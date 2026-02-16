@@ -285,7 +285,7 @@ class World(object):
             spawn_points = self.map.get_spawn_points()
             #spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
 
-            # STARTING POINT
+            # STARTING POINT                                => coordinates from UE must be divided by 100
             spawn_point = carla.Transform(
                 carla.Location(x=59.6000293, y=306.420, z=0.50),
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
@@ -293,6 +293,7 @@ class World(object):
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
             self.modify_vehicle_physics(self.player)
+
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
