@@ -93,6 +93,9 @@ import random
 import re
 import weakref
 
+os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
+os.environ["SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS"] = "1"
+
 try:
     import pygame
     from pygame.locals import KMOD_CTRL
@@ -675,6 +678,87 @@ class KeyboardControl(object):
     @staticmethod
     def _is_quit_shortcut(key):
         return (key == K_ESCAPE) or (key == K_q and pygame.key.get_mods() & KMOD_CTRL)
+
+
+# ==============================================================================
+# -- Gamepad controller (DualShock/PS4) ----------------------------------------
+# ==============================================================================
+
+class GamepadControl(object):
+    """
+    Control a vehicle using a game controller via pygame.joystick.
+    - Left stick    :   steer
+    - R2            :   throttle
+    - L2            :   brake
+    - Cross (X)     :   hand-brake
+    - Circle (O)    :   toggle reverse
+    - Option        :   quit
+
+    """
+
+    def __init__(self, world, start_in_autopilot, deadzone=0.08, steer_sensitivity=1.0):
+        import pygame
+
+        joystick_id = 0
+        self._autopilot_enabled = start_in_autopilot
+        self._control = carla.VehicleControl()
+        self._reverse_toggle_state = False
+        self._deadzone = deadzone
+        self._steer_gain = steer_sensitivity
+
+        pygame.joystick.init()
+        count = pygame.joystick.get_count()
+        if count == 0:
+            raise RuntimeError("No game controller detected. Plug in a controller or use --input keyboard.")
+        if joystick_id < 0 or joystick_id >= count:
+            raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
+
+        self.joy = pygame.joystick.Joystick(joystick_id)
+        self.joy.init()
+
+        world.player.set_autopilot(self._autopilot_enabled)
+        world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
+
+    def _apply_deadzone(self, v):
+        return 0.0 if abs(v) < self._deadzone else v
+
+    def parse_events(self, client, world, clock, sync_mode):
+        import pygame
+
+        # pump events to update joystick state (also if window not focused)
+        pygame.event.pump()
+
+        for event in pygame.event.get(pygame.QUIT):
+            if event.type == pygame.QUIT:
+                return True
+        
+        if self.joy.get_button(6):  # close window with "options" button 
+            return True
+        
+        # only polling, no pygame.event.get()
+        steer_axis = self._apply_deadzone(self.joy.get_axis(0))
+        l2 = self.joy.get_axis(4)
+        r2 = self.joy.get_axis(5)
+
+        brake    = max(0.0, (l2 + 1.0) / 2.0)
+        throttle = max(0.0, (r2 + 1.0) / 2.0)
+
+        self._control.steer    = float(max(-1.0, min(1.0, steer_axis * self._steer_gain)))
+        self._control.throttle = float(max(0.0, min(1.0, throttle)))
+        self._control.brake    = float(max(0.0, min(1.0, brake)))
+
+        btn_cross  = self.joy.get_button(0)  # X
+        btn_circle = self.joy.get_button(1)  # O
+
+        self._control.hand_brake = bool(btn_cross)
+
+        if btn_circle and not getattr(self, "_prev_circle", False):
+            self._reverse_toggle_state = not self._reverse_toggle_state
+        self._prev_circle = btn_circle
+        self._control.reverse = self._reverse_toggle_state
+
+        world.player.apply_control(self._control)
+        return False
 
 
 # ==============================================================================
@@ -1318,6 +1402,7 @@ def game_loop(args):
             print("WARNING: You are currently in asynchronous mode and could "
                   "experience some issues with the traffic simulation")
 
+        pygame.display.set_caption(f"CARLA Manual Control [{args.input}] (joy #0)")
         display = pygame.display.set_mode(
             (args.width, args.height),
             pygame.HWSURFACE | pygame.DOUBLEBUF)
@@ -1326,7 +1411,11 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
-        controller = KeyboardControl(world, args.autopilot)
+        
+        if args.input == 'gamepad':
+            controller = GamepadControl(world, args.autopilot)
+        else:
+            controller = KeyboardControl(world, args.autopilot)
 
         if args.sync:
             sim_world.tick()
@@ -1415,6 +1504,12 @@ def main():
         '--sync',
         action='store_true',
         help='Activate synchronous mode execution')
+    argparser.add_argument(                             # keyboard vs. gamepad input
+        '--input',
+        choices=['keyboard', 'gamepad'],
+        default='keyboard',
+        help='Select input device for this window (default: keyboard)'
+    )
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
