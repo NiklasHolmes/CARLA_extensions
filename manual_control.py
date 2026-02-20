@@ -97,6 +97,7 @@ os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
 os.environ["SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS"] = "1"
 
 try:
+    import pygame.mixer
     import pygame
     from pygame.locals import KMOD_CTRL
     from pygame.locals import KMOD_SHIFT
@@ -138,6 +139,7 @@ try:
     from pygame.locals import K_z
     from pygame.locals import K_MINUS
     from pygame.locals import K_EQUALS
+
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
@@ -145,6 +147,49 @@ try:
     import numpy as np
 except ImportError:
     raise RuntimeError('cannot import numpy, make sure numpy package is installed')
+
+from engine_audio import EngineAudio
+
+# ==============================================================================
+# -- Audio Setup  --------------------------------------------------------------
+# ==============================================================================
+
+#_HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\mixkit-classic-car-horn-1565_short.wav"
+_HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_horn1_elevenlabs.wav"
+_HORN_SOUND = None
+_HORN_CH = None
+_horn_on = False
+_FADEOUT_MS = 120
+
+# ENGINE AUDIO
+#_ENGINE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_1.wav"
+#_ENGINE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\police_siren.wav"
+engine_audio = EngineAudio(
+    r"C:\C_CARLA\CARLA_extensions\audio\car_engine_idle.wav",
+    r"C:\C_CARLA\CARLA_extensions\audio\car_engine_mid.wav",
+    r"C:\C_CARLA\CARLA_extensions\audio\car_engine_high.wav"
+)
+
+# AUDIO SETUP
+def _audio_init():
+    # 44.1 kHz, 16-bit, stereo, small buffer for low latency
+    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+
+def _audio_load_horn():
+    global _HORN_SOUND, _HORN_CH
+    if os.path.exists(_HORN_PATH):
+        _HORN_SOUND = pygame.mixer.Sound(_HORN_PATH)
+        _HORN_SOUND.set_volume(0.9)             # default volume
+        _HORN_CH = pygame.mixer.Channel(0)      # reserve channel 0
+    else:
+        print("[Audio] horn file not found:", _HORN_PATH)
+
+def _audio_quit():
+    try:
+        pygame.mixer.stop()
+        pygame.mixer.quit()
+    except Exception:
+        pass
 
 
 # ==============================================================================
@@ -186,7 +231,6 @@ def get_actor_blueprints(world, filter, generation):
     except:
         print("   Warning! Actor Generation is not valid. No actor will be spawned.")
         return []
-
 
 # ==============================================================================
 # -- World ---------------------------------------------------------------------
@@ -393,7 +437,6 @@ class World(object):
 # -- KeyboardControl -----------------------------------------------------------
 # ==============================================================================
 
-
 class KeyboardControl(object):
     """Class that handles keyboard input."""
     def __init__(self, world, start_in_autopilot):
@@ -416,12 +459,23 @@ class KeyboardControl(object):
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
     def parse_events(self, client, world, clock, sync_mode):
+        global _horn_on
+
         if isinstance(self._control, carla.VehicleControl):
             current_lights = self._lights
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return True
+            
+            if event.type == pygame.KEYDOWN:
+
+                if event.key == K_h:
+                    if (not _horn_on) and (_HORN_SOUND is not None) and (_HORN_CH is not None):
+                        _horn_on = True
+                        _HORN_CH.play(_HORN_SOUND, loops=-1)
+
             elif event.type == pygame.KEYUP:
+
                 if self._is_quit_shortcut(event.key):
                     return True
                 elif event.key == K_BACKSPACE:
@@ -441,7 +495,7 @@ class KeyboardControl(object):
                     world.load_map_layer(unload=True)
                 elif event.key == K_b:
                     world.load_map_layer()
-                elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
+                elif event.key == K_SLASH and (pygame.key.get_mods() & KMOD_SHIFT):        #K_h or 
                     world.hud.help.toggle()
                 elif event.key == K_TAB:
                     world.camera_manager.toggle_camera()
@@ -530,6 +584,13 @@ class KeyboardControl(object):
                     else:
                         world.recording_start += 1
                     world.hud.notification("Recording start time is %d" % (world.recording_start))
+
+                # Horn control: play sound while 'H' is held down
+                elif event.key == K_h:
+                    if _horn_on and (_HORN_CH is not None):
+                        _horn_on = False
+                        _HORN_CH.fadeout(_FADEOUT_MS)
+
                 if isinstance(self._control, carla.VehicleControl):
                     if event.key == K_f:
                         # Toggle ackermann controller
@@ -614,6 +675,14 @@ class KeyboardControl(object):
                     self._control = world.player.get_control()
                     # Update hud with the newest ackermann control
                     world.hud.update_ackermann_control(self._ackermann_control)
+                
+                # --- ENGINE AUDIO (KEYBOARD) ---
+                try:
+                    global engine_audio
+                    if engine_audio is not None:
+                        engine_audio.update(self._control.throttle)
+                except:
+                    pass
 
             elif isinstance(self._control, carla.WalkerControl):
                 self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time(), world)
@@ -723,6 +792,7 @@ class GamepadControl(object):
         return 0.0 if abs(v) < self._deadzone else v
 
     def parse_events(self, client, world, clock, sync_mode):
+        global _horn_on
         import pygame
 
         # pump events to update joystick state (also if window not focused)
@@ -741,7 +811,7 @@ class GamepadControl(object):
         r2 = self.joy.get_axis(5)
 
         brake    = max(0.0, (l2 + 1.0) / 2.0)
-        throttle = max(0.0, (r2 + 1.0) / 2.0)
+        throttle = max(0.0, (r2 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
 
         self._control.steer    = float(max(-1.0, min(1.0, steer_axis * self._steer_gain)))
         self._control.throttle = float(max(0.0, min(1.0, throttle)))
@@ -758,6 +828,13 @@ class GamepadControl(object):
         self._control.reverse = self._reverse_toggle_state
 
         world.player.apply_control(self._control)
+
+        # --- ENGINE AUDIO (GAMEPAD) ---
+        try:
+            engine_audio.update(self._control.throttle)
+        except:
+            pass
+
         return False
 
 
@@ -1375,7 +1452,6 @@ class CameraManager(object):
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
-
 def game_loop(args):
     pygame.init()
     pygame.font.init()
@@ -1408,6 +1484,9 @@ def game_loop(args):
             pygame.HWSURFACE | pygame.DOUBLEBUF)
         display.fill((0,0,0))
         pygame.display.flip()
+
+        _audio_init()
+        _audio_load_horn()
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
@@ -1444,6 +1523,7 @@ def game_loop(args):
         if world is not None:
             world.destroy()
 
+        _audio_quit()
         pygame.quit()
 
 
