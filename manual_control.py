@@ -161,6 +161,7 @@ _ENGINE_MID = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_mid.wav"
 _ENGINE_HIGH = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_high.wav"
 _HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_horn1_elevenlabs.wav"
 _BLINKER_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_blinker.wav"
+_BRAKE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_break.wav"
 
 # Central audio manager
 audio_manager: Optional[AudioGenerator] = None
@@ -175,6 +176,7 @@ def _audio_init():
             engine_high_path=_ENGINE_HIGH,
             horn_path=_HORN_PATH,
             blinker_path=_BLINKER_PATH,
+            brake_path=_BRAKE_PATH,
         )
         audio_manager.init(frequency=44100, channels=2, buffer_size=512)
         print("[Audio] Initialized successfully")
@@ -455,6 +457,7 @@ class KeyboardControl(object):
             raise NotImplementedError("Actor type not supported")
         self._steer_cache = 0.0
         self._last_blinker_button = None
+        self._prev_brake = False
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
     def parse_events(self, client, world, clock, sync_mode):
@@ -703,12 +706,19 @@ class KeyboardControl(object):
 
         if keys[K_DOWN] or keys[K_s]:
             if not self._ackermann_enabled:
+                # Brake audio - play once on press (0 -> 1 transition)
+                current_braking = True
+                if audio_manager is not None and not self._prev_brake and current_braking:
+                    audio_manager.play_brake()
+                self._prev_brake = current_braking
+                
                 self._control.brake = min(self._control.brake + 0.2, 1)
             else:
                 self._ackermann_control.speed -= min(abs(self._ackermann_control.speed), round(milliseconds * 0.005, 2)) * self._ackermann_reverse
                 self._ackermann_control.speed = max(0, abs(self._ackermann_control.speed)) * self._ackermann_reverse
         else:
             if not self._ackermann_enabled:
+                self._prev_brake = False
                 self._control.brake = 0
 
         steer_increment = 5e-4 * milliseconds
@@ -781,6 +791,7 @@ class GamepadControl(object):
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
         self._last_blinker_button = None
+        self._prev_brake = False
 
         pygame.joystick.init()
         count = pygame.joystick.get_count()
@@ -818,6 +829,12 @@ class GamepadControl(object):
 
         brake    = max(0.0, (l2 + 1.0) / 2.0)
         throttle = max(0.0, (r2 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
+
+        # Brake audio - play once on L2 press (0 -> 1 transition)
+        current_braking = brake > 0.1
+        if audio_manager is not None and not self._prev_brake and current_braking:
+            audio_manager.play_brake()
+        self._prev_brake = current_braking
 
         self._control.steer    = float(max(-1.0, min(1.0, steer_axis * self._steer_gain)))
         self._control.throttle = float(max(0.0, min(1.0, throttle)))

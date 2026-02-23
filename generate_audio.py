@@ -419,6 +419,85 @@ class BlinkerAudio(BaseAudioGenerator):
                 self.current_channel.stop()
         self.is_on = False
 
+
+class BrakeAudio(BaseAudioGenerator):
+    """Brake sound"""
+    
+    def __init__(self, channel_pool: ChannelPool, brake_path: str, 
+                 base_volume: float = 0.7, fadeout_ms: int = 120):
+        """
+        Initialize brake audio.
+        
+        Args:
+            channel_pool (ChannelPool): Shared channel pool
+            brake_path (str): Path to brake sound file
+            base_volume (float): Brake volume (0.0-1.0)
+            fadeout_ms (int): Fadeout duration in milliseconds
+        """
+        super().__init__(channel_pool)
+        
+        self.brake_path = brake_path
+        self.base_volume = base_volume
+        self.fadeout_ms = fadeout_ms
+
+        self.brake_sound: Optional[pygame.mixer.Sound] = None
+        self.is_on = False
+        self.last_play_time = 0.0
+        self.min_interval = 0.1
+    
+    def _load_sound(self):
+        """Load brake sound (lazy loading)."""
+        if self._sound_loaded:
+            return
+        
+        if not pygame.mixer.get_init():
+            print("[BrakeAudio] WARNING: Mixer not initialized")
+            return
+        
+        self.brake_sound = super()._load_sound(self.brake_path, "BrakeAudio")
+        if self.brake_sound is not None:
+            self.brake_sound.set_volume(self.base_volume)
+            self.min_interval = max(self.min_interval, self.brake_sound.get_length())
+            self._sound_loaded = True
+    
+    def play(self):
+        """Start playing brake sound (one-shot)."""
+        if not self._sound_loaded:
+            self._load_sound()
+        
+        if self.brake_sound is None or not pygame.mixer.get_init():
+            return
+
+        now = time.time()
+        if (now - self.last_play_time) < self.min_interval:
+            return
+
+        if self.current_channel is not None and self.current_channel.get_busy():
+            return
+
+        if self.current_channel is None:
+            self.current_channel = self.channel_pool.get_channel()
+
+        if self.current_channel is not None:
+            self.current_channel.play(self.brake_sound, loops=0)
+            self.is_on = True
+            self.last_play_time = now
+        else:
+            print("[BrakeAudio] WARNING: No channels available")
+
+    def stop(self, fadeout_ms: Optional[int] = None):
+        """Stop brake sound."""
+        if fadeout_ms is None:
+            fadeout_ms = self.fadeout_ms
+
+        if self.current_channel is not None:
+            if fadeout_ms > 0:
+                self.current_channel.fadeout(fadeout_ms)
+            else:
+                self.current_channel.stop()
+        self.is_on = False
+
+
 class AudioGenerator:
     """Main audio manager - initializes and controls all sounds."""
     
@@ -428,6 +507,7 @@ class AudioGenerator:
                  engine_high_path: Optional[str] = None,
                  horn_path: Optional[str] = None,
                  blinker_path: Optional[str] = None,
+                 brake_path: Optional[str] = None,
                  channel_pool_size: int = 6):
         """
         Initialize all audio generators.
@@ -438,6 +518,7 @@ class AudioGenerator:
             engine_high_path (str): Path to engine high RPM sound
             horn_path (str): Path to horn sound
             blinker_path (str): Path to blinker sound
+            brake_path (str): Path to brake sound
             channel_pool_size (int): Size of channel pool
         """
         self.initialized = False
@@ -446,6 +527,7 @@ class AudioGenerator:
         self.engine_audio: Optional[EngineAudio] = None
         self.horn_audio: Optional[HornAudio] = None
         self.blinker_audio: Optional[BlinkerAudio] = None
+        self.brake_audio: Optional[BrakeAudio] = None
         
         # Initialize engines
         if engine_idle_path:
@@ -463,6 +545,10 @@ class AudioGenerator:
         # Initialize blinker
         if blinker_path:
             self.blinker_audio = BlinkerAudio(self.channel_pool, blinker_path)
+
+        # Initialize brake
+        if brake_path:
+            self.brake_audio = BrakeAudio(self.channel_pool, brake_path)
     
     def init(self, frequency: int = 44100, channels: int = 2, buffer_size: int = 512):
         """
@@ -505,6 +591,16 @@ class AudioGenerator:
     #     """Stop blinker sound."""
     #     if self.blinker_audio is not None:
     #         self.blinker_audio.stop(fadeout_ms)
+    
+    def play_brake(self):
+        """Play brake sound once."""
+        if self.brake_audio is not None:
+            self.brake_audio.play()
+
+    # def stop_brake(self, fadeout_ms: int = 120):
+    #     """Stop brake sound."""
+    #     if self.brake_audio is not None:
+    #         self.brake_audio.stop(fadeout_ms)
     
     def quit(self):
         """Clean up audio resources."""
