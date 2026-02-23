@@ -498,6 +498,119 @@ class BrakeAudio(BaseAudioGenerator):
         self.is_on = False
 
 
+class ProximityAlertAudio(BaseAudioGenerator):
+    """Proximity alert beeping sound - plays continuously with variable interval"""
+    
+    def __init__(self, channel_pool: ChannelPool, proximity_path: str, 
+                 base_volume: float = 0.1):
+        """
+        Initialize proximity alert audio.
+        
+        Args:
+            channel_pool (ChannelPool): Shared channel pool
+            proximity_path (str): Path to proximity beep sound file
+            base_volume (float): Alert volume (0.0-1.0)
+        """
+        super().__init__(channel_pool)
+        
+        self.proximity_path = proximity_path
+        self.base_volume = base_volume
+        
+        self.proximity_sound: Optional[pygame.mixer.Sound] = None
+        self.is_playing = False
+        self.last_beep_time = 0.0
+        self.current_interval = 0.0
+        self.beep_mode = "off"  # "off", "far", "medium", "close", "critical"
+    
+    def _load_sound(self):
+        """Load proximity alert sound (lazy loading)."""
+        if self._sound_loaded:
+            return
+        
+        if not pygame.mixer.get_init():
+            print("[ProximityAlertAudio] WARNING: Mixer not initialized")
+            return
+        
+        self.proximity_sound = super()._load_sound(self.proximity_path, "ProximityAlertAudio")
+        if self.proximity_sound is not None:
+            self.proximity_sound.set_volume(self.base_volume)
+            self._sound_loaded = True
+    
+    def update(self, distance_group: str):
+        """
+        Update proximity alert based on distance group.
+        
+        Args:
+            distance_group (str): One of "off", "far", "medium", "close", "critical"
+        """
+        if not self._sound_loaded:
+            self._load_sound()
+        
+        if self.proximity_sound is None or not pygame.mixer.get_init():
+            return
+        
+        # Map distance groups to beep intervals (in seconds)
+        interval_map = {
+            "off": 0.0,       # No beeping
+            "safe": 0.0,      # No beeping (>0.5m from vehicle edge)
+            "medium": 1.0,    # 0.25-0.5m: medium beep
+            "close": 0.5,     # 0.05-0.25m: fast beep
+            "critical": 0.0   # <0.05m: continuous (loop) - actual contact
+        }
+        
+        target_interval = interval_map.get(distance_group, 0.0)
+        
+        # Handle mode changes
+        if distance_group != self.beep_mode:
+            self.beep_mode = distance_group
+            self.current_interval = target_interval
+            
+            # Stop current sound if switching modes
+            if self.current_channel is not None:
+                self.current_channel.stop()
+                self.current_channel = None
+            
+            # Reset timer for immediate beep on mode change
+            self.last_beep_time = 0.0
+        
+        now = time.time()
+        
+        # Safe mode - stop everything
+        if distance_group == "safe":
+            if self.current_channel is not None:
+                self.current_channel.stop()
+                self.current_channel = None
+            self.is_playing = False
+            return
+        
+        # Critical mode - continuous loop
+        if distance_group == "critical":
+            if self.current_channel is None or not self.current_channel.get_busy():
+                self.current_channel = self.channel_pool.get_channel()
+                if self.current_channel is not None:
+                    self.current_channel.play(self.proximity_sound, loops=-1)  # Infinite loop
+                    self.is_playing = True
+            return
+        
+        # Beeping modes (far, medium, close)
+        if (now - self.last_beep_time) >= self.current_interval:
+            if self.current_channel is None:
+                self.current_channel = self.channel_pool.get_channel()
+            
+            if self.current_channel is not None:
+                self.current_channel.play(self.proximity_sound, loops=0)  # One-shot beep
+                self.last_beep_time = now
+                self.is_playing = True
+    
+    def stop(self):
+        """Stop proximity alert."""
+        if self.current_channel is not None:
+            self.current_channel.stop()
+            self.current_channel = None
+        self.is_playing = False
+        self.beep_mode = "off"
+
+
 class AudioGenerator:
     """Main audio manager - initializes and controls all sounds."""
     
@@ -508,6 +621,7 @@ class AudioGenerator:
                  horn_path: Optional[str] = None,
                  blinker_path: Optional[str] = None,
                  brake_path: Optional[str] = None,
+                 proximity_alert_path: Optional[str] = None,
                  channel_pool_size: int = 6):
         """
         Initialize all audio generators.
@@ -519,6 +633,7 @@ class AudioGenerator:
             horn_path (str): Path to horn sound
             blinker_path (str): Path to blinker sound
             brake_path (str): Path to brake sound
+            proximity_alert_path (str): Path to proximity alert beep sound
             channel_pool_size (int): Size of channel pool
         """
         self.initialized = False
@@ -528,6 +643,7 @@ class AudioGenerator:
         self.horn_audio: Optional[HornAudio] = None
         self.blinker_audio: Optional[BlinkerAudio] = None
         self.brake_audio: Optional[BrakeAudio] = None
+        self.proximity_alert_audio: Optional[ProximityAlertAudio] = None
         
         # Initialize engines
         if engine_idle_path:
@@ -549,6 +665,10 @@ class AudioGenerator:
         # Initialize brake
         if brake_path:
             self.brake_audio = BrakeAudio(self.channel_pool, brake_path)
+        
+        # Initialize proximity alert
+        if proximity_alert_path:
+            self.proximity_alert_audio = ProximityAlertAudio(self.channel_pool, proximity_alert_path)
     
     def init(self, frequency: int = 44100, channels: int = 2, buffer_size: int = 512):
         """
@@ -601,6 +721,16 @@ class AudioGenerator:
     #     """Stop brake sound."""
     #     if self.brake_audio is not None:
     #         self.brake_audio.stop(fadeout_ms)
+    
+    def update_proximity_alert(self, distance_group: str):
+        """Update proximity alert based on distance group (safe/medium/close/critical)."""
+        if self.proximity_alert_audio is not None:
+            self.proximity_alert_audio.update(distance_group)
+    
+    def stop_proximity_alert(self):
+        """Stop proximity alert."""
+        if self.proximity_alert_audio is not None:
+            self.proximity_alert_audio.stop()
     
     def quit(self):
         """Clean up audio resources."""

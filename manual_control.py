@@ -162,6 +162,7 @@ _ENGINE_HIGH = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_high.wav"
 _HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_horn1_elevenlabs.wav"
 _BLINKER_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_blinker.wav"
 _BRAKE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_break.wav"
+_PROXIMITY_ALERT_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_proximityAlert.wav"
 
 # Central audio manager
 audio_manager: Optional[AudioGenerator] = None
@@ -177,6 +178,7 @@ def _audio_init():
             horn_path=_HORN_PATH,
             blinker_path=_BLINKER_PATH,
             brake_path=_BRAKE_PATH,
+            proximity_alert_path=_PROXIMITY_ALERT_PATH,
         )
         audio_manager.init(frequency=44100, channels=2, buffer_size=512)
         print("[Audio] Initialized successfully")
@@ -257,6 +259,7 @@ class World(object):
         self.radar_sensor = None
         self.camera_manager = None
         self.rear_camera = None                     # rear camera for rear_view.py
+        self.obstacle_sensor = None                 # Proximity alert sensor
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
         self._actor_filter = args.filter
@@ -360,6 +363,10 @@ class World(object):
         # --- Spawn rear camera for rear_view.py ---
         self.rear_camera = RearCamera(self.player)
         #print("Rear Camera spawned with ID:", self.rear_camera.sensor.id)
+        
+        # --- Spawn obstacle detection sensor for proximity alerts ---
+        if isinstance(self.player, carla.Vehicle):
+            self.obstacle_sensor = ObstacleDetectionSensor(self.player)
 
         if self.sync:
             self.world.tick()
@@ -425,6 +432,14 @@ class World(object):
             self.lane_invasion_sensor.sensor,
             self.gnss_sensor.sensor,
             self.imu_sensor.sensor]
+        
+        # Add obstacle sensors to cleanup
+        if self.obstacle_sensor is not None:
+            if self.obstacle_sensor.sensor_front is not None:
+                sensors.append(self.obstacle_sensor.sensor_front)
+            if self.obstacle_sensor.sensor_rear is not None:
+                sensors.append(self.obstacle_sensor.sensor_rear)
+        
         for sensor in sensors:
             if sensor is not None:
                 sensor.stop()
@@ -1177,6 +1192,129 @@ class LaneInvasionSensor(object):
 
 
 # ==============================================================================
+# -- ObstacleDetectionSensor ---------------------------------------------------
+# ==============================================================================
+
+
+class ObstacleDetectionSensor(object):
+    """Detects obstacles in front and behind the vehicle for proximity alerts."""
+    
+    def __init__(self, parent_actor):
+        self.sensor_front = None
+        self.sensor_rear = None
+        self._parent = parent_actor
+        
+        # Distance state tracking
+        self.front_distance = float('inf')
+        self.rear_distance = float('inf')
+        self.front_last_seen = 0.0
+        self.rear_last_seen = 0.0
+        self.stale_timeout = 1.0
+        self.last_update_time = 0.0
+        self.update_interval = 0.5  # Update every 0.5 seconds for efficiency
+        
+        world = self._parent.get_world()
+        bp = world.get_blueprint_library().find('sensor.other.obstacle')
+        
+        # Configure sensor parameters (reduced max distance)
+        bp.set_attribute('distance', '1.5')  # Max detection range in meters
+        bp.set_attribute('hit_radius', '0.3')
+        bp.set_attribute('only_dynamics', 'false')  # Detect static and dynamic objects
+        
+        # Get vehicle bounds for sensor placement
+        bound_x = 0.5 + self._parent.bounding_box.extent.x
+        bound_z = 0.5 + self._parent.bounding_box.extent.z
+        
+        # Position sensors INSIDE the bounding box to compensate for visual model being smaller
+        # Bounding box is typically 0.2-0.4m larger than the visible car mesh
+        sensor_offset = 0.3  # Move sensor 0.3m inward from bounding box edge
+        
+        # Front sensor - positioned INSIDE the front edge
+        front_transform = carla.Transform(
+            carla.Location(x=bound_x - sensor_offset, z=bound_z * 0.5),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+        )
+        self.sensor_front = world.spawn_actor(bp, front_transform, attach_to=self._parent)
+        
+        # Rear sensor - positioned INSIDE the rear edge
+        rear_transform = carla.Transform(
+            carla.Location(x=-bound_x + sensor_offset, z=bound_z * 0.5),
+            carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+        )
+        self.sensor_rear = world.spawn_actor(bp, rear_transform, attach_to=self._parent)
+        
+        # Set up callbacks
+        weak_self = weakref.ref(self)
+        self.sensor_front.listen(lambda event: ObstacleDetectionSensor._on_obstacle_front(weak_self, event))
+        self.sensor_rear.listen(lambda event: ObstacleDetectionSensor._on_obstacle_rear(weak_self, event))
+        
+        print("[ObstacleDetectionSensor] Front and rear sensors initialized")
+    
+    @staticmethod
+    def _on_obstacle_front(weak_self, event):
+        """Callback for front obstacle detection."""
+        self = weak_self()
+        if not self:
+            return
+        import time
+        self.front_distance = event.distance
+        self.front_last_seen = time.time()
+        print(f"[Front] Distance: {event.distance:.10f}m")
+    
+    @staticmethod
+    def _on_obstacle_rear(weak_self, event):
+        """Callback for rear obstacle detection."""
+        self = weak_self()
+        if not self:
+            return
+        import time
+        self.rear_distance = event.distance
+        self.rear_last_seen = time.time()
+        print(f"[Rear] Distance: {event.distance:.10f}m")
+    
+    def get_distance_group(self):
+        """
+        Get the current distance group for audio alerts.
+        
+        Returns:
+            str: One of "safe", "medium", "close", "critical"
+        """
+        # Take the minimum distance (closest obstacle from front or rear)
+        import time
+        now = time.time()
+        if (now - self.front_last_seen) > self.stale_timeout:
+            self.front_distance = float('inf')
+        if (now - self.rear_last_seen) > self.stale_timeout:
+            self.rear_distance = float('inf')
+        min_distance = min(self.front_distance, self.rear_distance)
+        
+        # Map distance to groups - adjusted for actual collision point
+        # Sensor is now 0.3m inside bounding box to match visual model
+        if min_distance > 0.5:
+            return "safe"           # >0.5m: safe, no beeping
+        elif min_distance > 0.25:
+            return "medium"         # 0.25-0.5m: medium beep (1.0s interval)
+        elif min_distance > 0.05:
+            return "close"          # 0.05-0.25m: fast beep (0.5s interval)
+        else:
+            return "critical"       # <0.05m: continuous (actual contact!)
+    
+    def should_update_audio(self):
+        """
+        Check if enough time has passed to update audio (throttling).
+        
+        Returns:
+            bool: True if audio should be updated
+        """
+        import time
+        now = time.time()
+        if (now - self.last_update_time) >= self.update_interval:
+            self.last_update_time = now
+            return True
+        return False
+
+
+# ==============================================================================
 # -- GnssSensor ----------------------------------------------------------------
 # ==============================================================================
 
@@ -1563,6 +1701,13 @@ def game_loop(args):
                 return
             world.tick(clock)
             world.render(display)
+            
+            # Update proximity alert audio (throttled internally to 0.5s)
+            if audio_manager is not None and world.obstacle_sensor is not None:
+                if world.obstacle_sensor.should_update_audio():
+                    distance_group = world.obstacle_sensor.get_distance_group()
+                    audio_manager.update_proximity_alert(distance_group)
+            
             pygame.display.flip()
 
     finally:
