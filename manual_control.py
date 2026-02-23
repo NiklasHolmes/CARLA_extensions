@@ -685,7 +685,7 @@ class KeyboardControl(object):
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
-                self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
+                self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time(), world)
                 self._control.reverse = self._control.gear < 0
                 # Set automatic control-related vehicle lights
                 if self._control.brake:
@@ -720,7 +720,7 @@ class KeyboardControl(object):
                 self._parse_walker_keys(pygame.key.get_pressed(), clock.get_time(), world)
                 world.player.apply_control(self._control)
 
-    def _parse_vehicle_keys(self, keys, milliseconds):
+    def _parse_vehicle_keys(self, keys, milliseconds, world):
         if keys[K_UP] or keys[K_w]:
             if not self._ackermann_enabled:
                 self._control.throttle = min(self._control.throttle + 0.1, 1.00)
@@ -730,15 +730,24 @@ class KeyboardControl(object):
             if not self._ackermann_enabled:
                 self._control.throttle = 0.0
 
+        speed_kmh = 0.0
+        try:
+            if world is not None and isinstance(world.player, carla.Vehicle):
+                v = world.player.get_velocity()
+                speed_kmh = 3.6 * math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
+        except Exception:
+            speed_kmh = 0.0
+
         if keys[K_DOWN] or keys[K_s]:
             if not self._ackermann_enabled:
                 # Brake audio - play once on press (0 -> 1 transition)
-                current_braking = True
+                next_brake = min(self._control.brake + 0.2, 1)
+                current_braking = next_brake > 0.1
                 if audio_manager is not None and not self._prev_brake and current_braking:
-                    audio_manager.play_brake()
+                    audio_manager.play_brake(brake_strength=next_brake, speed_kmh=speed_kmh)
                 self._prev_brake = current_braking
                 
-                self._control.brake = min(self._control.brake + 0.2, 1)
+                self._control.brake = next_brake
             else:
                 self._ackermann_control.speed -= min(abs(self._ackermann_control.speed), round(milliseconds * 0.005, 2)) * self._ackermann_reverse
                 self._ackermann_control.speed = max(0, abs(self._ackermann_control.speed)) * self._ackermann_reverse
@@ -856,10 +865,17 @@ class GamepadControl(object):
         brake    = max(0.0, (l2 + 1.0) / 2.0)
         throttle = max(0.0, (r2 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
 
+        speed_kmh = 0.0
+        try:
+            v = world.player.get_velocity()
+            speed_kmh = 3.6 * math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
+        except Exception:
+            speed_kmh = 0.0
+
         # Brake audio - play once on L2 press (0 -> 1 transition)
         current_braking = brake > 0.1
         if audio_manager is not None and not self._prev_brake and current_braking:
-            audio_manager.play_brake()
+            audio_manager.play_brake(brake_strength=brake, speed_kmh=speed_kmh)
         self._prev_brake = current_braking
 
         self._control.steer    = float(max(-1.0, min(1.0, steer_axis * self._steer_gain)))

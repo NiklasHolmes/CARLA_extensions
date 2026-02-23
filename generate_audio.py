@@ -424,7 +424,7 @@ class BrakeAudio(BaseAudioGenerator):
     """Brake sound"""
     
     def __init__(self, channel_pool: ChannelPool, brake_path: str, 
-                 base_volume: float = 0.7, fadeout_ms: int = 120):
+                 base_volume: float = 0.3, fadeout_ms: int = 120):
         """
         Initialize brake audio.
         
@@ -444,6 +444,16 @@ class BrakeAudio(BaseAudioGenerator):
         self.is_on = False
         self.last_play_time = 0.0
         self.min_interval = 0.1
+
+        # Brake sound tuning
+        self.speed_full_kmh = 60.0
+        self.intensity_low = 0.35
+        self.intensity_mid = 0.70
+        self.volume_low = 0.35
+        self.volume_mid = 0.60
+        self.volume_high = 1.00
+        self.duration_low = 0.40
+        self.duration_mid = 0.70
     
     def _load_sound(self):
         """Load brake sound (lazy loading)."""
@@ -460,7 +470,19 @@ class BrakeAudio(BaseAudioGenerator):
             self.min_interval = max(self.min_interval, self.brake_sound.get_length())
             self._sound_loaded = True
     
-    def play(self):
+    def _get_brake_profile(self, speed_kmh: float, brake_strength: float) -> Dict[str, float]:
+        """Return volume scale and max playback time for the brake sound."""
+        speed_factor = min(max(speed_kmh / self.speed_full_kmh, 0.0), 1.0)
+        brake_factor = min(max(brake_strength, 0.0), 1.0)
+        intensity = 0.6 * brake_factor + 0.4 * speed_factor
+
+        if intensity < self.intensity_low:
+            return {"volume": self.volume_low, "duration": self.duration_low}
+        if intensity < self.intensity_mid:
+            return {"volume": self.volume_mid, "duration": self.duration_mid}
+        return {"volume": self.volume_high, "duration": 1.0}
+
+    def play(self, brake_strength: Optional[float] = None, speed_kmh: Optional[float] = None):
         """Start playing brake sound (one-shot)."""
         if not self._sound_loaded:
             self._load_sound()
@@ -469,7 +491,16 @@ class BrakeAudio(BaseAudioGenerator):
             return
 
         now = time.time()
-        if (now - self.last_play_time) < self.min_interval:
+        sound_len_ms = int(self.brake_sound.get_length() * 1000)
+        speed_kmh = max(0.0, speed_kmh or 0.0)
+        brake_strength = 1.0 if brake_strength is None else float(brake_strength)
+        profile = self._get_brake_profile(speed_kmh, brake_strength)
+        volume_scale = profile["volume"]
+        duration_scale = profile["duration"]
+        maxtime_ms = 0 if duration_scale >= 1.0 else max(80, int(sound_len_ms * duration_scale))
+        play_interval = max(0.08, (sound_len_ms if maxtime_ms == 0 else maxtime_ms) / 1000.0)
+
+        if (now - self.last_play_time) < min(self.min_interval, play_interval):
             return
 
         if self.current_channel is not None and self.current_channel.get_busy():
@@ -479,7 +510,11 @@ class BrakeAudio(BaseAudioGenerator):
             self.current_channel = self.channel_pool.get_channel()
 
         if self.current_channel is not None:
-            self.current_channel.play(self.brake_sound, loops=0)
+            self.current_channel.set_volume(self.base_volume * volume_scale)
+            if maxtime_ms == 0:
+                self.current_channel.play(self.brake_sound, loops=0)
+            else:
+                self.current_channel.play(self.brake_sound, loops=0, maxtime=maxtime_ms)
             self.is_on = True
             self.last_play_time = now
         else:
@@ -712,10 +747,10 @@ class AudioGenerator:
     #     if self.blinker_audio is not None:
     #         self.blinker_audio.stop(fadeout_ms)
     
-    def play_brake(self):
+    def play_brake(self, brake_strength: Optional[float] = None, speed_kmh: Optional[float] = None):
         """Play brake sound once."""
         if self.brake_audio is not None:
-            self.brake_audio.play()
+            self.brake_audio.play(brake_strength=brake_strength, speed_kmh=speed_kmh)
 
     # def stop_brake(self, fadeout_ms: int = 120):
     #     """Stop brake sound."""
