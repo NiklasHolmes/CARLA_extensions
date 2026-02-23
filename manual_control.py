@@ -167,6 +167,9 @@ _PROXIMITY_ALERT_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_proximityAlert.w
 # Central audio manager
 audio_manager: Optional[AudioGenerator] = None
 
+# Camera selection
+USE_SCENE_FINAL_CAMERA = True
+
 def _audio_init():
     """Initialize audio generator."""
     global audio_manager
@@ -293,6 +296,9 @@ class World(object):
         # Keep same camera config if the camera manager exists.
         cam_index = self.camera_manager.index if self.camera_manager is not None else 0
         cam_pos_index = self.camera_manager.transform_index if self.camera_manager is not None else 0
+        if USE_SCENE_FINAL_CAMERA:
+            cam_index = 0
+            cam_pos_index = 0
         # Get a random blueprint.
         blueprint_list = get_actor_blueprints(self.world, self._actor_filter, self._actor_generation)
         if not blueprint_list:
@@ -354,7 +360,12 @@ class World(object):
         self.lane_invasion_sensor = LaneInvasionSensor(self.player, self.hud)
         self.gnss_sensor = GnssSensor(self.player)
         self.imu_sensor = IMUSensor(self.player)
-        self.camera_manager = CameraManager(self.player, self.hud, self._gamma)
+        self.camera_manager = CameraManager(
+            self.player,
+            self.hud,
+            self._gamma,
+            use_scene_final=USE_SCENE_FINAL_CAMERA
+        )
         self.camera_manager.transform_index = cam_pos_index
         self.camera_manager.set_sensor(cam_index, notify=False)
         actor_type = get_actor_display_name(self.player)
@@ -1491,18 +1502,27 @@ class RearCamera(object):
 
 
 class CameraManager(object):
-    def __init__(self, parent_actor, hud, gamma_correction):
+    def __init__(self, parent_actor, hud, gamma_correction, use_scene_final=False):
         self.sensor = None
         self.surface = None
         self._parent = parent_actor
         self.hud = hud
         self.recording = False
+        self.use_scene_final = use_scene_final
+        self.lock_camera = use_scene_final
         bound_x = 0.5 + self._parent.bounding_box.extent.x
         bound_y = 0.5 + self._parent.bounding_box.extent.y
         bound_z = 0.5 + self._parent.bounding_box.extent.z
         Attachment = carla.AttachmentType
 
-        if not self._parent.type_id.startswith("walker.pedestrian"):
+        if self.use_scene_final:
+            self._camera_transforms = [
+                (carla.Transform(
+                    carla.Location(x=0.80, y=0.0, z=1.40),              # set camera position in scene final
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ), Attachment.Rigid)
+            ]
+        elif not self._parent.type_id.startswith("walker.pedestrian"):
             self._camera_transforms = [
                 (carla.Transform(carla.Location(x=-2.0*bound_x, y=+0.0*bound_y, z=2.0*bound_z), carla.Rotation(pitch=8.0)), Attachment.SpringArmGhost),
                 (carla.Transform(carla.Location(x=+0.8*bound_x, y=+0.0*bound_y, z=1.3*bound_z)), Attachment.Rigid),
@@ -1517,26 +1537,33 @@ class CameraManager(object):
                 (carla.Transform(carla.Location(x=-4.0, z=2.0), carla.Rotation(pitch=6.0)), Attachment.SpringArmGhost),
                 (carla.Transform(carla.Location(x=0, y=-2.5, z=-0.0), carla.Rotation(yaw=90.0)), Attachment.Rigid)]
 
-        self.transform_index = 1
-        self.sensors = [
-            ['sensor.camera.rgb', cc.Raw, 'Camera RGB', {}],
-            ['sensor.camera.depth', cc.Raw, 'Camera Depth (Raw)', {}],
-            ['sensor.camera.depth', cc.Depth, 'Camera Depth (Gray Scale)', {}],
-            ['sensor.camera.depth', cc.LogarithmicDepth, 'Camera Depth (Logarithmic Gray Scale)', {}],
-            ['sensor.camera.semantic_segmentation', cc.Raw, 'Camera Semantic Segmentation (Raw)', {}],
-            ['sensor.camera.semantic_segmentation', cc.CityScapesPalette, 'Camera Semantic Segmentation (CityScapes Palette)', {}],
-            ['sensor.camera.instance_segmentation', cc.CityScapesPalette, 'Camera Instance Segmentation (CityScapes Palette)', {}],
-            ['sensor.camera.instance_segmentation', cc.Raw, 'Camera Instance Segmentation (Raw)', {}],
-            ['sensor.lidar.ray_cast', None, 'Lidar (Ray-Cast)', {'range': '50'}],
-            ['sensor.camera.dvs', cc.Raw, 'Dynamic Vision Sensor', {}],
-            ['sensor.camera.rgb', cc.Raw, 'Camera RGB Distorted',
-                {'lens_circle_multiplier': '3.0',
-                'lens_circle_falloff': '3.0',
-                'chromatic_aberration_intensity': '0.5',
-                'chromatic_aberration_offset': '0'}],
-            ['sensor.camera.optical_flow', cc.Raw, 'Optical Flow', {}],
-            ['sensor.camera.normals', cc.Raw, 'Camera Normals', {}],
-        ]
+        if self.use_scene_final:
+            self.transform_index = 0
+            self.sensors = [
+                ['sensor.camera.rgb', cc.Raw, 'Camera RGB (SceneFinal)',
+                    {'fov': '90.0', 'post_processing': 'SceneFinal'}],
+            ]
+        else:
+            self.transform_index = 1
+            self.sensors = [
+                ['sensor.camera.rgb', cc.Raw, 'Camera RGB', {}],
+                ['sensor.camera.depth', cc.Raw, 'Camera Depth (Raw)', {}],
+                ['sensor.camera.depth', cc.Depth, 'Camera Depth (Gray Scale)', {}],
+                ['sensor.camera.depth', cc.LogarithmicDepth, 'Camera Depth (Logarithmic Gray Scale)', {}],
+                ['sensor.camera.semantic_segmentation', cc.Raw, 'Camera Semantic Segmentation (Raw)', {}],
+                ['sensor.camera.semantic_segmentation', cc.CityScapesPalette, 'Camera Semantic Segmentation (CityScapes Palette)', {}],
+                ['sensor.camera.instance_segmentation', cc.CityScapesPalette, 'Camera Instance Segmentation (CityScapes Palette)', {}],
+                ['sensor.camera.instance_segmentation', cc.Raw, 'Camera Instance Segmentation (Raw)', {}],
+                ['sensor.lidar.ray_cast', None, 'Lidar (Ray-Cast)', {'range': '50'}],
+                ['sensor.camera.dvs', cc.Raw, 'Dynamic Vision Sensor', {}],
+                ['sensor.camera.rgb', cc.Raw, 'Camera RGB Distorted',
+                    {'lens_circle_multiplier': '3.0',
+                    'lens_circle_falloff': '3.0',
+                    'chromatic_aberration_intensity': '0.5',
+                    'chromatic_aberration_offset': '0'}],
+                ['sensor.camera.optical_flow', cc.Raw, 'Optical Flow', {}],
+                ['sensor.camera.normals', cc.Raw, 'Camera Normals', {}],
+            ]
         world = self._parent.get_world()
         bp_library = world.get_blueprint_library()
         for item in self.sensors:
@@ -1547,7 +1574,8 @@ class CameraManager(object):
                 if bp.has_attribute('gamma'):
                     bp.set_attribute('gamma', str(gamma_correction))
                 for attr_name, attr_value in item[3].items():
-                    bp.set_attribute(attr_name, attr_value)
+                    if bp.has_attribute(attr_name):
+                        bp.set_attribute(attr_name, attr_value)
             elif item[0].startswith('sensor.lidar'):
                 self.lidar_range = 50
 
@@ -1560,11 +1588,15 @@ class CameraManager(object):
         self.index = None
 
     def toggle_camera(self):
+        if self.lock_camera:
+            return
         self.transform_index = (self.transform_index + 1) % len(self._camera_transforms)
         self.set_sensor(self.index, notify=False, force_respawn=True)
 
     def set_sensor(self, index, notify=True, force_respawn=False):
         index = index % len(self.sensors)
+        if self.lock_camera and self.index is not None and index != self.index:
+            return
         needs_respawn = True if self.index is None else \
             (force_respawn or (self.sensors[index][2] != self.sensors[self.index][2]))
         if needs_respawn:
@@ -1585,6 +1617,8 @@ class CameraManager(object):
         self.index = index
 
     def next_sensor(self):
+        if self.lock_camera:
+            return
         self.set_sensor(self.index + 1)
 
     def toggle_recording(self):
@@ -1753,7 +1787,7 @@ def main():
         '-a', '--autopilot',
         action='store_true',
         help='enable autopilot')
-    argparser.add_argument(
+    argparser.add_argument(                             # SET RESOLUTION
         '--res',
         metavar='WIDTHxHEIGHT',
         default='1280x720',
