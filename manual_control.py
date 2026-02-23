@@ -148,48 +148,46 @@ try:
 except ImportError:
     raise RuntimeError('cannot import numpy, make sure numpy package is installed')
 
-from engine_audio import EngineAudio
+from typing import Optional
+from generate_audio import AudioGenerator
 
 # ==============================================================================
 # -- Audio Setup  --------------------------------------------------------------
 # ==============================================================================
 
-#_HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\mixkit-classic-car-horn-1565_short.wav"
+# Audio paths
+_ENGINE_IDLE = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_idle.wav"
+_ENGINE_MID = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_mid.wav"
+_ENGINE_HIGH = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_high.wav"
 _HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_horn1_elevenlabs.wav"
-_HORN_SOUND = None
-_HORN_CH = None
-_horn_on = False
-_FADEOUT_MS = 120
+_BLINKER_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_blinker.wav"
 
-# ENGINE AUDIO
-#_ENGINE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_1.wav"
-#_ENGINE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\police_siren.wav"
-engine_audio = EngineAudio(
-    r"C:\C_CARLA\CARLA_extensions\audio\car_engine_idle.wav",
-    r"C:\C_CARLA\CARLA_extensions\audio\car_engine_mid.wav",
-    r"C:\C_CARLA\CARLA_extensions\audio\car_engine_high.wav"
-)
+# Central audio manager
+audio_manager: Optional[AudioGenerator] = None
 
-# AUDIO SETUP
 def _audio_init():
-    # 44.1 kHz, 16-bit, stereo, small buffer for low latency
-    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
-
-def _audio_load_horn():
-    global _HORN_SOUND, _HORN_CH
-    if os.path.exists(_HORN_PATH):
-        _HORN_SOUND = pygame.mixer.Sound(_HORN_PATH)
-        _HORN_SOUND.set_volume(0.9)             # default volume
-        _HORN_CH = pygame.mixer.Channel(0)      # reserve channel 0
-    else:
-        print("[Audio] horn file not found:", _HORN_PATH)
+    """Initialize audio generator."""
+    global audio_manager
+    try:
+        audio_manager = AudioGenerator(
+            engine_idle_path=_ENGINE_IDLE,
+            engine_mid_path=_ENGINE_MID,
+            engine_high_path=_ENGINE_HIGH,
+            horn_path=_HORN_PATH,
+            blinker_path=_BLINKER_PATH,
+        )
+        audio_manager.init(frequency=44100, channels=2, buffer_size=512)
+        print("[Audio] Initialized successfully")
+    except Exception as e:
+        print(f"[Audio] ERROR initializing: {e}")
+        audio_manager = None
 
 def _audio_quit():
-    try:
-        pygame.mixer.stop()
-        pygame.mixer.quit()
-    except Exception:
-        pass
+    """Clean up audio resources."""
+    global audio_manager
+    if audio_manager is not None:
+        audio_manager.quit()
+        audio_manager = None
 
 
 # ==============================================================================
@@ -456,11 +454,10 @@ class KeyboardControl(object):
         else:
             raise NotImplementedError("Actor type not supported")
         self._steer_cache = 0.0
+        self._last_blinker_button = None
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
     def parse_events(self, client, world, clock, sync_mode):
-        global _horn_on
-
         if isinstance(self._control, carla.VehicleControl):
             current_lights = self._lights
         for event in pygame.event.get():
@@ -470,9 +467,9 @@ class KeyboardControl(object):
             if event.type == pygame.KEYDOWN:
 
                 if event.key == K_h:
-                    if (not _horn_on) and (_HORN_SOUND is not None) and (_HORN_CH is not None):
-                        _horn_on = True
-                        _HORN_CH.play(_HORN_SOUND, loops=-1)
+                    # Horn: play while held down
+                    if audio_manager is not None:
+                        audio_manager.play_horn()
 
             elif event.type == pygame.KEYUP:
 
@@ -585,11 +582,10 @@ class KeyboardControl(object):
                         world.recording_start += 1
                     world.hud.notification("Recording start time is %d" % (world.recording_start))
 
-                # Horn control: play sound while 'H' is held down
+                # Horn control: stop horn when key is released
                 elif event.key == K_h:
-                    if _horn_on and (_HORN_CH is not None):
-                        _horn_on = False
-                        _HORN_CH.fadeout(_FADEOUT_MS)
+                    if audio_manager is not None:
+                        audio_manager.stop_horn(fadeout_ms=120)
 
                 if isinstance(self._control, carla.VehicleControl):
                     if event.key == K_f:
@@ -647,8 +643,16 @@ class KeyboardControl(object):
                         current_lights ^= carla.VehicleLightState.Interior
                     elif event.key == K_z:
                         current_lights ^= carla.VehicleLightState.LeftBlinker
+                        if audio_manager is not None:
+                            force_restart = self._last_blinker_button is not None and self._last_blinker_button != "L"
+                            audio_manager.play_blinker(force_restart=force_restart)
+                            self._last_blinker_button = "L"
                     elif event.key == K_x:
                         current_lights ^= carla.VehicleLightState.RightBlinker
+                        if audio_manager is not None:
+                            force_restart = self._last_blinker_button is not None and self._last_blinker_button != "R"
+                            audio_manager.play_blinker(force_restart=force_restart)
+                            self._last_blinker_button = "R"
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
@@ -678,9 +682,8 @@ class KeyboardControl(object):
                 
                 # --- ENGINE AUDIO (KEYBOARD) ---
                 try:
-                    global engine_audio
-                    if engine_audio is not None:
-                        engine_audio.update(self._control.throttle)
+                    if audio_manager is not None and audio_manager.engine_audio is not None:
+                        audio_manager.update_engine(self._control.throttle)
                 except:
                     pass
 
@@ -761,7 +764,10 @@ class GamepadControl(object):
     - L2            :   brake
     - Cross (X)     :   hand-brake
     - Circle (O)    :   toggle reverse
+    - Horn ([])     :   honk while held down
     - Option        :   quit
+
+    - L1/R1        :   blinker left/right
 
     """
 
@@ -774,6 +780,7 @@ class GamepadControl(object):
         self._reverse_toggle_state = False
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
+        self._last_blinker_button = None
 
         pygame.joystick.init()
         count = pygame.joystick.get_count()
@@ -792,7 +799,6 @@ class GamepadControl(object):
         return 0.0 if abs(v) < self._deadzone else v
 
     def parse_events(self, client, world, clock, sync_mode):
-        global _horn_on
         import pygame
 
         # pump events to update joystick state (also if window not focused)
@@ -817,9 +823,13 @@ class GamepadControl(object):
         self._control.throttle = float(max(0.0, min(1.0, throttle)))
         self._control.brake    = float(max(0.0, min(1.0, brake)))
 
-        btn_cross  = self.joy.get_button(0)  # X
-        btn_circle = self.joy.get_button(1)  # O
-
+        btn_cross  = self.joy.get_button(0)     # X
+        btn_circle = self.joy.get_button(1)     # O
+        btn_square = self.joy.get_button(2)     # []
+        btn_triangle = self.joy.get_button(3)   # /\
+        btn_L1 = self.joy.get_button(9)   # L1
+        btn_R1 = self.joy.get_button(10)   # R1
+        # 7+8 => Left/Right stick (L3/R3)
         self._control.hand_brake = bool(btn_cross)
 
         if btn_circle and not getattr(self, "_prev_circle", False):
@@ -829,9 +839,36 @@ class GamepadControl(object):
 
         world.player.apply_control(self._control)
 
+        prev_square = getattr(self, "_prev_square", False)
+        if btn_square and not prev_square:
+            # Horn: play while held down
+            if audio_manager is not None:
+                audio_manager.play_horn()
+        # Horn control: stop horn when key is released
+        elif not btn_square and prev_square:
+            if audio_manager is not None:
+                audio_manager.stop_horn(fadeout_ms=120)
+        self._prev_square = btn_square
+
+        prev_L1 = getattr(self, "_prev_L1", False)
+        if btn_L1 and not prev_L1:
+            if audio_manager is not None:
+                force_restart = self._last_blinker_button is not None and self._last_blinker_button != "L1"
+                audio_manager.play_blinker(force_restart=force_restart)
+                self._last_blinker_button = "L1"
+        self._prev_L1 = btn_L1
+        prev_R1 = getattr(self, "_prev_R1", False)
+        if btn_R1 and not prev_R1:
+            if audio_manager is not None:
+                force_restart = self._last_blinker_button is not None and self._last_blinker_button != "R1"
+                audio_manager.play_blinker(force_restart=force_restart)
+                self._last_blinker_button = "R1"
+        self._prev_R1 = btn_R1
+
         # --- ENGINE AUDIO (GAMEPAD) ---
         try:
-            engine_audio.update(self._control.throttle)
+            if audio_manager is not None and audio_manager.engine_audio is not None:
+                audio_manager.update_engine(self._control.throttle)
         except:
             pass
 
@@ -1486,7 +1523,6 @@ def game_loop(args):
         pygame.display.flip()
 
         _audio_init()
-        _audio_load_horn()
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
