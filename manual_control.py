@@ -168,7 +168,7 @@ _PROXIMITY_ALERT_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_proximityAlert.w
 audio_manager: Optional[AudioGenerator] = None
 
 # Camera selection
-USE_SCENE_FINAL_CAMERA = True
+USE_SCENE_FINAL_CAMERA = False
 
 def _audio_init():
     """Initialize audio generator."""
@@ -1286,7 +1286,7 @@ class ObstacleDetectionSensor(object):
         import time
         self.front_distance = event.distance
         self.front_last_seen = time.time()
-        print(f"[Front] Distance: {event.distance:.10f}m")
+        #print(f"[Front] Distance: {event.distance:.10f}m")
     
     @staticmethod
     def _on_obstacle_rear(weak_self, event):
@@ -1297,7 +1297,7 @@ class ObstacleDetectionSensor(object):
         import time
         self.rear_distance = event.distance
         self.rear_last_seen = time.time()
-        print(f"[Rear] Distance: {event.distance:.10f}m")
+        #print(f"[Rear] Distance: {event.distance:.10f}m")
     
     def get_distance_group(self):
         """
@@ -1476,7 +1476,7 @@ class RadarSensor(object):
                 color=carla.Color(r, g, b))
 
 class RearCamera(object):
-    def __init__(self, parent_actor, width=320, height=240, fps=10):
+    def __init__(self, parent_actor, width=1920, height=1080, fps=10):
         self.sensor = None
         self._parent = parent_actor
 
