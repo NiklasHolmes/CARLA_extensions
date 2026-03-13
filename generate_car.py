@@ -38,11 +38,11 @@ except ImportError as e:
 AGENT_OPT_DICT = {
     'base_vehicle_threshold': 6.0,  # Following distance in meters (increased for earlier braking)
     'detection_speed_ratio': 1.2,   # Higher ratio for earlier reaction to obstacles
-    'max_brake': 0.9               # Higher brake for quick stops
+    'max_brake': 2.0                # Higher brake for quick stops
 }
 
-TARGET_SPEED = 45  # km/h (reduced for safer following)
-VEHICLE_COLOR = '90,0,0'  # Dark red
+TARGET_SPEED = 45           # km/h (reduced for safer following)
+VEHICLE_COLOR = '90,0,0'    # Dark red
 VEHICLE_MODEL = 'vehicle.dodge.charger_2020'
 DISAPPEAR_DISTANCE = 60.0  # meters - if stuck and this far from hero, exit
 
