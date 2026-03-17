@@ -91,6 +91,7 @@ import logging
 import math
 import random
 import re
+import subprocess
 import weakref
 
 os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
@@ -150,6 +151,7 @@ except ImportError:
 
 from typing import Optional
 from generate_audio import AudioGenerator
+from event_sync import EventSync
 
 # ==============================================================================
 # -- Audio Setup  --------------------------------------------------------------
@@ -166,6 +168,7 @@ _PROXIMITY_ALERT_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_proximityAlert.w
 
 # Central audio manager
 audio_manager: Optional[AudioGenerator] = None
+dashboard_process: Optional[subprocess.Popen] = None
 
 # Camera selection
 USE_SCENE_FINAL_CAMERA = False
@@ -195,6 +198,41 @@ def _audio_quit():
     if audio_manager is not None:
         audio_manager.quit()
         audio_manager = None
+
+def _start_dashboard_process(host: str, port: int):
+    """Start dashboard in a separate process to avoid pygame display conflicts."""
+    global dashboard_process
+    try:
+        if dashboard_process is not None and dashboard_process.poll() is None:
+            return
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        dashboard_script = os.path.join(script_dir, 'car_dashboard.py')
+        cmd = [sys.executable, dashboard_script, '--host', host, '--port', str(port)]
+        dashboard_process = subprocess.Popen(cmd, cwd=script_dir)
+        print("[Dashboard] External process started")
+    except Exception as e:
+        dashboard_process = None
+        print(f"[Dashboard] WARNING: failed to start external process: {e}")
+
+def _stop_dashboard_process():
+    """Stop dashboard process if running."""
+    global dashboard_process
+    if dashboard_process is None:
+        return
+
+    try:
+        if dashboard_process.poll() is None:
+            dashboard_process.terminate()
+            dashboard_process.wait(timeout=2)
+    except Exception:
+        try:
+            if dashboard_process.poll() is None:
+                dashboard_process.kill()
+        except Exception:
+            pass
+    finally:
+        dashboard_process = None
 
 
 # ==============================================================================
@@ -246,6 +284,7 @@ class World(object):
         self.world = carla_world
         self.sync = args.sync
         self.actor_role_name = args.rolename
+        self.event_sync: Optional[EventSync] = None
         try:
             self.map = self.world.get_map()
         except RuntimeError as error:
@@ -482,7 +521,6 @@ class KeyboardControl(object):
         else:
             raise NotImplementedError("Actor type not supported")
         self._steer_cache = 0.0
-        self._last_blinker_button = None
         self._prev_brake = False
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
@@ -672,16 +710,12 @@ class KeyboardControl(object):
                         current_lights ^= carla.VehicleLightState.Interior
                     elif event.key == K_z:
                         current_lights ^= carla.VehicleLightState.LeftBlinker
-                        if audio_manager is not None:
-                            force_restart = self._last_blinker_button is not None and self._last_blinker_button != "L"
-                            audio_manager.play_blinker(force_restart=force_restart)
-                            self._last_blinker_button = "L"
+                        if world.event_sync is not None:
+                            world.event_sync.trigger_blinker_left()
                     elif event.key == K_x:
                         current_lights ^= carla.VehicleLightState.RightBlinker
-                        if audio_manager is not None:
-                            force_restart = self._last_blinker_button is not None and self._last_blinker_button != "R"
-                            audio_manager.play_blinker(force_restart=force_restart)
-                            self._last_blinker_button = "R"
+                        if world.event_sync is not None:
+                            world.event_sync.trigger_blinker_right()
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
@@ -825,7 +859,6 @@ class GamepadControl(object):
         self._reverse_toggle_state = False
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
-        self._last_blinker_button = None
         self._prev_brake = False
 
         pygame.joystick.init()
@@ -886,8 +919,8 @@ class GamepadControl(object):
         btn_circle = self.joy.get_button(1)     # O
         btn_square = self.joy.get_button(2)     # []
         btn_triangle = self.joy.get_button(3)   # /\
-        btn_L1 = self.joy.get_button(9)   # L1
-        btn_R1 = self.joy.get_button(10)   # R1
+        btn_L1 = self.joy.get_button(9)         # L1
+        btn_R1 = self.joy.get_button(10)        # R1
         # 7+8 => Left/Right stick (L3/R3)
         self._control.hand_brake = bool(btn_cross)
 
@@ -911,17 +944,13 @@ class GamepadControl(object):
 
         prev_L1 = getattr(self, "_prev_L1", False)
         if btn_L1 and not prev_L1:
-            if audio_manager is not None:
-                force_restart = self._last_blinker_button is not None and self._last_blinker_button != "L1"
-                audio_manager.play_blinker(force_restart=force_restart)
-                self._last_blinker_button = "L1"
+            if world.event_sync is not None:
+                world.event_sync.trigger_blinker_left()
         self._prev_L1 = btn_L1
         prev_R1 = getattr(self, "_prev_R1", False)
         if btn_R1 and not prev_R1:
-            if audio_manager is not None:
-                force_restart = self._last_blinker_button is not None and self._last_blinker_button != "R1"
-                audio_manager.play_blinker(force_restart=force_restart)
-                self._last_blinker_button = "R1"
+            if world.event_sync is not None:
+                world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
 
         # --- ENGINE AUDIO (GAMEPAD) ---
@@ -1699,6 +1728,7 @@ def game_loop(args):
     pygame.font.init()
     world = None
     original_settings = None
+    event_sync = None
 
     try:
         client = carla.Client(args.host, args.port)
@@ -1731,6 +1761,9 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
+        _start_dashboard_process(args.host, args.port)
+        event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
+        world.event_sync = event_sync
         
         if args.input == 'gamepad':
             controller = GamepadControl(world, args.autopilot)
@@ -1749,6 +1782,8 @@ def game_loop(args):
             clock.tick_busy_loop(60)
             if controller.parse_events(client, world, clock, args.sync):
                 return
+            if event_sync is not None:
+                event_sync.update()
             world.tick(clock)
             world.render(display)
             
@@ -1767,6 +1802,15 @@ def game_loop(args):
 
         if (world and world.recording_enabled):
             client.stop_recorder()
+
+        if event_sync is not None:
+            event_sync.shutdown()
+            event_sync = None
+
+        if world is not None:
+            world.event_sync = None
+
+        _stop_dashboard_process()
 
         if world is not None:
             world.destroy()
