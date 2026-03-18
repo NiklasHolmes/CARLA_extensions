@@ -4,16 +4,12 @@ import pygame
 import numpy as np
 import time
 
-# ----------------------------------------------------------
-# Find ego vehicle
-# ----------------------------------------------------------
 def find_hero_vehicle(world):
     actors = world.get_actors().filter("vehicle.*")
     for v in actors:
         if v.attributes.get("role_name", "") == "hero":
             return v
     return None
-
 
 def find_rear_camera(world, hero):
     sensors = world.get_actors().filter("sensor.camera.rgb")
@@ -25,7 +21,6 @@ def find_rear_camera(world, hero):
 
             yaw = s.get_transform().rotation.yaw
 
-            # ----- Robust rear detection -----
             # calculate yaw difference to perfect 180°
             angle = (yaw - 180) % 360
             if angle > 180:
@@ -37,20 +32,13 @@ def find_rear_camera(world, hero):
 
     return rear_candidates[0] if rear_candidates else None
 
-
-# ----------------------------------------------------------
-# Convert CARLA image → pygame surface
-# ----------------------------------------------------------
+# convert CARLA image => pygame surface
 def to_surface(image):
     arr = np.frombuffer(image.raw_data, dtype=np.uint8)
     arr = arr.reshape((image.height, image.width, 4))
     arr = arr[:, :, :3][:, :, ::-1]
     return pygame.surfarray.make_surface(arr.swapaxes(0, 1))
 
-
-# ----------------------------------------------------------
-# MAIN
-# ----------------------------------------------------------
 def main():
     print("Connecting to CARLA...")
 
@@ -59,7 +47,7 @@ def main():
 
     world = client.get_world()
 
-    # Wait for hero spawn
+    # wait for hero spawn
     hero = None
     for _ in range(60):
         hero = find_hero_vehicle(world)
@@ -72,7 +60,7 @@ def main():
 
     print("Found ego vehicle:", hero)
 
-    # Wait & find rear cam
+    # wait & find rear camera
     rear_cam = None
     for _ in range(60):
         rear_cam = find_rear_camera(world, hero)
