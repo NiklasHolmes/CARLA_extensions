@@ -13,23 +13,29 @@ import sys
 import time
 import argparse
 
+DEFAULT_DASHBOARD_SIZE = (960, 540)               # (960, 540)  (1920, 1080) 
+DEFAULT_DASHBOARD_RES = f"{DEFAULT_DASHBOARD_SIZE[0]}x{DEFAULT_DASHBOARD_SIZE[1]}"
+
 class CarDashboard(threading.Thread):
 
-    def __init__(self, world, width=960, height=540):
+    def __init__(self, world, width=None, height=None):
         """Initialize dashboard in separate thread.
         
         Args:
             world: CARLA world object to get hero vehicle from
-            width: Dashboard window width (default 960)
-            height: Dashboard window height (default 540)
+            width: Dashboard window width (uses default if None)
+            height: Dashboard window height (uses default if None)
         """
         # use threading to run dashboard in separate thread and avoid blocking main CARLA loop
         threading.Thread.__init__(self)
         self.daemon = True  # daemon thread
         
         self.world = world
-        self.width = width
-        self.height = height
+        if width is None or height is None:
+            self.width, self.height = DEFAULT_DASHBOARD_SIZE
+        else:
+            self.width = width
+            self.height = height
 
         # maximum speed the pointer can display (degrees = km/h == 1:1 ratio)
         self._max_speed = 100
@@ -330,8 +336,8 @@ if __name__ == '__main__':
         '-p', '--port', metavar='P', default=2000, type=int,
         help='TCP port to listen to (default: 2000)')
     argparser.add_argument(
-        '--res', metavar='WIDTHxHEIGHT', default='960x540',
-        help='window resolution (default: 960x540)')
+        '--res', metavar='WIDTHxHEIGHT', default=DEFAULT_DASHBOARD_RES,
+        help=f'window resolution (default: {DEFAULT_DASHBOARD_RES})')
     argparser.add_argument(
         '--offline', action='store_true',
         help='start dashboard without CARLA server connection')
