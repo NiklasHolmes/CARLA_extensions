@@ -41,6 +41,7 @@ Use ARROWS or WASD keys for control.
 
     V            : Select next map layer (Shift+V reverse)
     B            : Load current selected map layer (Shift+B to unload)
+    Y            : export current performance row for Excel (overwrite file)
 
     R            : toggle recording images to disk
 
@@ -86,12 +87,14 @@ from carla import ColorConverter as cc
 
 import argparse
 import collections
+from collections import deque
 import datetime
 import logging
 import math
 import random
 import re
 import subprocess
+import time
 import weakref
 
 os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
@@ -137,9 +140,11 @@ try:
     from pygame.locals import K_v
     from pygame.locals import K_w
     from pygame.locals import K_x
+    from pygame.locals import K_y
     from pygame.locals import K_z
     from pygame.locals import K_MINUS
     from pygame.locals import K_EQUALS
+
 
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
@@ -606,6 +611,12 @@ class KeyboardControl(object):
                             world.hud.notification("Enabled Vehicle Telemetry")
                         except Exception:
                             pass
+                elif event.key == K_y:
+                    try:
+                        out_path = world.hud.export_perf_row_for_excel()
+                        world.hud.notification("Perf export written: %s" % os.path.basename(out_path), seconds=2.5)
+                    except Exception as e:
+                        world.hud.error("Perf export failed: %s" % e)
                 elif event.key > K_0 and event.key <= K_9:
                     index_ctrl = 0
                     if pygame.key.get_mods() & KMOD_CTRL:
@@ -905,7 +916,7 @@ class GamepadControl(object):
         except Exception:
             speed_kmh = 0.0
 
-        # Brake audio - play once on L2 press (0 -> 1 transition)
+        # Brake audio - play once on L2 press (0 => 1 transition)
         current_braking = brake > 0.1
         if audio_manager is not None and not self._prev_brake and current_braking:
             audio_manager.play_brake(brake_strength=brake, speed_kmh=speed_kmh)
@@ -981,8 +992,16 @@ class HUD(object):
         self._notifications = FadingText(font, (width, 40), (0, height - 40))
         self.help = HelpText(pygame.font.Font(mono, 16), width, height)
         self.server_fps = 0
+        self.client_fps = 0                     # new attribute to store client FPS
+        self.server_fps_window = deque(maxlen=1800)    # ~30s at ~60 FPS
+        self.client_fps_window = deque(maxlen=1800)    # ~30s at ~60 FPS
         self.frame = 0
         self.simulation_time = 0
+        self.wall_elapsed = 0.0
+        self.real_time_factor = 0.0
+        self.server_frame_ms = 0.0
+        self.client_frame_ms = 0.0
+        self._wall_start = time.perf_counter()
         self._show_info = True
         self._info_text = []
         self._server_clock = pygame.time.Clock()
@@ -991,10 +1010,21 @@ class HUD(object):
         self._ackermann_control = carla.VehicleAckermannControl()
 
     def on_world_tick(self, timestamp):
-        self._server_clock.tick()
-        self.server_fps = self._server_clock.get_fps()
+        # self._server_clock.tick()
+        # self.server_fps = self._server_clock.get_fps()
+        # self.frame = timestamp.frame
+        # self.simulation_time = timestamp.elapsed_seconds
+        try:
+            self.server_fps = 1.0 / timestamp.delta_seconds
+        except ZeroDivisionError:
+            self.server_fps = 0.0
+        self.server_frame_ms = max(0.0, timestamp.delta_seconds * 1000.0)
+
+        self.server_fps_window.append(self.server_fps)
+
         self.frame = timestamp.frame
         self.simulation_time = timestamp.elapsed_seconds
+
 
     def tick(self, world, clock):
         self._notifications.tick(world, clock)
@@ -1013,13 +1043,28 @@ class HUD(object):
         max_col = max(1.0, max(collision))
         collision = [x / max_col for x in collision]
         vehicles = world.world.get_actors().filter('vehicle.*')
+        current_client_fps = clock.get_fps()
+        self.client_fps = current_client_fps
+        self.client_fps_window.append(current_client_fps)
+        self.client_frame_ms = float(clock.get_time())
+        self.wall_elapsed = max(0.0, time.perf_counter() - self._wall_start)
+        if self.wall_elapsed > 1e-6:
+            self.real_time_factor = self.simulation_time / self.wall_elapsed
+        else:
+            self.real_time_factor = 0.0
+
         self._info_text = [
             'Server:  % 16.0f FPS' % self.server_fps,
-            'Client:  % 16.0f FPS' % clock.get_fps(),
+            #'Client:  % 16.0f FPS' % clock.get_fps(),
+            'Client:  % 16.0f FPS' % current_client_fps,
             '',
             'Vehicle: % 20s' % get_actor_display_name(world.player, truncate=20),
             'Map:     % 20s' % world.map.name.split('/')[-1],
             'Simulation time: % 12s' % datetime.timedelta(seconds=int(self.simulation_time)),
+            'Runtime: % 16s' % datetime.timedelta(seconds=int(self.wall_elapsed)),
+            'RT factor: % 10.2f' % self.real_time_factor,                       # real-time factor
+            'Server frame: % 7.1f ms' % self.server_frame_ms,                   # calculate server frame time in ms
+            'Client frame: % 7.1f ms' % self.client_frame_ms,
             '',
             'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2)),
             u'Compass:% 17.0f\N{DEGREE SIGN} % 2s' % (compass, heading),
@@ -1029,6 +1074,23 @@ class HUD(object):
             'GNSS:% 24s' % ('(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
             'Height:  % 18.0f m' % t.location.z,
             '']
+        # FPS statistics over ~30s for server and client separately
+        if len(self.server_fps_window) > 0:
+            avg_fps, std_fps, fps_1pct_low = self._compute_fps_stats(self.server_fps_window)
+            self._info_text += [
+                'Server avg (30s): %5.1f' % avg_fps,
+                'Server std (30s): %5.1f' % std_fps,
+                'Server 1%% low:    %5.1f' % fps_1pct_low,
+            ]
+
+        if len(self.client_fps_window) > 0:
+            avg_fps, std_fps, fps_1pct_low = self._compute_fps_stats(self.client_fps_window)
+            self._info_text += [
+                'Client avg (30s): %5.1f' % avg_fps,
+                'Client std (30s): %5.1f' % std_fps,
+                'Client 1%% low:    %5.1f' % fps_1pct_low,
+            ]
+
         if isinstance(c, carla.VehicleControl):
             self._info_text += [
                 ('Throttle:', c.throttle, 0.0, 1.0),
@@ -1066,6 +1128,42 @@ class HUD(object):
 
     def show_ackermann_info(self, enabled):
         self._show_ackermann_info = enabled
+
+    @staticmethod
+    def _compute_fps_stats(samples):
+        avg_fps = sum(samples) / len(samples)
+        var = sum((f - avg_fps) ** 2 for f in samples) / len(samples)
+        std_fps = var ** 0.5
+        sorted_fps = sorted(samples)
+        index_1pct = max(0, int(len(sorted_fps) * 0.01) - 1)
+        fps_1pct_low = sorted_fps[index_1pct]
+        return avg_fps, std_fps, fps_1pct_low
+
+    def export_perf_row_for_excel(self):
+        """
+        Write one tab-separated row with performance metrics in the exact column
+        order expected by the Excel sheet. The file is overwritten on each call.
+        """
+        server_avg, server_std, server_1pct = self._compute_fps_stats(self.server_fps_window) if len(self.server_fps_window) > 0 else (0.0, 0.0, 0.0)
+        client_avg, client_std, client_1pct = self._compute_fps_stats(self.client_fps_window) if len(self.client_fps_window) > 0 else (0.0, 0.0, 0.0)
+
+        values = [
+            server_avg,
+            server_std,
+            server_1pct,
+            client_avg,
+            client_std,
+            client_1pct,
+            self.real_time_factor,
+            self.server_frame_ms,
+            self.client_frame_ms,
+        ]
+
+        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'perf_export_row.tsv')
+        with open(out_path, 'w', encoding='utf-8', newline='') as f:
+            f.write('\t'.join('%.3f' % v for v in values) + '\n')
+
+        return out_path
 
     def update_ackermann_control(self, ackermann_control):
         self._ackermann_control = ackermann_control
@@ -1680,6 +1778,7 @@ class CameraManager(object):
         if not self:
             return
         if self.sensors[self.index][0].startswith('sensor.lidar'):
+            print(f"Using Lidar!")
             points = np.frombuffer(image.raw_data, dtype=np.dtype('f4'))
             points = np.reshape(points, (int(points.shape[0] / 4), 4))
             lidar_data = np.array(points[:, :2])
