@@ -51,6 +51,7 @@ Use ARROWS or WASD keys for control.
     CTRL + -     : decrements the start time of the replay by 1 second (+SHIFT = 10 seconds)
 
     F1           : toggle HUD
+    F2           : toggle camera resolution (100% <-> --sp)
     H/?          : toggle help
     ESC          : quit
 """
@@ -113,6 +114,7 @@ try:
     from pygame.locals import K_DOWN
     from pygame.locals import K_ESCAPE
     from pygame.locals import K_F1
+    from pygame.locals import K_F2
     from pygame.locals import K_LEFT
     from pygame.locals import K_PERIOD
     from pygame.locals import K_RIGHT
@@ -289,6 +291,8 @@ class World(object):
         self.world = carla_world
         self.sync = args.sync
         self.actor_role_name = args.rolename
+        self._screen_percentage = args.sp
+        self._sp_upscale = args.sp_upscale
         self.event_sync: Optional[EventSync] = None
         try:
             self.map = self.world.get_map()
@@ -408,6 +412,8 @@ class World(object):
             self.player,
             self.hud,
             self._gamma,
+            screen_percentage=self._screen_percentage,
+            upscale_filter=self._sp_upscale,
             use_scene_final=USE_SCENE_FINAL_CAMERA
         )
         self.camera_manager.transform_index = cam_pos_index
@@ -556,6 +562,8 @@ class KeyboardControl(object):
                         world.restart()
                 elif event.key == K_F1:
                     world.hud.toggle_info()
+                elif event.key == K_F2:
+                    world.camera_manager.toggle_screen_percentage()
                 elif event.key == K_v and pygame.key.get_mods() & KMOD_SHIFT:
                     world.next_map_layer(reverse=True)
                 elif event.key == K_v:
@@ -1161,7 +1169,7 @@ class HUD(object):
 
         out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'perf_export_row.tsv')
         with open(out_path, 'w', encoding='utf-8', newline='') as f:
-            f.write('\t'.join('%.3f' % v for v in values) + '\n')
+            f.write('\t'.join(('%.3f' % v).replace('.', ',') for v in values) + '\n')               # get values with , for Excel
 
         return out_path
 
@@ -1645,14 +1653,21 @@ class RearCamera(object):
 
 
 class CameraManager(object):
-    def __init__(self, parent_actor, hud, gamma_correction, use_scene_final=False):
+    def __init__(self, parent_actor, hud, gamma_correction, screen_percentage=1.0, upscale_filter='fast', use_scene_final=False):
         self.sensor = None
         self.surface = None
+        self._scaled_surface = None
         self._parent = parent_actor
         self.hud = hud
         self.recording = False
         self.use_scene_final = use_scene_final
         self.lock_camera = use_scene_final
+        self._upscale_filter = upscale_filter
+        self._use_smooth_upscale = (upscale_filter == 'smooth')
+        self._full_screen_percentage = 1.0
+        self._reduced_screen_percentage = max(0.01, min(1.0, float(screen_percentage)))
+        self._current_screen_percentage = self._reduced_screen_percentage
+        self.sensor_dim = self._compute_sensor_dim(self._current_screen_percentage)
         bound_x = 0.5 + self._parent.bounding_box.extent.x
         bound_y = 0.5 + self._parent.bounding_box.extent.y
         bound_z = 0.5 + self._parent.bounding_box.extent.z
@@ -1712,8 +1727,8 @@ class CameraManager(object):
         for item in self.sensors:
             bp = bp_library.find(item[0])
             if item[0].startswith('sensor.camera'):
-                bp.set_attribute('image_size_x', str(hud.dim[0]))
-                bp.set_attribute('image_size_y', str(hud.dim[1]))
+                bp.set_attribute('image_size_x', str(self.sensor_dim[0]))
+                bp.set_attribute('image_size_y', str(self.sensor_dim[1]))
                 if bp.has_attribute('gamma'):
                     bp.set_attribute('gamma', str(gamma_correction))
                 for attr_name, attr_value in item[3].items():
@@ -1729,6 +1744,44 @@ class CameraManager(object):
 
             item.append(bp)
         self.index = None
+
+    def _compute_sensor_dim(self, screen_percentage):
+        return (
+            max(1, int(self.hud.dim[0] * screen_percentage)),
+            max(1, int(self.hud.dim[1] * screen_percentage)),
+        )
+
+    def _set_camera_blueprint_resolution(self):
+        for item in self.sensors:
+            if item[0].startswith('sensor.camera'):
+                bp = item[-1]
+                bp.set_attribute('image_size_x', str(self.sensor_dim[0]))
+                bp.set_attribute('image_size_y', str(self.sensor_dim[1]))
+
+    def toggle_screen_percentage(self):
+        if abs(self._reduced_screen_percentage - 1.0) < 1e-6:
+            self.hud.notification('Render scale fixed at 100% (set --sp < 1.0 to enable toggle)')
+            return
+
+        if abs(self._current_screen_percentage - self._full_screen_percentage) < 1e-6:
+            self._current_screen_percentage = self._reduced_screen_percentage
+        else:
+            self._current_screen_percentage = self._full_screen_percentage
+
+        self.sensor_dim = self._compute_sensor_dim(self._current_screen_percentage)
+        self._set_camera_blueprint_resolution()
+
+        if self.index is not None and self.sensors[self.index][0].startswith('sensor.camera'):
+            self.set_sensor(self.index, notify=False, force_respawn=True)
+
+        self.hud.notification(
+            'Render scale: %d%% (%dx%d), upscale=%s' % (
+                int(round(self._current_screen_percentage * 100.0)),
+                self.sensor_dim[0],
+                self.sensor_dim[1],
+                self._upscale_filter,
+            )
+        )
 
     def toggle_camera(self):
         if self.lock_camera:
@@ -1770,7 +1823,16 @@ class CameraManager(object):
 
     def render(self, display):
         if self.surface is not None:
-            display.blit(self.surface, (0, 0))
+            if self.surface.get_size() != self.hud.dim:
+                if self._scaled_surface is None or self._scaled_surface.get_size() != self.hud.dim:
+                    self._scaled_surface = pygame.Surface(self.hud.dim)
+                if self._use_smooth_upscale:
+                    pygame.transform.smoothscale(self.surface, self.hud.dim, self._scaled_surface)
+                else:
+                    pygame.transform.scale(self.surface, self.hud.dim, self._scaled_surface)
+                display.blit(self._scaled_surface, (0, 0))
+            else:
+                display.blit(self.surface, (0, 0))
 
     @staticmethod
     def _parse_image(weak_self, image):
@@ -1952,6 +2014,17 @@ def main():
         default='1280x720',
         help='window resolution (default: 1280x720)')
     argparser.add_argument(
+        '--sp',
+        metavar='FLOAT',
+        default=1.0,
+        type=float,
+        help='internal camera screen percentage in (0.0, 1.0], e.g. 0.7 (default: 1.0)')
+    argparser.add_argument(
+        '--sp-upscale',
+        choices=['smooth', 'fast'],
+        default='fast',
+        help='upscaling filter for low internal camera resolution (default: fast)')
+    argparser.add_argument(
         '--filter',
         metavar='PATTERN',
         default='vehicle.*',
@@ -1984,11 +2057,18 @@ def main():
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
+    if not (0.0 < args.sp <= 1.0):
+        argparser.error('--sp must be > 0.0 and <= 1.0')
+    internal_width = max(1, int(args.width * args.sp))
+    internal_height = max(1, int(args.height * args.sp))
 
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
 
     logging.info('listening to server %s:%s', args.host, args.port)
+    logging.info('window=%dx%d internal_camera=%dx%d (sp=%.2f)',
+                 args.width, args.height, internal_width, internal_height, args.sp)
+    logging.info('upscale_filter=%s', args.sp_upscale)
 
     print(__doc__)
 
