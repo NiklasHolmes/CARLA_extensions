@@ -12,19 +12,22 @@ import threading
 import sys
 import time
 import argparse
+import ctypes
+from ctypes import wintypes
 
-DEFAULT_DASHBOARD_SIZE = (960, 540)               # (960, 540)  (1920, 1080) 
+DEFAULT_DASHBOARD_SIZE = (1920, 1080)             # (960, 540)  (1920, 1080) 
 DEFAULT_DASHBOARD_RES = f"{DEFAULT_DASHBOARD_SIZE[0]}x{DEFAULT_DASHBOARD_SIZE[1]}"
 
 class CarDashboard(threading.Thread):
 
-    def __init__(self, world, width=None, height=None):
+    def __init__(self, world, width=None, height=None, display_index=0):
         """Initialize dashboard in separate thread.
         
         Args:
             world: CARLA world object to get hero vehicle from
             width: Dashboard window width (uses default if None)
             height: Dashboard window height (uses default if None)
+            display_index: pygame display index (0-based)
         """
         # use threading to run dashboard in separate thread and avoid blocking main CARLA loop
         threading.Thread.__init__(self)
@@ -36,6 +39,7 @@ class CarDashboard(threading.Thread):
         else:
             self.width = width
             self.height = height
+        self.display_index = max(0, int(display_index))
 
         # maximum speed the pointer can display (degrees = km/h == 1:1 ratio)
         self._max_speed = 100
@@ -69,6 +73,95 @@ class CarDashboard(threading.Thread):
         self._blink_interval = 0.3
         self._blink_timer = 0.0
         self._blink_phase_on = True
+
+    def _resolve_display_index(self, requested_index, num_displays):
+        """Resolve requested monitor index with support for 0-based and common 1-based input."""
+        if num_displays <= 0:
+            return max(0, int(requested_index))
+
+        idx = int(requested_index)
+        if 0 <= idx < num_displays:
+            return idx
+
+        if 1 <= idx <= num_displays:
+            resolved = idx - 1
+            print(f"[Dashboard] display index {idx} interpreted as 1-based -> using {resolved}")
+            return resolved
+
+        clamped = max(0, min(idx, num_displays - 1))
+        print(f"[Dashboard] display index {idx} out of range, clamped to {clamped}")
+        return clamped
+
+    def _windows_monitor_rects(self):
+        """Return monitor rectangles on Windows as (left, top, right, bottom)."""
+        if os.name != 'nt':
+            return []
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            ]
+
+        rects = []
+        monitor_enum_proc = ctypes.WINFUNCTYPE(
+            wintypes.BOOL,
+            wintypes.HMONITOR,
+            wintypes.HDC,
+            ctypes.POINTER(RECT),
+            wintypes.LPARAM,
+        )
+
+        def _callback(_monitor, _hdc, lprc_monitor, _data):
+            r = lprc_monitor.contents
+            rects.append((int(r.left), int(r.top), int(r.right), int(r.bottom)))
+            return 1
+
+        try:
+            ctypes.windll.user32.EnumDisplayMonitors(
+                0, 0, monitor_enum_proc(_callback), 0
+            )
+        except Exception:
+            return []
+
+        return rects
+
+    def _move_window_to_monitor_windows(self, resolved_display_index):
+        """Move pygame window to selected monitor on Windows."""
+        if os.name != 'nt':
+            return
+
+        try:
+            wm_info = pygame.display.get_wm_info()
+            hwnd = wm_info.get('window')
+            if not hwnd:
+                return
+
+            rects = self._windows_monitor_rects()
+            if not rects:
+                return
+
+            monitor_idx = self._resolve_display_index(resolved_display_index, len(rects))
+            left, top, _, _ = rects[monitor_idx]
+
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            SWP_NOACTIVATE = 0x0010
+
+            ctypes.windll.user32.SetWindowPos(
+                int(hwnd),
+                0,
+                int(left),
+                int(top),
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+            print(f"[Dashboard] Window moved to monitor index {monitor_idx} at ({left}, {top})")
+        except Exception as e:
+            print(f"[Dashboard] WARNING: failed to move window to monitor: {e}")
 
     # SOCKET: 
     def _init_sync_socket(self):
@@ -113,9 +206,49 @@ class CarDashboard(threading.Thread):
     def run(self):
         """Main dashboard thread loop."""
         try:
+            if os.name == 'nt':
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
             pygame.init()
-            self._display = pygame.display.set_mode((self.width, self.height))
+
+            try:
+                num_displays = pygame.display.get_num_video_displays()
+            except Exception:
+                num_displays = 0
+            resolved_display_index = self._resolve_display_index(self.display_index, num_displays)
+            print(
+                f"[Dashboard] requested_display={self.display_index}, "
+                f"resolved_display={resolved_display_index}, "
+                f"num_displays={num_displays}"
+            )
+
+            window_flags = 0
+            if os.name == 'nt':
+                rects = self._windows_monitor_rects()
+                if rects:
+                    monitor_idx = self._resolve_display_index(resolved_display_index, len(rects))
+                    left, top, right, bottom = rects[monitor_idx]
+                    self.width = int(right - left)
+                    self.height = int(bottom - top)
+                    window_flags = pygame.NOFRAME
+                    print(
+                        f"[Dashboard] monitor_rect=({left}, {top}, {right}, {bottom}), "
+                        f"window_size={self.width}x{self.height}, borderless=True"
+                    )
+
+            try:
+                self._display = pygame.display.set_mode(
+                    (self.width, self.height),
+                    window_flags,
+                    display=resolved_display_index,
+                )
+            except TypeError:
+                # Fallback for older pygame signatures without display keyword.
+                self._display = pygame.display.set_mode((self.width, self.height), window_flags)
             pygame.display.set_caption("Car Dashboard")
+            self._move_window_to_monitor_windows(resolved_display_index)
 
             # scale speedometer images
             img_dir = os.path.join(os.path.dirname(__file__), 'images')
@@ -341,6 +474,9 @@ if __name__ == '__main__':
     argparser.add_argument(
         '--offline', action='store_true',
         help='start dashboard without CARLA server connection')
+    argparser.add_argument(
+        '--display-index', metavar='N', default=2, type=int,
+        help='pygame display index (0-based, default: 2)')
     args = argparser.parse_args()
     args.width, args.height = [int(x) for x in args.res.split('x')]
     dashboard = None
@@ -365,9 +501,14 @@ if __name__ == '__main__':
             self.player = player
 
     def start_dashboard_with_player(player, mode_label):
-        nonlocal_dashboard = CarDashboard(WorldWrapper(player), width=args.width, height=args.height)
+        nonlocal_dashboard = CarDashboard(
+            WorldWrapper(player),
+            width=args.width,
+            height=args.height,
+            display_index=args.display_index,
+        )
         nonlocal_dashboard.start()
-        print(f"[Dashboard] Started ({args.res}) in {mode_label} mode. Press Ctrl+C to exit.")
+        print(f"[Dashboard] Started ({args.res}, display={args.display_index}) in {mode_label} mode. Press Ctrl+C to exit.")
         return nonlocal_dashboard
     
     try:
