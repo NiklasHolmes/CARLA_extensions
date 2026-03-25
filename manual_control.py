@@ -206,7 +206,7 @@ def _audio_quit():
         audio_manager.quit()
         audio_manager = None
 
-def _start_dashboard_process(host: str, port: int):
+def _start_dashboard_process(host: str, port: int, display_index: Optional[int] = None):
     """Start dashboard in a separate process to avoid pygame display conflicts."""
     global dashboard_process
     try:
@@ -216,6 +216,8 @@ def _start_dashboard_process(host: str, port: int):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         dashboard_script = os.path.join(script_dir, 'car_dashboard.py')
         cmd = [sys.executable, dashboard_script, '--host', host, '--port', str(port)]
+        if display_index is not None and display_index >= 0:
+            cmd.extend(['--display-index', str(display_index)])
         dashboard_process = subprocess.Popen(cmd, cwd=script_dir)
         print("[Dashboard] External process started")
     except Exception as e:
@@ -1922,7 +1924,7 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
-        _start_dashboard_process(args.host, args.port)
+        _start_dashboard_process(args.host, args.port, args.dashboard_display)
         event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
         world.event_sync = event_sync
         
@@ -2053,6 +2055,13 @@ def main():
         choices=['keyboard', 'gamepad'],
         default='keyboard',
         help='Select input device for this window (default: keyboard)'
+    )
+    argparser.add_argument(
+        '--dashboard-display',
+        metavar='N',
+        type=int,
+        default=1,                                      # dashbaord disply SCREEN
+        help='pygame display index for external dashboard (default: 2 for screen 3 (tablet))'
     )
     args = argparser.parse_args()
 
