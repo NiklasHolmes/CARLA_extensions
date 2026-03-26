@@ -41,6 +41,7 @@ Use ARROWS or WASD keys for control.
 
     V            : Select next map layer (Shift+V reverse)
     B            : Load current selected map layer (Shift+B to unload)
+    Y            : export current performance row for Excel (overwrite file)
 
     R            : toggle recording images to disk
 
@@ -50,6 +51,7 @@ Use ARROWS or WASD keys for control.
     CTRL + -     : decrements the start time of the replay by 1 second (+SHIFT = 10 seconds)
 
     F1           : toggle HUD
+    F2           : toggle camera resolution (100% <-> --sp)
     H/?          : toggle help
     ESC          : quit
 """
@@ -86,11 +88,14 @@ from carla import ColorConverter as cc
 
 import argparse
 import collections
+from collections import deque
 import datetime
 import logging
 import math
 import random
 import re
+import subprocess
+import time
 import weakref
 
 os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
@@ -109,6 +114,7 @@ try:
     from pygame.locals import K_DOWN
     from pygame.locals import K_ESCAPE
     from pygame.locals import K_F1
+    from pygame.locals import K_F2
     from pygame.locals import K_LEFT
     from pygame.locals import K_PERIOD
     from pygame.locals import K_RIGHT
@@ -136,9 +142,11 @@ try:
     from pygame.locals import K_v
     from pygame.locals import K_w
     from pygame.locals import K_x
+    from pygame.locals import K_y
     from pygame.locals import K_z
     from pygame.locals import K_MINUS
     from pygame.locals import K_EQUALS
+
 
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
@@ -150,6 +158,7 @@ except ImportError:
 
 from typing import Optional
 from generate_audio import AudioGenerator
+from event_sync import EventSync
 
 # ==============================================================================
 # -- Audio Setup  --------------------------------------------------------------
@@ -166,6 +175,7 @@ _PROXIMITY_ALERT_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_proximityAlert.w
 
 # Central audio manager
 audio_manager: Optional[AudioGenerator] = None
+dashboard_process: Optional[subprocess.Popen] = None
 
 # Camera selection
 USE_SCENE_FINAL_CAMERA = False
@@ -195,6 +205,43 @@ def _audio_quit():
     if audio_manager is not None:
         audio_manager.quit()
         audio_manager = None
+
+def _start_dashboard_process(host: str, port: int, display_index: Optional[int] = None):
+    """Start dashboard in a separate process to avoid pygame display conflicts."""
+    global dashboard_process
+    try:
+        if dashboard_process is not None and dashboard_process.poll() is None:
+            return
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        dashboard_script = os.path.join(script_dir, 'car_dashboard.py')
+        cmd = [sys.executable, dashboard_script, '--host', host, '--port', str(port)]
+        if display_index is not None and display_index >= 0:
+            cmd.extend(['--display-index', str(display_index)])
+        dashboard_process = subprocess.Popen(cmd, cwd=script_dir)
+        print("[Dashboard] External process started")
+    except Exception as e:
+        dashboard_process = None
+        print(f"[Dashboard] WARNING: failed to start external process: {e}")
+
+def _stop_dashboard_process():
+    """Stop dashboard process if running."""
+    global dashboard_process
+    if dashboard_process is None:
+        return
+
+    try:
+        if dashboard_process.poll() is None:
+            dashboard_process.terminate()
+            dashboard_process.wait(timeout=2)
+    except Exception:
+        try:
+            if dashboard_process.poll() is None:
+                dashboard_process.kill()
+        except Exception:
+            pass
+    finally:
+        dashboard_process = None
 
 
 # ==============================================================================
@@ -246,6 +293,9 @@ class World(object):
         self.world = carla_world
         self.sync = args.sync
         self.actor_role_name = args.rolename
+        self._screen_percentage = args.sp
+        self._sp_upscale = args.sp_upscale
+        self.event_sync: Optional[EventSync] = None
         try:
             self.map = self.world.get_map()
         except RuntimeError as error:
@@ -364,6 +414,8 @@ class World(object):
             self.player,
             self.hud,
             self._gamma,
+            screen_percentage=self._screen_percentage,
+            upscale_filter=self._sp_upscale,
             use_scene_final=USE_SCENE_FINAL_CAMERA
         )
         self.camera_manager.transform_index = cam_pos_index
@@ -482,7 +534,6 @@ class KeyboardControl(object):
         else:
             raise NotImplementedError("Actor type not supported")
         self._steer_cache = 0.0
-        self._last_blinker_button = None
         self._prev_brake = False
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
@@ -513,6 +564,8 @@ class KeyboardControl(object):
                         world.restart()
                 elif event.key == K_F1:
                     world.hud.toggle_info()
+                elif event.key == K_F2:
+                    world.camera_manager.toggle_screen_percentage()
                 elif event.key == K_v and pygame.key.get_mods() & KMOD_SHIFT:
                     world.next_map_layer(reverse=True)
                 elif event.key == K_v:
@@ -568,6 +621,12 @@ class KeyboardControl(object):
                             world.hud.notification("Enabled Vehicle Telemetry")
                         except Exception:
                             pass
+                elif event.key == K_y:
+                    try:
+                        out_path = world.hud.export_perf_row_for_excel()
+                        world.hud.notification("Perf export written: %s" % os.path.basename(out_path), seconds=2.5)
+                    except Exception as e:
+                        world.hud.error("Perf export failed: %s" % e)
                 elif event.key > K_0 and event.key <= K_9:
                     index_ctrl = 0
                     if pygame.key.get_mods() & KMOD_CTRL:
@@ -672,16 +731,12 @@ class KeyboardControl(object):
                         current_lights ^= carla.VehicleLightState.Interior
                     elif event.key == K_z:
                         current_lights ^= carla.VehicleLightState.LeftBlinker
-                        if audio_manager is not None:
-                            force_restart = self._last_blinker_button is not None and self._last_blinker_button != "L"
-                            audio_manager.play_blinker(force_restart=force_restart)
-                            self._last_blinker_button = "L"
+                        if world.event_sync is not None:
+                            world.event_sync.trigger_blinker_left()
                     elif event.key == K_x:
                         current_lights ^= carla.VehicleLightState.RightBlinker
-                        if audio_manager is not None:
-                            force_restart = self._last_blinker_button is not None and self._last_blinker_button != "R"
-                            audio_manager.play_blinker(force_restart=force_restart)
-                            self._last_blinker_button = "R"
+                        if world.event_sync is not None:
+                            world.event_sync.trigger_blinker_right()
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
@@ -825,7 +880,6 @@ class GamepadControl(object):
         self._reverse_toggle_state = False
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
-        self._last_blinker_button = None
         self._prev_brake = False
 
         pygame.joystick.init()
@@ -872,7 +926,7 @@ class GamepadControl(object):
         except Exception:
             speed_kmh = 0.0
 
-        # Brake audio - play once on L2 press (0 -> 1 transition)
+        # Brake audio - play once on L2 press (0 => 1 transition)
         current_braking = brake > 0.1
         if audio_manager is not None and not self._prev_brake and current_braking:
             audio_manager.play_brake(brake_strength=brake, speed_kmh=speed_kmh)
@@ -886,8 +940,8 @@ class GamepadControl(object):
         btn_circle = self.joy.get_button(1)     # O
         btn_square = self.joy.get_button(2)     # []
         btn_triangle = self.joy.get_button(3)   # /\
-        btn_L1 = self.joy.get_button(9)   # L1
-        btn_R1 = self.joy.get_button(10)   # R1
+        btn_L1 = self.joy.get_button(9)         # L1
+        btn_R1 = self.joy.get_button(10)        # R1
         # 7+8 => Left/Right stick (L3/R3)
         self._control.hand_brake = bool(btn_cross)
 
@@ -911,17 +965,13 @@ class GamepadControl(object):
 
         prev_L1 = getattr(self, "_prev_L1", False)
         if btn_L1 and not prev_L1:
-            if audio_manager is not None:
-                force_restart = self._last_blinker_button is not None and self._last_blinker_button != "L1"
-                audio_manager.play_blinker(force_restart=force_restart)
-                self._last_blinker_button = "L1"
+            if world.event_sync is not None:
+                world.event_sync.trigger_blinker_left()
         self._prev_L1 = btn_L1
         prev_R1 = getattr(self, "_prev_R1", False)
         if btn_R1 and not prev_R1:
-            if audio_manager is not None:
-                force_restart = self._last_blinker_button is not None and self._last_blinker_button != "R1"
-                audio_manager.play_blinker(force_restart=force_restart)
-                self._last_blinker_button = "R1"
+            if world.event_sync is not None:
+                world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
 
         # --- ENGINE AUDIO (GAMEPAD) ---
@@ -952,8 +1002,16 @@ class HUD(object):
         self._notifications = FadingText(font, (width, 40), (0, height - 40))
         self.help = HelpText(pygame.font.Font(mono, 16), width, height)
         self.server_fps = 0
+        self.client_fps = 0                     # new attribute to store client FPS
+        self.server_fps_window = deque(maxlen=1800)    # ~30s at ~60 FPS
+        self.client_fps_window = deque(maxlen=1800)    # ~30s at ~60 FPS
         self.frame = 0
         self.simulation_time = 0
+        self.wall_elapsed = 0.0
+        self.real_time_factor = 0.0
+        self.server_frame_ms = 0.0
+        self.client_frame_ms = 0.0
+        self._wall_start = time.perf_counter()
         self._show_info = True
         self._info_text = []
         self._server_clock = pygame.time.Clock()
@@ -962,10 +1020,21 @@ class HUD(object):
         self._ackermann_control = carla.VehicleAckermannControl()
 
     def on_world_tick(self, timestamp):
-        self._server_clock.tick()
-        self.server_fps = self._server_clock.get_fps()
+        # self._server_clock.tick()
+        # self.server_fps = self._server_clock.get_fps()
+        # self.frame = timestamp.frame
+        # self.simulation_time = timestamp.elapsed_seconds
+        try:
+            self.server_fps = 1.0 / timestamp.delta_seconds
+        except ZeroDivisionError:
+            self.server_fps = 0.0
+        self.server_frame_ms = max(0.0, timestamp.delta_seconds * 1000.0)
+
+        self.server_fps_window.append(self.server_fps)
+
         self.frame = timestamp.frame
         self.simulation_time = timestamp.elapsed_seconds
+
 
     def tick(self, world, clock):
         self._notifications.tick(world, clock)
@@ -984,13 +1053,28 @@ class HUD(object):
         max_col = max(1.0, max(collision))
         collision = [x / max_col for x in collision]
         vehicles = world.world.get_actors().filter('vehicle.*')
+        current_client_fps = clock.get_fps()
+        self.client_fps = current_client_fps
+        self.client_fps_window.append(current_client_fps)
+        self.client_frame_ms = float(clock.get_time())
+        self.wall_elapsed = max(0.0, time.perf_counter() - self._wall_start)
+        if self.wall_elapsed > 1e-6:
+            self.real_time_factor = self.simulation_time / self.wall_elapsed
+        else:
+            self.real_time_factor = 0.0
+
         self._info_text = [
             'Server:  % 16.0f FPS' % self.server_fps,
-            'Client:  % 16.0f FPS' % clock.get_fps(),
+            #'Client:  % 16.0f FPS' % clock.get_fps(),
+            'Client:  % 16.0f FPS' % current_client_fps,
             '',
             'Vehicle: % 20s' % get_actor_display_name(world.player, truncate=20),
             'Map:     % 20s' % world.map.name.split('/')[-1],
             'Simulation time: % 12s' % datetime.timedelta(seconds=int(self.simulation_time)),
+            'Runtime: % 16s' % datetime.timedelta(seconds=int(self.wall_elapsed)),
+            'RT factor: % 10.2f' % self.real_time_factor,                       # real-time factor
+            'Server frame: % 7.1f ms' % self.server_frame_ms,                   # calculate server frame time in ms
+            'Client frame: % 7.1f ms' % self.client_frame_ms,
             '',
             'Speed:   % 15.0f km/h' % (3.6 * math.sqrt(v.x**2 + v.y**2 + v.z**2)),
             u'Compass:% 17.0f\N{DEGREE SIGN} % 2s' % (compass, heading),
@@ -1000,6 +1084,23 @@ class HUD(object):
             'GNSS:% 24s' % ('(% 2.6f, % 3.6f)' % (world.gnss_sensor.lat, world.gnss_sensor.lon)),
             'Height:  % 18.0f m' % t.location.z,
             '']
+        # FPS statistics over ~30s for server and client separately
+        if len(self.server_fps_window) > 0:
+            avg_fps, std_fps, fps_1pct_low = self._compute_fps_stats(self.server_fps_window)
+            self._info_text += [
+                'Server avg (30s): %5.1f' % avg_fps,
+                'Server std (30s): %5.1f' % std_fps,
+                'Server 1%% low:    %5.1f' % fps_1pct_low,
+            ]
+
+        if len(self.client_fps_window) > 0:
+            avg_fps, std_fps, fps_1pct_low = self._compute_fps_stats(self.client_fps_window)
+            self._info_text += [
+                'Client avg (30s): %5.1f' % avg_fps,
+                'Client std (30s): %5.1f' % std_fps,
+                'Client 1%% low:    %5.1f' % fps_1pct_low,
+            ]
+
         if isinstance(c, carla.VehicleControl):
             self._info_text += [
                 ('Throttle:', c.throttle, 0.0, 1.0),
@@ -1037,6 +1138,42 @@ class HUD(object):
 
     def show_ackermann_info(self, enabled):
         self._show_ackermann_info = enabled
+
+    @staticmethod
+    def _compute_fps_stats(samples):
+        avg_fps = sum(samples) / len(samples)
+        var = sum((f - avg_fps) ** 2 for f in samples) / len(samples)
+        std_fps = var ** 0.5
+        sorted_fps = sorted(samples)
+        index_1pct = max(0, int(len(sorted_fps) * 0.01) - 1)
+        fps_1pct_low = sorted_fps[index_1pct]
+        return avg_fps, std_fps, fps_1pct_low
+
+    def export_perf_row_for_excel(self):
+        """
+        Write one tab-separated row with performance metrics in the exact column
+        order expected by the Excel sheet. The file is overwritten on each call.
+        """
+        server_avg, server_std, server_1pct = self._compute_fps_stats(self.server_fps_window) if len(self.server_fps_window) > 0 else (0.0, 0.0, 0.0)
+        client_avg, client_std, client_1pct = self._compute_fps_stats(self.client_fps_window) if len(self.client_fps_window) > 0 else (0.0, 0.0, 0.0)
+
+        values = [
+            server_avg,
+            server_std,
+            server_1pct,
+            client_avg,
+            client_std,
+            client_1pct,
+            self.real_time_factor,
+            self.server_frame_ms,
+            self.client_frame_ms,
+        ]
+
+        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'perf_export_row.tsv')
+        with open(out_path, 'w', encoding='utf-8', newline='') as f:
+            f.write('\t'.join(('%.3f' % v).replace('.', ',') for v in values) + '\n')               # get values with , for Excel
+
+        return out_path
 
     def update_ackermann_control(self, ackermann_control):
         self._ackermann_control = ackermann_control
@@ -1518,14 +1655,21 @@ class RearCamera(object):
 
 
 class CameraManager(object):
-    def __init__(self, parent_actor, hud, gamma_correction, use_scene_final=False):
+    def __init__(self, parent_actor, hud, gamma_correction, screen_percentage=1.0, upscale_filter='fast', use_scene_final=False):
         self.sensor = None
         self.surface = None
+        self._scaled_surface = None
         self._parent = parent_actor
         self.hud = hud
         self.recording = False
         self.use_scene_final = use_scene_final
         self.lock_camera = use_scene_final
+        self._upscale_filter = upscale_filter
+        self._use_smooth_upscale = (upscale_filter == 'smooth')
+        self._full_screen_percentage = 1.0
+        self._reduced_screen_percentage = max(0.01, min(1.0, float(screen_percentage)))
+        self._current_screen_percentage = self._reduced_screen_percentage
+        self.sensor_dim = self._compute_sensor_dim(self._current_screen_percentage)
         bound_x = 0.5 + self._parent.bounding_box.extent.x
         bound_y = 0.5 + self._parent.bounding_box.extent.y
         bound_z = 0.5 + self._parent.bounding_box.extent.z
@@ -1585,8 +1729,8 @@ class CameraManager(object):
         for item in self.sensors:
             bp = bp_library.find(item[0])
             if item[0].startswith('sensor.camera'):
-                bp.set_attribute('image_size_x', str(hud.dim[0]))
-                bp.set_attribute('image_size_y', str(hud.dim[1]))
+                bp.set_attribute('image_size_x', str(self.sensor_dim[0]))
+                bp.set_attribute('image_size_y', str(self.sensor_dim[1]))
                 if bp.has_attribute('gamma'):
                     bp.set_attribute('gamma', str(gamma_correction))
                 for attr_name, attr_value in item[3].items():
@@ -1602,6 +1746,44 @@ class CameraManager(object):
 
             item.append(bp)
         self.index = None
+
+    def _compute_sensor_dim(self, screen_percentage):
+        return (
+            max(1, int(self.hud.dim[0] * screen_percentage)),
+            max(1, int(self.hud.dim[1] * screen_percentage)),
+        )
+
+    def _set_camera_blueprint_resolution(self):
+        for item in self.sensors:
+            if item[0].startswith('sensor.camera'):
+                bp = item[-1]
+                bp.set_attribute('image_size_x', str(self.sensor_dim[0]))
+                bp.set_attribute('image_size_y', str(self.sensor_dim[1]))
+
+    def toggle_screen_percentage(self):
+        if abs(self._reduced_screen_percentage - 1.0) < 1e-6:
+            self.hud.notification('Render scale fixed at 100% (set --sp < 1.0 to enable toggle)')
+            return
+
+        if abs(self._current_screen_percentage - self._full_screen_percentage) < 1e-6:
+            self._current_screen_percentage = self._reduced_screen_percentage
+        else:
+            self._current_screen_percentage = self._full_screen_percentage
+
+        self.sensor_dim = self._compute_sensor_dim(self._current_screen_percentage)
+        self._set_camera_blueprint_resolution()
+
+        if self.index is not None and self.sensors[self.index][0].startswith('sensor.camera'):
+            self.set_sensor(self.index, notify=False, force_respawn=True)
+
+        self.hud.notification(
+            'Render scale: %d%% (%dx%d), upscale=%s' % (
+                int(round(self._current_screen_percentage * 100.0)),
+                self.sensor_dim[0],
+                self.sensor_dim[1],
+                self._upscale_filter,
+            )
+        )
 
     def toggle_camera(self):
         if self.lock_camera:
@@ -1643,7 +1825,16 @@ class CameraManager(object):
 
     def render(self, display):
         if self.surface is not None:
-            display.blit(self.surface, (0, 0))
+            if self.surface.get_size() != self.hud.dim:
+                if self._scaled_surface is None or self._scaled_surface.get_size() != self.hud.dim:
+                    self._scaled_surface = pygame.Surface(self.hud.dim)
+                if self._use_smooth_upscale:
+                    pygame.transform.smoothscale(self.surface, self.hud.dim, self._scaled_surface)
+                else:
+                    pygame.transform.scale(self.surface, self.hud.dim, self._scaled_surface)
+                display.blit(self._scaled_surface, (0, 0))
+            else:
+                display.blit(self.surface, (0, 0))
 
     @staticmethod
     def _parse_image(weak_self, image):
@@ -1651,6 +1842,7 @@ class CameraManager(object):
         if not self:
             return
         if self.sensors[self.index][0].startswith('sensor.lidar'):
+            print(f"Using Lidar!")
             points = np.frombuffer(image.raw_data, dtype=np.dtype('f4'))
             points = np.reshape(points, (int(points.shape[0] / 4), 4))
             lidar_data = np.array(points[:, :2])
@@ -1699,6 +1891,7 @@ def game_loop(args):
     pygame.font.init()
     world = None
     original_settings = None
+    event_sync = None
 
     try:
         client = carla.Client(args.host, args.port)
@@ -1731,6 +1924,9 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
+        _start_dashboard_process(args.host, args.port, args.dashboard_display)
+        event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
+        world.event_sync = event_sync
         
         if args.input == 'gamepad':
             controller = GamepadControl(world, args.autopilot)
@@ -1749,6 +1945,8 @@ def game_loop(args):
             clock.tick_busy_loop(60)
             if controller.parse_events(client, world, clock, args.sync):
                 return
+            if event_sync is not None:
+                event_sync.update()
             world.tick(clock)
             world.render(display)
             
@@ -1767,6 +1965,15 @@ def game_loop(args):
 
         if (world and world.recording_enabled):
             client.stop_recorder()
+
+        if event_sync is not None:
+            event_sync.shutdown()
+            event_sync = None
+
+        if world is not None:
+            world.event_sync = None
+
+        _stop_dashboard_process()
 
         if world is not None:
             world.destroy()
@@ -1809,6 +2016,17 @@ def main():
         default='1280x720',
         help='window resolution (default: 1280x720)')
     argparser.add_argument(
+        '--sp',
+        metavar='FLOAT',
+        default=1.0,
+        type=float,
+        help='internal camera screen percentage in (0.0, 1.0], e.g. 0.7 (default: 1.0)')
+    argparser.add_argument(
+        '--sp-upscale',
+        choices=['smooth', 'fast'],
+        default='fast',
+        help='upscaling filter for low internal camera resolution (default: fast)')
+    argparser.add_argument(
         '--filter',
         metavar='PATTERN',
         default='vehicle.*',
@@ -1838,14 +2056,28 @@ def main():
         default='keyboard',
         help='Select input device for this window (default: keyboard)'
     )
+    argparser.add_argument(
+        '--dashboard-display',
+        metavar='N',
+        type=int,
+        default=1,                                      # dashbaord disply SCREEN
+        help='pygame display index for external dashboard (default: 2 for screen 3 (tablet))'
+    )
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
+    if not (0.0 < args.sp <= 1.0):
+        argparser.error('--sp must be > 0.0 and <= 1.0')
+    internal_width = max(1, int(args.width * args.sp))
+    internal_height = max(1, int(args.height * args.sp))
 
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(format='%(levelname)s: %(message)s', level=log_level)
 
     logging.info('listening to server %s:%s', args.host, args.port)
+    logging.info('window=%dx%d internal_camera=%dx%d (sp=%.2f)',
+                 args.width, args.height, internal_width, internal_height, args.sp)
+    logging.info('upscale_filter=%s', args.sp_upscale)
 
     print(__doc__)
 

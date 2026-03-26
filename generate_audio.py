@@ -6,11 +6,11 @@ import pygame
 import pygame.mixer
 import time
 import os
-from typing import Optional, Dict, List
+from typing import Optional, List, Dict
 
 
 class ChannelPool:
-    """Manages a pool of reusable audio channels for efficient memory usage."""
+    """ Manages a pool of reusable audio channels for efficient memory usage. """
     
     def __init__(self, pool_size: int = 6):
         """
@@ -23,17 +23,15 @@ class ChannelPool:
         self.pool_size = pool_size
         self.channels: List[pygame.mixer.Channel] = []
         self._allocated = False
-        self._channel_usage: Dict[int, bool] = {}
     
     def initialize(self):
-        """Initialize channels from pygame mixer."""
+        """ Initialize channels from pygame mixer. """
         if self._allocated or not pygame.mixer.get_init():
             return False
         
         try:
             for i in range(self.pool_size):
                 self.channels.append(pygame.mixer.Channel(i))
-                self._channel_usage[i] = False
             self._allocated = True
             print(f"[ChannelPool] Initialized {self.pool_size} channels")
             return True
@@ -55,17 +53,16 @@ class ChannelPool:
             return None
         
         # Try to get idle channels
-        for i, channel in enumerate(self.channels):
+        for channel in self.channels:
             if not channel.get_busy():
-                self._channel_usage[i] = True
                 return channel
         
-        # If all busy, return None (caller has to handle it)
+        # If all busy => return None
         return None
     
     def release_channel(self, channel: pygame.mixer.Channel):
-        """Mark channel as available (it will auto-stop if needed)."""
-        # actually channels are auto-released when they finish playing
+        """ Mark channel as available (it will auto-stop if needed). """
+        # channels are auto-released when finish playing
         pass
 
 
@@ -164,7 +161,7 @@ class EngineAudio(BaseAudioGenerator):
         self.high_volume = 0.0
     
     def _load_sounds(self):
-        """Load all engine sounds (lazy loading)."""
+        """ Load all engine sounds (lazy loading). """
         if self._sound_loaded:
             return
         
@@ -184,7 +181,7 @@ class EngineAudio(BaseAudioGenerator):
         self._sound_loaded = self.idle_sound is not None
     
     def _ensure_channels(self) -> bool:
-        """Allocate specific channels for engine audio."""
+        """ Allocate specific channels for engine audio. """
         if not pygame.mixer.get_init():
             return False
         
@@ -201,7 +198,7 @@ class EngineAudio(BaseAudioGenerator):
             return False
     
     def _start_all_loops(self):
-        """Start all three sound loops (will be controlled by volume)."""
+        """ Start all three sound loops (will be controlled by volume). """
         if self.idle_sound is not None and not self.idle_channel.get_busy():
             self.idle_channel.play(self.idle_sound, loops=-1)
         if self.mid_sound is not None and not self.mid_channel.get_busy():
@@ -273,7 +270,7 @@ class EngineAudio(BaseAudioGenerator):
 
 
 class HornAudio(BaseAudioGenerator):
-    """Single-shot horn sound with quick response."""
+    """ Single-shot horn sound with quick response. """
     
     def __init__(self, channel_pool: ChannelPool, horn_path: str, 
                  base_volume: float = 0.9, fadeout_ms: int = 120):
@@ -296,7 +293,7 @@ class HornAudio(BaseAudioGenerator):
         self.is_on = False
     
     def _load_sound(self):
-        """Load horn sound (lazy loading)."""
+        """ Load horn sound (lazy loading). """
         if self._sound_loaded:
             return
         
@@ -310,7 +307,7 @@ class HornAudio(BaseAudioGenerator):
             self._sound_loaded = True
     
     def play(self):
-        """Start playing horn."""
+        """ Start playing horn. """
         if not self._sound_loaded:
             self._load_sound()
         
@@ -326,7 +323,7 @@ class HornAudio(BaseAudioGenerator):
                 print("[HornAudio] WARNING: No channels available")
     
     def stop(self, fadeout_ms: Optional[int] = None):
-        """Stop horn sound."""
+        """ Stop horn sound. """
         if fadeout_ms is None:
             fadeout_ms = self.fadeout_ms
         
@@ -343,7 +340,7 @@ class BlinkerAudio(BaseAudioGenerator):
     """Blinker sound"""
     
     def __init__(self, channel_pool: ChannelPool, blinker_path: str, 
-                 base_volume: float = 0.9, fadeout_ms: int = 120):
+                 base_volume: float = 0.9):
         """
         Initialize blinker audio.
         
@@ -351,21 +348,17 @@ class BlinkerAudio(BaseAudioGenerator):
             channel_pool (ChannelPool): Shared channel pool
             blinker_path (str): Path to blinker sound file
             base_volume (float): Blinker volume (0.0-1.0)
-            fadeout_ms (int): Fadeout duration in milliseconds
         """
         super().__init__(channel_pool)
         
         self.blinker_path = blinker_path
         self.base_volume = base_volume
-        self.fadeout_ms = fadeout_ms
 
         self.blinker_sound: Optional[pygame.mixer.Sound] = None
-        self.is_on = False
-        self.last_play_time = 0.0
         self.min_interval = 0.1
     
     def _load_sound(self):
-        """Load blinker sound (lazy loading)."""
+        """ Load blinker sound (lazy loading)."""
         if self._sound_loaded:
             return
         
@@ -379,45 +372,24 @@ class BlinkerAudio(BaseAudioGenerator):
             self.min_interval = max(self.min_interval, self.blinker_sound.get_length())
             self._sound_loaded = True
     
-    def play(self, force_restart: bool = False):
-        """Start playing blinker."""
+    def play(self):
+        """ Start playing blinker."""
         if not self._sound_loaded:
             self._load_sound()
         
         if self.blinker_sound is None or not pygame.mixer.get_init():
             return
 
-        now = time.time()
-        if not force_restart and (now - self.last_play_time) < self.min_interval:
-            return
-
         if self.current_channel is not None and self.current_channel.get_busy():
-            if force_restart:
-                self.current_channel.stop()
-            else:
-                return
+            return
 
         if self.current_channel is None:
             self.current_channel = self.channel_pool.get_channel()
 
         if self.current_channel is not None:
             self.current_channel.play(self.blinker_sound, loops=0)
-            self.is_on = True
-            self.last_play_time = now
         else:
             print("[BlinkerAudio] WARNING: No channels available")
-
-    def stop(self, fadeout_ms: Optional[int] = None):
-        """Stop blinker sound."""
-        if fadeout_ms is None:
-            fadeout_ms = self.fadeout_ms
-
-        if self.current_channel is not None:
-            if fadeout_ms > 0:
-                self.current_channel.fadeout(fadeout_ms)
-            else:
-                self.current_channel.stop()
-        self.is_on = False
 
 
 class BrakeAudio(BaseAudioGenerator):
@@ -737,15 +709,10 @@ class AudioGenerator:
         if self.horn_audio is not None:
             self.horn_audio.stop(fadeout_ms)
 
-    def play_blinker(self, force_restart: bool = False):
+    def play_blinker(self):
         """Play blinker sound once."""
         if self.blinker_audio is not None:
-            self.blinker_audio.play(force_restart=force_restart)
-
-    # def stop_blinker(self, fadeout_ms: int = 120):
-    #     """Stop blinker sound."""
-    #     if self.blinker_audio is not None:
-    #         self.blinker_audio.stop(fadeout_ms)
+            self.blinker_audio.play()
     
     def play_brake(self, brake_strength: Optional[float] = None, speed_kmh: Optional[float] = None):
         """Play brake sound once."""
