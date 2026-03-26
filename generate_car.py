@@ -22,8 +22,8 @@ import logging
 from numpy import random
 
 # Import the navigation agent
-sys.path.insert(0, r'c:\C_CARLA\PythonAPI')
-sys.path.insert(0, r'c:\C_CARLA\PythonAPI\carla')
+sys.path.insert(0, r'd:\CarlaQuick\PythonAPI')
+sys.path.insert(0, r'd:\CarlaQuick\PythonAPI\carla')
 
 try:
     from agents.navigation.basic_agent import BasicAgent
