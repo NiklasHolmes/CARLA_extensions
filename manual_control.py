@@ -418,7 +418,7 @@ class World(object):
             upscale_filter=self._sp_upscale,
             use_scene_final=USE_SCENE_FINAL_CAMERA
         )
-        self.camera_manager.transform_index = cam_pos_index
+        self.camera_manager.transform_index = 1
         self.camera_manager.set_sensor(cam_index, notify=False)
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
