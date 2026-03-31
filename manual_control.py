@@ -418,7 +418,7 @@ class World(object):
             upscale_filter=self._sp_upscale,
             use_scene_final=USE_SCENE_FINAL_CAMERA
         )
-        self.camera_manager.transform_index = 1
+        self.camera_manager.transform_index = cam_pos_index
         self.camera_manager.set_sensor(cam_index, notify=False)
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
@@ -1678,7 +1678,7 @@ class CameraManager(object):
         if self.use_scene_final:
             self._camera_transforms = [
                 (carla.Transform(
-                    carla.Location(x=0.80, y=0.0, z=1.40),              # set camera position in scene final
+                    carla.Location(x=0.80, y=0.0, z=1.40),              # CHANGE camera position in scene final
                     carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
                 ), Attachment.Rigid)
             ]
