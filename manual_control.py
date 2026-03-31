@@ -165,13 +165,13 @@ from event_sync import EventSync
 # ==============================================================================
 
 # Audio paths
-_ENGINE_IDLE = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_idle.wav"
-_ENGINE_MID = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_mid.wav"
-_ENGINE_HIGH = r"C:\C_CARLA\CARLA_extensions\audio\car_engine_high.wav"
-_HORN_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_horn1_elevenlabs.wav"
-_BLINKER_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_blinker.wav"
-_BRAKE_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_break.wav"
-_PROXIMITY_ALERT_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_proximityAlert.wav"
+_ENGINE_IDLE = r".\audio\car_engine_idle.wav"
+_ENGINE_MID = r".\audio\car_engine_mid.wav"
+_ENGINE_HIGH = r".\audio\car_engine_high.wav"
+_HORN_PATH = r".\audio\car_horn1_elevenlabs.wav"
+_BLINKER_PATH = r".\audio\car_blinker.wav"
+_BRAKE_PATH = r".\audio\car_break.wav"
+_PROXIMITY_ALERT_PATH = r".\audio\car_proximityAlert.wav"
 
 # Central audio manager
 audio_manager: Optional[AudioGenerator] = None
@@ -418,7 +418,7 @@ class World(object):
             upscale_filter=self._sp_upscale,
             use_scene_final=USE_SCENE_FINAL_CAMERA
         )
-        self.camera_manager.transform_index = cam_pos_index
+        self.camera_manager.transform_index = 1
         self.camera_manager.set_sensor(cam_index, notify=False)
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)

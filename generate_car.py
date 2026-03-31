@@ -25,6 +25,10 @@ from numpy import random
 sys.path.insert(0, r'c:\C_CARLA\PythonAPI')
 sys.path.insert(0, r'c:\C_CARLA\PythonAPI\carla')
 
+# Pfade für PC 2 (D-Laufwerk)
+# sys.path.insert(0, r'd:\CarlaQuick\PythonAPI')
+# sys.path.insert(0, r'd:\CarlaQuick\PythonAPI\carla')
+
 try:
     from agents.navigation.basic_agent import BasicAgent
 except ImportError as e:
