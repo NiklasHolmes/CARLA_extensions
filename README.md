@@ -10,9 +10,15 @@ Current focus on manual control and dashboard for CARLA simulator.
 - **`--input [keyboard|gamepad]`**      – Input device (default: keyboard)
 - **`--dashboard-display N`**           – Monitor index for dashboard window (default: 0)
 
-examples: 
+### Examples
+
+```bash
+# Basic example with custom resolution and performance scale
 python manual_control.py --res 3840x1080 --sp 0.8
+
+# Gamepad input with dashboard on second monitor
 python manual_control.py --input gamepad --dashboard-display 1
+```
 
 
 ## Final Scene Camera
