@@ -157,7 +157,7 @@ except ImportError:
     raise RuntimeError('cannot import numpy, make sure numpy package is installed')
 
 from typing import Optional
-from generate_audio import AudioGenerator
+from generate_audio import AudioGenerator, DummyAudioGenerator
 from event_sync import EventSync
 
 # ==============================================================================
@@ -180,9 +180,19 @@ dashboard_process: Optional[subprocess.Popen] = None
 # Camera selection
 USE_SCENE_FINAL_CAMERA = False
 
+# Performance export filename
+PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
+
+# Audio enable/disable flag
+ENABLE_AUDIO = False
+
 def _audio_init():
     """Initialize audio generator."""
     global audio_manager
+    if not ENABLE_AUDIO:
+        audio_manager = DummyAudioGenerator()
+        return
+    
     try:
         audio_manager = AudioGenerator(
             engine_idle_path=_ENGINE_IDLE,
@@ -197,7 +207,7 @@ def _audio_init():
         print("[Audio] Initialized successfully")
     except Exception as e:
         print(f"[Audio] ERROR initializing: {e}")
-        audio_manager = None
+        audio_manager = DummyAudioGenerator()
 
 def _audio_quit():
     """Clean up audio resources."""
@@ -283,6 +293,36 @@ def get_actor_blueprints(world, filter, generation):
     except:
         print("   Warning! Actor Generation is not valid. No actor will be spawned.")
         return []
+
+def _export_performance_metrics(world):
+    """
+    Export current performance metrics tsv file (for Excel)
+    File is overwritten on each call.
+    """
+    try:
+        hud = world.hud
+        server_avg, server_std, server_1pct = hud._compute_fps_stats(hud.server_fps_window) if len(hud.server_fps_window) > 0 else (0.0, 0.0, 0.0)
+        client_avg, client_std, client_1pct = hud._compute_fps_stats(hud.client_fps_window) if len(hud.client_fps_window) > 0 else (0.0, 0.0, 0.0)
+
+        values = [
+            server_avg,
+            server_std,
+            server_1pct,
+            client_avg,
+            client_std,
+            client_1pct,
+            hud.real_time_factor,
+            hud.server_frame_ms,
+            hud.client_frame_ms,
+        ]
+
+        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), PERF_EXPORT_FILENAME)
+        with open(out_path, 'w', encoding='utf-8', newline='') as f:
+            f.write('\t'.join(('%.3f' % v).replace('.', ',') for v in values) + '\n')
+
+        print("[Performance] Perf export written: %s" % os.path.basename(out_path))
+    except Exception as e:
+        print("[Performance] ERROR: Perf export failed: %s" % e)
 
 # ==============================================================================
 # -- World ---------------------------------------------------------------------
@@ -622,11 +662,7 @@ class KeyboardControl(object):
                         except Exception:
                             pass
                 elif event.key == K_y:
-                    try:
-                        out_path = world.hud.export_perf_row_for_excel()
-                        world.hud.notification("Perf export written: %s" % os.path.basename(out_path), seconds=2.5)
-                    except Exception as e:
-                        world.hud.error("Perf export failed: %s" % e)
+                    _export_performance_metrics(world)
                 elif event.key > K_0 and event.key <= K_9:
                     index_ctrl = 0
                     if pygame.key.get_mods() & KMOD_CTRL:
@@ -864,10 +900,11 @@ class GamepadControl(object):
     - L2            :   brake
     - Cross (X)     :   hand-brake
     - Circle (O)    :   toggle reverse
-    - Horn ([])     :   honk while held down
+    - Square ([])   :   honk while held down
+    - Triangle (/\) :   export performance data
+    - L1            :   blinker left
+    - R1            :   blinker right
     - Option        :   quit
-
-    - L1/R1        :   blinker left/right
 
     """
 
@@ -942,6 +979,7 @@ class GamepadControl(object):
         btn_triangle = self.joy.get_button(3)   # /\
         btn_L1 = self.joy.get_button(9)         # L1
         btn_R1 = self.joy.get_button(10)        # R1
+        btn_L3 = self.joy.get_button(7)         # L3
         # 7+8 => Left/Right stick (L3/R3)
         self._control.hand_brake = bool(btn_cross)
 
@@ -973,6 +1011,11 @@ class GamepadControl(object):
             if world.event_sync is not None:
                 world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
+
+        prev_L3 = getattr(self, "_prev_L3", False)
+        if btn_L3 and not prev_L3:
+            _export_performance_metrics(world)
+        self._prev_L3 = btn_L3
 
         # --- ENGINE AUDIO (GAMEPAD) ---
         try:
@@ -1149,31 +1192,7 @@ class HUD(object):
         fps_1pct_low = sorted_fps[index_1pct]
         return avg_fps, std_fps, fps_1pct_low
 
-    def export_perf_row_for_excel(self):
-        """
-        Write one tab-separated row with performance metrics in the exact column
-        order expected by the Excel sheet. The file is overwritten on each call.
-        """
-        server_avg, server_std, server_1pct = self._compute_fps_stats(self.server_fps_window) if len(self.server_fps_window) > 0 else (0.0, 0.0, 0.0)
-        client_avg, client_std, client_1pct = self._compute_fps_stats(self.client_fps_window) if len(self.client_fps_window) > 0 else (0.0, 0.0, 0.0)
 
-        values = [
-            server_avg,
-            server_std,
-            server_1pct,
-            client_avg,
-            client_std,
-            client_1pct,
-            self.real_time_factor,
-            self.server_frame_ms,
-            self.client_frame_ms,
-        ]
-
-        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'perf_export_row.tsv')
-        with open(out_path, 'w', encoding='utf-8', newline='') as f:
-            f.write('\t'.join(('%.3f' % v).replace('.', ',') for v in values) + '\n')               # get values with , for Excel
-
-        return out_path
 
     def update_ackermann_control(self, ackermann_control):
         self._ackermann_control = ackermann_control
@@ -2015,13 +2034,13 @@ def main():
         metavar='WIDTHxHEIGHT',
         default='1280x720',
         help='window resolution (default: 1280x720)')
-    argparser.add_argument(
+    argparser.add_argument(                             # SET screen percentage for internal camera resolution
         '--sp',
         metavar='FLOAT',
         default=1.0,
         type=float,
         help='internal camera screen percentage in (0.0, 1.0], e.g. 0.7 (default: 1.0)')
-    argparser.add_argument(
+    argparser.add_argument(                             # SET upscale factor (smooth/fast)
         '--sp-upscale',
         choices=['smooth', 'fast'],
         default='fast',
