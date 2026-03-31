@@ -13,10 +13,10 @@ Current focus on manual control and dashboard for CARLA simulator.
 ### Examples
 
 ```bash
-# Basic example with custom resolution and performance scale
+# custom resolution and performance scale
 python manual_control.py --res 3840x1080 --sp 0.8
 
-# Gamepad input with dashboard on second monitor
+# gamepad (DualShock Controller tested) input with dashboard on second monitor
 python manual_control.py --input gamepad --dashboard-display 1
 ```
 
