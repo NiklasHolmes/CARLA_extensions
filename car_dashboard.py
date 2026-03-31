@@ -1,6 +1,9 @@
 """
 Generates a separate dashboard showing information about velocity, rpm (revolutions/minute) and turn signal status. 
 
+use:
+python car_dashboard.py --display-index 0
+
 """
 
 import carla
@@ -9,24 +12,26 @@ import math
 import os
 import socket
 import threading
-import sys
 import time
 import argparse
 import ctypes
 from ctypes import wintypes
 
-DEFAULT_DASHBOARD_SIZE = (1920, 1080)             # (960, 540)  (1920, 1080) 
-DEFAULT_DASHBOARD_RES = f"{DEFAULT_DASHBOARD_SIZE[0]}x{DEFAULT_DASHBOARD_SIZE[1]}"
+# Switch window size mode:
+# - None => fullscreen on selected monitor
+# - (width, height) => fixed dashboard window size
+DEFAULT_DASHBOARD_SIZE = (960, 540)              # (960, 540)  (1920, 1080) 
+#DASHBOARD_WINDOW_SIZE = None
+DASHBOARD_WINDOW_SIZE = DEFAULT_DASHBOARD_SIZE
 
 class CarDashboard(threading.Thread):
 
-    def __init__(self, world, width=None, height=None, display_index=0):
+    def __init__(self, world, window_size=None, display_index=0):
         """Initialize dashboard in separate thread.
         
         Args:
             world: CARLA world object to get hero vehicle from
-            width: Dashboard window width (uses default if None)
-            height: Dashboard window height (uses default if None)
+            window_size: None for fullscreen, or (width, height) for fixed size
             display_index: pygame display index (0-based)
         """
         # use threading to run dashboard in separate thread and avoid blocking main CARLA loop
@@ -34,11 +39,14 @@ class CarDashboard(threading.Thread):
         self.daemon = True  # daemon thread
         
         self.world = world
-        if width is None or height is None:
-            self.width, self.height = DEFAULT_DASHBOARD_SIZE
+        # If no size is provided, use fullscreen on the selected monitor.
+        self._use_fullscreen = window_size is None
+        if self._use_fullscreen:
+            self.width = None
+            self.height = None
         else:
-            self.width = width
-            self.height = height
+            self.width = int(window_size[0])
+            self.height = int(window_size[1])
         self.display_index = max(0, int(display_index))
 
         # maximum speed the pointer can display (degrees = km/h == 1:1 ratio)
@@ -225,7 +233,9 @@ class CarDashboard(threading.Thread):
             )
 
             window_flags = 0
-            if os.name == 'nt':
+
+            if self._use_fullscreen and os.name == 'nt':
+                # Fullscreen mode on Windows: use monitor dimensions and borderless window.
                 rects = self._windows_monitor_rects()
                 if rects:
                     monitor_idx = self._resolve_display_index(resolved_display_index, len(rects))
@@ -237,6 +247,10 @@ class CarDashboard(threading.Thread):
                         f"[Dashboard] monitor_rect=({left}, {top}, {right}, {bottom}), "
                         f"window_size={self.width}x{self.height}, borderless=True"
                     )
+
+            if self.width is None or self.height is None:
+                self.width, self.height = DEFAULT_DASHBOARD_SIZE
+                print(f"[Dashboard] Using fallback size: {self.width}x{self.height}")
 
             try:
                 self._display = pygame.display.set_mode(
@@ -469,16 +483,12 @@ if __name__ == '__main__':
         '-p', '--port', metavar='P', default=2000, type=int,
         help='TCP port to listen to (default: 2000)')
     argparser.add_argument(
-        '--res', metavar='WIDTHxHEIGHT', default=DEFAULT_DASHBOARD_RES,
-        help=f'window resolution (default: {DEFAULT_DASHBOARD_RES})')
-    argparser.add_argument(
         '--offline', action='store_true',
         help='start dashboard without CARLA server connection')
     argparser.add_argument(
         '--display-index', metavar='N', default=2, type=int,
         help='pygame display index (0-based, default: 2)')
     args = argparser.parse_args()
-    args.width, args.height = [int(x) for x in args.res.split('x')]
     dashboard = None
 
     class DummyVelocity:
@@ -503,12 +513,12 @@ if __name__ == '__main__':
     def start_dashboard_with_player(player, mode_label):
         nonlocal_dashboard = CarDashboard(
             WorldWrapper(player),
-            width=args.width,
-            height=args.height,
+            window_size=DASHBOARD_WINDOW_SIZE,
             display_index=args.display_index,
         )
         nonlocal_dashboard.start()
-        print(f"[Dashboard] Started ({args.res}, display={args.display_index}) in {mode_label} mode. Press Ctrl+C to exit.")
+        size_label = "fullscreen" if DASHBOARD_WINDOW_SIZE is None else f"{DASHBOARD_WINDOW_SIZE[0]}x{DASHBOARD_WINDOW_SIZE[1]}"
+        print(f"[Dashboard] Started ({size_label}, display={args.display_index}) in {mode_label} mode. Press Ctrl+C to exit.")
         return nonlocal_dashboard
     
     try:

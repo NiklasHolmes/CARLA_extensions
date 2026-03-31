@@ -2060,8 +2060,8 @@ def main():
         '--dashboard-display',
         metavar='N',
         type=int,
-        default=1,                                      # dashbaord disply SCREEN
-        help='pygame display index for external dashboard (default: 2 for screen 3 (tablet))'
+        default=0,                                      # dashbaord display SCREEN
+        help='pygame display index for external dashboard (default: 0 for screen 1)'
     )
     args = argparser.parse_args()
 
