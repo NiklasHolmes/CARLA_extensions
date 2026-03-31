@@ -617,6 +617,17 @@ class ProximityAlertAudio(BaseAudioGenerator):
         self.is_playing = False
         self.beep_mode = "off"
 
+class DummyAudioGenerator:
+    """No-op audio generator - does nothing when audio is disabled."""
+    def update_engine(self, *args, **kwargs): pass
+    def play_horn(self, *args, **kwargs): pass
+    def stop_horn(self, *args, **kwargs): pass
+    def play_blinker(self, *args, **kwargs): pass
+    def play_brake(self, *args, **kwargs): pass
+    def update_proximity_alert(self, *args, **kwargs): pass
+    def stop_proximity_alert(self, *args, **kwargs): pass
+    def quit(self): pass
+    def init(self, *args, **kwargs): pass
 
 class AudioGenerator:
     """Main audio manager - initializes and controls all sounds."""
