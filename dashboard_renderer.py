@@ -40,6 +40,7 @@ class DashboardRenderer:
         self._rpm_decay_up_per_sec = 1.5     # smooth up (display units/sec)
         self._rpm_display_value = 0.0        # persistent pointer state
         self._rpm_first_run = True           # for initial pointer behavior
+        self._rpm_activation_started = False # latch first throttle impulse for smooth start
         
         # Turn signal blinking
         self._left_indicator_on = False
@@ -76,8 +77,10 @@ class DashboardRenderer:
         else:
             print("[DashboardRenderer] WARNING: dashboard_background.png not found")
         
-        # Scale gauge images to fit dashboard
-        panel_size = int(min(self.dashboard_height, self.dashboard_width) * 0.7)
+        # Base size for dashboard assets
+        base_size = int(min(self.dashboard_height, self.dashboard_width) * 0.7)
+        # Circle size
+        circle_size = int(base_size * 0.85)
         
         # Velocity circle and pointer
         velocity_circle_path = os.path.join(img_dir, 'dashboard_velocity_circle.png')
@@ -85,8 +88,8 @@ class DashboardRenderer:
         if os.path.exists(velocity_circle_path) and os.path.exists(velocity_pointer_path):
             raw_circle = pygame.image.load(velocity_circle_path).convert_alpha()
             raw_pointer = pygame.image.load(velocity_pointer_path).convert_alpha()
-            self._velocity_circle = pygame.transform.smoothscale(raw_circle, (panel_size, panel_size))
-            self._velocity_pointer = pygame.transform.smoothscale(raw_pointer, (panel_size, panel_size))
+            self._velocity_circle = pygame.transform.smoothscale(raw_circle, (circle_size, circle_size))
+            self._velocity_pointer = pygame.transform.smoothscale(raw_pointer, (circle_size, circle_size))
         else:
             print("[DashboardRenderer] WARNING: velocity gauge images not found")
         
@@ -96,8 +99,8 @@ class DashboardRenderer:
         if os.path.exists(rpm_circle_path) and os.path.exists(rpm_pointer_path):
             raw_rpm_circle = pygame.image.load(rpm_circle_path).convert_alpha()
             raw_rpm_pointer = pygame.image.load(rpm_pointer_path).convert_alpha()
-            self._rpm_circle = pygame.transform.smoothscale(raw_rpm_circle, (panel_size, panel_size))
-            self._rpm_pointer = pygame.transform.smoothscale(raw_rpm_pointer, (panel_size, panel_size))
+            self._rpm_circle = pygame.transform.smoothscale(raw_rpm_circle, (circle_size, circle_size))
+            self._rpm_pointer = pygame.transform.smoothscale(raw_rpm_pointer, (circle_size, circle_size))
         else:
             print("[DashboardRenderer] WARNING: RPM gauge images not found")
         
@@ -107,7 +110,7 @@ class DashboardRenderer:
         if os.path.exists(ts_green_path) and os.path.exists(ts_grey_path):
             raw_ts_green = pygame.image.load(ts_green_path).convert_alpha()
             raw_ts_grey = pygame.image.load(ts_grey_path).convert_alpha()
-            ts_w = int(panel_size * 0.15)
+            ts_w = int(base_size * 0.15)
             ts_h = int(ts_w * raw_ts_green.get_height() / raw_ts_green.get_width())
             
             self._ts_arrow_left_green = pygame.transform.smoothscale(raw_ts_green, (ts_w, ts_h))
@@ -121,7 +124,7 @@ class DashboardRenderer:
         center_car_path = os.path.join(img_dir, 'dashboard_center_car.png')
         if os.path.exists(center_car_path):
             raw_center_car = pygame.image.load(center_car_path).convert_alpha()
-            car_w = int(panel_size * 0.42)
+            car_w = int(base_size * 0.42)
             car_h = int(car_w * raw_center_car.get_height() / raw_center_car.get_width())
             self._center_car_image = pygame.transform.smoothscale(raw_center_car, (car_w, car_h))
         else:
@@ -159,8 +162,15 @@ class DashboardRenderer:
         # RPM decay logic
         if self._rpm_first_run:
             if throttle > 0.01:
-                self._rpm_first_run = False
-            self._rpm_display_value = 0.0
+                self._rpm_activation_started = True
+
+            if self._rpm_activation_started:
+                up = self._rpm_decay_up_per_sec * dt
+                self._rpm_display_value = min(self._rpm_display_value + up, self._min_rpm_display)
+                if self._rpm_display_value >= self._min_rpm_display - 1e-6:
+                    self._rpm_first_run = False
+            else:
+                self._rpm_display_value = 0.0
         else:
             target_rpm = throttle * self._max_rpm_display
             min_rpm = self._min_rpm_display
@@ -224,8 +234,9 @@ class DashboardRenderer:
         
         # Mirror the external dashboard layout formulas as closely as possible.
         center_y = self.dashboard_height // 2
-        left_center_x = self.dashboard_width // 4
-        center_x = self.dashboard_width * 3 // 4
+        inward_shift = int(self.dashboard_width * 0.03)
+        left_center_x = self.dashboard_width // 4 + inward_shift
+        center_x = self.dashboard_width * 3 // 4 - inward_shift
         
         # Render RPM gauge (left half)
         if self._rpm_circle and self._rpm_pointer:
@@ -233,8 +244,13 @@ class DashboardRenderer:
             dashboard_surface.blit(self._rpm_circle, rpm_circle_rect)
             
             # RPM pointer rotation
-            if self._rpm_first_run and self._rpm_display_value <= 0.0:
-                rpm_rotation_deg = 0.0
+            if self._rpm_first_run:
+                if self._rpm_activation_started and self._min_rpm_display > 1e-6:
+                    # Smooth visible transition from 0 RPM to minimum RPM marker.
+                    frac_start = min(max(self._rpm_display_value / self._min_rpm_display, 0.0), 1.0)
+                    rpm_rotation_deg = -(frac_start * self._min_rpm_rotation)
+                else:
+                    rpm_rotation_deg = 0.0
             else:
                 rpm_val = min(max(self._rpm_display_value, self._min_rpm_display), self._max_rpm_display)
                 frac = (rpm_val - self._min_rpm_display) / (self._max_rpm_display - self._min_rpm_display)
