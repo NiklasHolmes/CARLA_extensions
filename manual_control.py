@@ -158,6 +158,7 @@ except ImportError:
 
 from typing import Optional
 from generate_audio import AudioGenerator, DummyAudioGenerator
+from dashboard_renderer import DashboardRenderer
 from event_sync import EventSync
 
 # ==============================================================================
@@ -185,6 +186,9 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 
 # Audio enable/disable flag
 ENABLE_AUDIO = False
+
+# Dashboard inside main window (bottom-left corner)
+ENABLE_INSIDE_DASHBOARD = True
 
 def _audio_init():
     """Initialize audio generator."""
@@ -353,6 +357,7 @@ class World(object):
         self.camera_manager = None
         self.rear_camera = None                     # rear camera for rear_view.py
         self.obstacle_sensor = None                 # Proximity alert sensor
+        self.dashboard_renderer = None              # Dashboard renderer (optional)
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
         self._actor_filter = args.filter
@@ -516,10 +521,19 @@ class World(object):
 
     def tick(self, clock):
         self.hud.tick(self, clock)
+        # Update dashboard renderer if enabled
+        if self.dashboard_renderer is not None:
+            dt = clock.get_time() / 1000.0  # Convert ms to seconds
+            self.dashboard_renderer.update(dt)
 
     def render(self, display):
         self.camera_manager.render(display)
-        self.hud.render(display)
+        # Render HUD or dashboard based on flag
+        if ENABLE_INSIDE_DASHBOARD:
+            if self.dashboard_renderer is not None:
+                self.dashboard_renderer.render(display)
+        else:
+            self.hud.render(display)
 
     def destroy_sensors(self):
         self.camera_manager.sensor.destroy()
@@ -575,7 +589,20 @@ class KeyboardControl(object):
             raise NotImplementedError("Actor type not supported")
         self._steer_cache = 0.0
         self._prev_brake = False
+        self._left_blinker_until = 0.0
+        self._right_blinker_until = 0.0
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
+
+    def _get_blinker_duration(self, world):
+        if world is None or world.event_sync is None:
+            raise RuntimeError("Blinker duration not found: world.event_sync is None")
+
+        try:
+            duration = float(world.event_sync.default_blink_duration)
+        except Exception as exc:
+            raise RuntimeError("Blinker duration not found: invalid world.event_sync.default_blink_duration") from exc
+
+        return max(0.1, duration)
 
     def parse_events(self, client, world, clock, sync_mode):
         if isinstance(self._control, carla.VehicleControl):
@@ -766,13 +793,33 @@ class KeyboardControl(object):
                     elif event.key == K_i:
                         current_lights ^= carla.VehicleLightState.Interior
                     elif event.key == K_z:
-                        current_lights ^= carla.VehicleLightState.LeftBlinker
-                        if world.event_sync is not None:
-                            world.event_sync.trigger_blinker_left()
+                        if self._lights & carla.VehicleLightState.LeftBlinker:
+                            current_lights &= ~carla.VehicleLightState.LeftBlinker
+                            self._left_blinker_until = 0.0
+                        else:
+                            current_lights |= carla.VehicleLightState.LeftBlinker
+                            self._left_blinker_until = time.time() + self._get_blinker_duration(world)
+                            if world.event_sync is not None:
+                                world.event_sync.trigger_blinker_left()
                     elif event.key == K_x:
-                        current_lights ^= carla.VehicleLightState.RightBlinker
-                        if world.event_sync is not None:
-                            world.event_sync.trigger_blinker_right()
+                        if self._lights & carla.VehicleLightState.RightBlinker:
+                            current_lights &= ~carla.VehicleLightState.RightBlinker
+                            self._right_blinker_until = 0.0
+                        else:
+                            current_lights |= carla.VehicleLightState.RightBlinker
+                            self._right_blinker_until = time.time() + self._get_blinker_duration(world)
+                            if world.event_sync is not None:
+                                world.event_sync.trigger_blinker_right()
+
+        # Auto-stop blinkers
+        if isinstance(self._control, carla.VehicleControl):
+            now = time.time()
+            if self._left_blinker_until > 0.0 and now >= self._left_blinker_until:
+                current_lights &= ~carla.VehicleLightState.LeftBlinker
+                self._left_blinker_until = 0.0
+            if self._right_blinker_until > 0.0 and now >= self._right_blinker_until:
+                current_lights &= ~carla.VehicleLightState.RightBlinker
+                self._right_blinker_until = 0.0
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
@@ -1943,7 +1990,13 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
-        _start_dashboard_process(args.host, args.port, args.dashboard_display)
+        
+        # Initialize inside dashboard if enabled
+        if ENABLE_INSIDE_DASHBOARD:
+            world.dashboard_renderer = DashboardRenderer(args.width, args.height, world)
+            print(f"[Dashboard] Inside dashboard enabled ({args.width}x{args.height})")
+        else:
+            _start_dashboard_process(args.host, args.port, args.dashboard_display)
         event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
         world.event_sync = event_sync
         
