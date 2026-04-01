@@ -188,7 +188,7 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 ENABLE_AUDIO = False
 
 # Dashboard inside main window (bottom-left corner)
-ENABLE_INSIDE_DASHBOARD = True
+ENABLE_INSIDE_DASHBOARD = False
 
 def _audio_init():
     """Initialize audio generator."""
@@ -327,6 +327,46 @@ def _export_performance_metrics(world):
         print("[Performance] Perf export written: %s" % os.path.basename(out_path))
     except Exception as e:
         print("[Performance] ERROR: Perf export failed: %s" % e)
+
+# Blinker and Light logic: 
+
+def _get_blinker_duration_or_raise(world):
+    """Return configured blinker duration from EventSync or raise if unavailable."""
+    if world is None or world.event_sync is None:
+        raise RuntimeError("Blinker duration not found: world.event_sync is None")
+
+    try:
+        duration = float(world.event_sync.default_blink_duration)
+    except Exception as exc:
+        raise RuntimeError("Blinker duration not found: invalid world.event_sync.default_blink_duration") from exc
+
+    return max(0.1, duration)
+
+
+def _apply_blinker_auto_off(current_lights, left_blinker_until, right_blinker_until, now):
+    """Disable blinker bits when their timers have expired."""
+    if left_blinker_until > 0.0 and now >= left_blinker_until:
+        current_lights &= ~carla.VehicleLightState.LeftBlinker
+        left_blinker_until = 0.0
+    if right_blinker_until > 0.0 and now >= right_blinker_until:
+        current_lights &= ~carla.VehicleLightState.RightBlinker
+        right_blinker_until = 0.0
+    return current_lights, left_blinker_until, right_blinker_until
+
+
+def _apply_control_vehicle_lights(current_lights, control):
+    """Apply brake/reverse light bits from the current vehicle control."""
+    if control.brake:
+        current_lights |= carla.VehicleLightState.Brake
+    else:
+        current_lights &= ~carla.VehicleLightState.Brake
+
+    if control.reverse:
+        current_lights |= carla.VehicleLightState.Reverse
+    else:
+        current_lights &= ~carla.VehicleLightState.Reverse
+
+    return current_lights
 
 # ==============================================================================
 # -- World ---------------------------------------------------------------------
@@ -594,15 +634,7 @@ class KeyboardControl(object):
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
     def _get_blinker_duration(self, world):
-        if world is None or world.event_sync is None:
-            raise RuntimeError("Blinker duration not found: world.event_sync is None")
-
-        try:
-            duration = float(world.event_sync.default_blink_duration)
-        except Exception as exc:
-            raise RuntimeError("Blinker duration not found: invalid world.event_sync.default_blink_duration") from exc
-
-        return max(0.1, duration)
+        return _get_blinker_duration_or_raise(world)
 
     def parse_events(self, client, world, clock, sync_mode):
         if isinstance(self._control, carla.VehicleControl):
@@ -814,26 +846,18 @@ class KeyboardControl(object):
         # Auto-stop blinkers
         if isinstance(self._control, carla.VehicleControl):
             now = time.time()
-            if self._left_blinker_until > 0.0 and now >= self._left_blinker_until:
-                current_lights &= ~carla.VehicleLightState.LeftBlinker
-                self._left_blinker_until = 0.0
-            if self._right_blinker_until > 0.0 and now >= self._right_blinker_until:
-                current_lights &= ~carla.VehicleLightState.RightBlinker
-                self._right_blinker_until = 0.0
+            current_lights, self._left_blinker_until, self._right_blinker_until = _apply_blinker_auto_off(
+                current_lights,
+                self._left_blinker_until,
+                self._right_blinker_until,
+                now,
+            )
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
                 self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time(), world)
                 self._control.reverse = self._control.gear < 0
-                # Set automatic control-related vehicle lights
-                if self._control.brake:
-                    current_lights |= carla.VehicleLightState.Brake
-                else: # Remove the Brake flag
-                    current_lights &= ~carla.VehicleLightState.Brake
-                if self._control.reverse:
-                    current_lights |= carla.VehicleLightState.Reverse
-                else: # Remove the Reverse flag
-                    current_lights &= ~carla.VehicleLightState.Reverse
+                current_lights = _apply_control_vehicle_lights(current_lights, self._control)
                 if current_lights != self._lights: # Change the light state only if necessary
                     self._lights = current_lights
                     world.player.set_light_state(carla.VehicleLightState(self._lights))
@@ -965,6 +989,9 @@ class GamepadControl(object):
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
         self._prev_brake = False
+        self._lights = carla.VehicleLightState.NONE
+        self._left_blinker_until = 0.0
+        self._right_blinker_until = 0.0
 
         pygame.joystick.init()
         count = pygame.joystick.get_count()
@@ -977,6 +1004,7 @@ class GamepadControl(object):
         self.joy.init()
 
         world.player.set_autopilot(self._autopilot_enabled)
+        world.player.set_light_state(self._lights)
         world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
 
     def _apply_deadzone(self, v):
@@ -984,6 +1012,7 @@ class GamepadControl(object):
 
     def parse_events(self, client, world, clock, sync_mode):
         import pygame
+        current_lights = self._lights
 
         # pump events to update joystick state (also if window not focused)
         pygame.event.pump()
@@ -1050,19 +1079,43 @@ class GamepadControl(object):
 
         prev_L1 = getattr(self, "_prev_L1", False)
         if btn_L1 and not prev_L1:
-            if world.event_sync is not None:
-                world.event_sync.trigger_blinker_left()
+            if self._lights & carla.VehicleLightState.LeftBlinker:
+                current_lights &= ~carla.VehicleLightState.LeftBlinker
+                self._left_blinker_until = 0.0
+            else:
+                current_lights |= carla.VehicleLightState.LeftBlinker
+                self._left_blinker_until = time.time() + _get_blinker_duration_or_raise(world)
+                if world.event_sync is not None:
+                    world.event_sync.trigger_blinker_left()
         self._prev_L1 = btn_L1
         prev_R1 = getattr(self, "_prev_R1", False)
         if btn_R1 and not prev_R1:
-            if world.event_sync is not None:
-                world.event_sync.trigger_blinker_right()
+            if self._lights & carla.VehicleLightState.RightBlinker:
+                current_lights &= ~carla.VehicleLightState.RightBlinker
+                self._right_blinker_until = 0.0
+            else:
+                current_lights |= carla.VehicleLightState.RightBlinker
+                self._right_blinker_until = time.time() + _get_blinker_duration_or_raise(world)
+                if world.event_sync is not None:
+                    world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
 
         prev_L3 = getattr(self, "_prev_L3", False)
         if btn_L3 and not prev_L3:
             _export_performance_metrics(world)
         self._prev_L3 = btn_L3
+
+        now = time.time()
+        current_lights, self._left_blinker_until, self._right_blinker_until = _apply_blinker_auto_off(
+            current_lights,
+            self._left_blinker_until,
+            self._right_blinker_until,
+            now,
+        )
+        current_lights = _apply_control_vehicle_lights(current_lights, self._control)
+        if current_lights != self._lights:
+            self._lights = current_lights
+            world.player.set_light_state(carla.VehicleLightState(self._lights))
 
         # --- ENGINE AUDIO (GAMEPAD) ---
         try:
