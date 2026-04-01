@@ -61,6 +61,7 @@ class CarDashboard(threading.Thread):
         self._rpm_decay_up_per_sec = 1.5    # smooth up (display units/sec)
         self._rpm_display_value = 0.0       # persistent pointer state
         self._rpm_first_run = True          # for initial pointer behavior
+        self._rpm_activation_started = False # latch first throttle impulse for smooth start
 
         # thread control
         self.running = True
@@ -351,8 +352,15 @@ class CarDashboard(threading.Thread):
                 # RPM decay logic
                 if self._rpm_first_run:
                     if throttle > 0.01:
-                        self._rpm_first_run = False
-                    self._rpm_display_value = 0.0
+                        self._rpm_activation_started = True
+
+                    if self._rpm_activation_started:
+                        up = self._rpm_decay_up_per_sec * dt
+                        self._rpm_display_value = min(self._rpm_display_value + up, self._min_rpm_display)
+                        if self._rpm_display_value >= self._min_rpm_display - 1e-6:
+                            self._rpm_first_run = False
+                    else:
+                        self._rpm_display_value = 0.0
                 else:
                     target_rpm = throttle * self._max_rpm_display
                     min_rpm = self._min_rpm_display
@@ -410,9 +418,13 @@ class CarDashboard(threading.Thread):
             rpm_circle_rect = self._rpm_circle.get_rect(center=(left_center_x, center_y))
             self._display.blit(self._rpm_circle, rpm_circle_rect)
 
-            # initial state = 0 degrees => after first activation minimum (RPM 700)
-            if self._rpm_first_run and rpm_display <= 0.0:
-                rpm_rotation_deg = 0.0
+            # Smooth visible transition from 0 RPM to minimum RPM marker.
+            if self._rpm_first_run:
+                if self._rpm_activation_started and self._min_rpm_display > 1e-6:
+                    frac_start = min(max(rpm_display / self._min_rpm_display, 0.0), 1.0)
+                    rpm_rotation_deg = -(frac_start * self._min_rpm_rotation)
+                else:
+                    rpm_rotation_deg = 0.0
             else:
                 rpm_val = min(max(rpm_display, self._min_rpm_display), self._max_rpm_display)
                 frac = (rpm_val - self._min_rpm_display) / (self._max_rpm_display - self._min_rpm_display)
