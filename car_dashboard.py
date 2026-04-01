@@ -75,6 +75,7 @@ class CarDashboard(threading.Thread):
         self._ts_arrow_left_grey = None
         self._ts_arrow_left_green = None
 
+        # Turn signal blinking
         self._left_indicator_on = False
         self._right_indicator_on = False
         self._sync_socket = None
