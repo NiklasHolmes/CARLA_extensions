@@ -22,11 +22,23 @@ class DashboardRenderer:
         self.display_height = display_height
         self.world = world
         
-        # Dashboard dimensions: 1/3 of screen width, positioned bottom-left
-        self.dashboard_width = display_width // 3
-        self.dashboard_height = display_height // 2  # Proportional height
+        # Dashboard layout/performance test settings.
+        self._dashboard_scale = 0.85  # < 1.0 renders a smaller dashboard
+        self._opaque_mode = False      # True: draw as opaque rectangle for cheaper blending
+        self._opaque_fill_color = (10, 20, 34)
+        self._render_pointers = True  # test mode: disable RPM/speed pointers
+ 
+        # Dashboard dimensions: scaled variant of previous 1/3 x 1/2 layout, bottom-left.
+        self.dashboard_width = max(320, int((display_width // 3) * self._dashboard_scale))
+        self.dashboard_height = max(220, int((display_height // 2) * self._dashboard_scale))
         self.dashboard_x = 0
         self.dashboard_y = display_height - self.dashboard_height + 100
+
+        # Precompute shared layout positions once.
+        self._center_y = self.dashboard_height // 2
+        self._inward_shift = int(self.dashboard_width * 0.03)
+        self._left_center_x = self.dashboard_width // 4 + self._inward_shift
+        self._right_center_x = self.dashboard_width * 3 // 4 - self._inward_shift
         
         # Speed display settings
         self._max_speed = 100  # km/h
@@ -62,6 +74,18 @@ class DashboardRenderer:
         self._center_car_image = None
         
         self._load_images()
+        
+        # Performance optimization: Caching and offscreen rendering
+        self._rpm_pointer_cache = {}      # Cache for rotated RPM pointer: angle_key -> surface
+        self._velocity_pointer_cache = {} # Cache for rotated velocity pointer: angle_key -> surface
+        self._rpm_angle_tolerance = 0.5
+        self._velocity_angle_tolerance = 0.25
+        self._offscreen_layer = None      # Cached offscreen surface for static elements
+        self._dashboard_frame = None      # Cached composited frame blitted each client frame
+        self._ts_left_center = (0, 0)
+        self._ts_right_center = (0, 0)
+        self._create_offscreen_layer()    # Create the initial offscreen layer
+        self._compose_dashboard_frame()
     
     def _load_images(self):
         """Load dashboard images."""
@@ -130,6 +154,84 @@ class DashboardRenderer:
         else:
             print("[DashboardRenderer] WARNING: center car image not found")
     
+    def _create_offscreen_layer(self):
+        """ Create cached offscreen layer with all static elements.
+        """
+        # Create static layer (opaque mode avoids per-pixel alpha blending cost).
+        layer_flags = 0 if self._opaque_mode else pygame.SRCALPHA
+        self._offscreen_layer = pygame.Surface((self.dashboard_width, self.dashboard_height), layer_flags)
+        if self._opaque_mode:
+            self._offscreen_layer.fill(self._opaque_fill_color)
+        
+        # Blit background image if available
+        if self._background:
+            self._offscreen_layer.blit(self._background, (0, 0))
+        
+        # Render static gauge circles
+        if self._rpm_circle:
+            rpm_circle_rect = self._rpm_circle.get_rect(center=(self._left_center_x, self._center_y))
+            self._offscreen_layer.blit(self._rpm_circle, rpm_circle_rect)
+        
+        if self._velocity_circle:
+            circle_rect = self._velocity_circle.get_rect(center=(self._right_center_x, self._center_y))
+            self._offscreen_layer.blit(self._velocity_circle, circle_rect)
+        
+        # Render center car image
+        if self._center_car_image:
+            car_center_x = self.dashboard_width // 2
+            car_center_y = int(self.dashboard_height * 0.30)
+            car_rect = self._center_car_image.get_rect(center=(car_center_x, car_center_y))
+            self._offscreen_layer.blit(self._center_car_image, car_rect)
+
+        # Render grey turn signal arrows as static baseline.
+        if self._ts_arrow_left_grey and self._velocity_circle:
+            gauge_radius = self._velocity_circle.get_height() // 2
+            ts_y = self._center_y - int(gauge_radius * 1.1)
+            left_x = (self.dashboard_width // 4 + self.dashboard_width // 2) // 2
+            right_x = (self.dashboard_width * 3 // 4 + self.dashboard_width // 2) // 2
+            self._ts_left_center = (left_x, ts_y)
+            self._ts_right_center = (right_x, ts_y)
+
+            self._offscreen_layer.blit(
+                self._ts_arrow_left_grey,
+                self._ts_arrow_left_grey.get_rect(center=self._ts_left_center)
+            )
+            self._offscreen_layer.blit(
+                self._ts_arrow_right_grey,
+                self._ts_arrow_right_grey.get_rect(center=self._ts_right_center)
+            )
+
+        # Allocate frame surface with same pixel mode as static layer.
+        frame_flags = 0 if self._opaque_mode else pygame.SRCALPHA
+        self._dashboard_frame = pygame.Surface((self.dashboard_width, self.dashboard_height), frame_flags)
+        if self._opaque_mode:
+            self._dashboard_frame.fill(self._opaque_fill_color)
+    
+    def _get_cached_rotated_pointer(self, pointer_image, rotation_deg, cache_dict, angle_tolerance):
+        """Get a rotated pointer image from cache or create and cache it.
+        
+        Args:
+            pointer_image: The original pointer image (pygame.Surface)
+            rotation_deg: Rotation angle in degrees
+            cache_dict: Cache dictionary to use (RPM or velocity cache)
+        
+        Returns:
+            Rotated pointer surface (pygame.Surface)
+        """
+        # Round angle to tolerance level to reduce cache misses
+        angle_key = round(rotation_deg / angle_tolerance) * angle_tolerance
+        
+        if angle_key not in cache_dict:
+            # Not in cache, create and cache it
+            rotated = pygame.transform.rotozoom(pointer_image, angle_key, 1.0)
+            cache_dict[angle_key] = rotated
+            # Limit cache size to 120 entries per pointer (covers full rotation at ~3° granularity)
+            if len(cache_dict) > 120:
+                # Remove oldest entry (simple FIFO, could use OrderedDict for LRU)
+                cache_dict.pop(next(iter(cache_dict)))
+        
+        return cache_dict[angle_key]
+    
     def _get_velocity(self):
         """Get velocity in km/h."""
         try:
@@ -139,7 +241,7 @@ class DashboardRenderer:
         except Exception:
             pass
         return 0.0
-    
+
     def _get_throttle(self):
         """Get throttle in range [0.0, 1.0]."""
         try:
@@ -149,6 +251,64 @@ class DashboardRenderer:
         except Exception:
             pass
         return 0.0
+
+    def _compose_dashboard_frame(self):
+        """Compose one dashboard frame in local coordinates.
+        """
+        if self._dashboard_frame is None or self._offscreen_layer is None:
+            return
+
+        self._dashboard_frame.blit(self._offscreen_layer, (0, 0))
+
+        # RPM pointer
+        if self._render_pointers and self._rpm_pointer:
+            if self._rpm_first_run:
+                if self._rpm_activation_started and self._min_rpm_display > 1e-6:
+                    frac_start = min(max(self._rpm_display_value / self._min_rpm_display, 0.0), 1.0)
+                    rpm_rotation_deg = -(frac_start * self._min_rpm_rotation)
+                else:
+                    rpm_rotation_deg = 0.0
+            else:
+                rpm_val = min(max(self._rpm_display_value, self._min_rpm_display), self._max_rpm_display)
+                frac = (rpm_val - self._min_rpm_display) / (self._max_rpm_display - self._min_rpm_display)
+                rpm_rotation_deg = -(
+                    self._min_rpm_rotation + frac * (self._max_rpm_rotation - self._min_rpm_rotation)
+                )
+
+            rotated_rpm_pointer = self._get_cached_rotated_pointer(
+                self._rpm_pointer,
+                rpm_rotation_deg,
+                self._rpm_pointer_cache,
+                self._rpm_angle_tolerance,
+            )
+            rpm_pointer_rect = rotated_rpm_pointer.get_rect(center=(self._left_center_x, self._center_y))
+            self._dashboard_frame.blit(rotated_rpm_pointer, rpm_pointer_rect)
+
+        # Velocity pointer
+        if self._render_pointers and self._velocity_pointer:
+            speed_clamped = min(max(self._get_velocity(), 0.0), self._max_speed)
+            rotation_deg = -(speed_clamped / self._max_speed) * 100.0
+
+            rotated_velocity_pointer = self._get_cached_rotated_pointer(
+                self._velocity_pointer,
+                rotation_deg,
+                self._velocity_pointer_cache,
+                self._velocity_angle_tolerance,
+            )
+            pointer_rect = rotated_velocity_pointer.get_rect(center=(self._right_center_x, self._center_y))
+            self._dashboard_frame.blit(rotated_velocity_pointer, pointer_rect)
+
+        # Active green blinkers only; grey ones are in static layer.
+        if self._left_indicator_on and self._blink_phase_on and self._ts_arrow_left_green:
+            self._dashboard_frame.blit(
+                self._ts_arrow_left_green,
+                self._ts_arrow_left_green.get_rect(center=self._ts_left_center)
+            )
+        if self._right_indicator_on and self._blink_phase_on and self._ts_arrow_right_green:
+            self._dashboard_frame.blit(
+                self._ts_arrow_right_green,
+                self._ts_arrow_right_green.get_rect(center=self._ts_right_center)
+            )
     
     def update(self, dt):
         """Update dashboard state based on delta time.
@@ -193,6 +353,9 @@ class DashboardRenderer:
             self._blink_timer = 0.0
             self._blink_phase_on = True
 
+        # Compose dashboard every update tick.
+        self._compose_dashboard_frame()
+
     def _update_blinkers_from_vehicle_lights(self):
         """Mirror left/right indicator state from CARLA vehicle light state."""
         try:
@@ -217,87 +380,16 @@ class DashboardRenderer:
             pass
     
     def render(self, display):
-        """Render dashboard to display surface.
+        """Render dashboard to display surface using cached layers and pointers.
         
         Args:
             display: pygame display surface
         """
-        # Transparent surface keeps the PNG half-circle shape without a rectangular fill.
-        dashboard_surface = pygame.Surface((self.dashboard_width, self.dashboard_height), pygame.SRCALPHA)
-        
-        # Blit background image if available
-        if self._background:
-            dashboard_surface.blit(self._background, (0, 0))
-        
-        # Get current velocity
-        velocity_kmh = self._get_velocity()
-        
-        # Mirror the external dashboard layout formulas as closely as possible.
-        center_y = self.dashboard_height // 2
-        inward_shift = int(self.dashboard_width * 0.03)
-        left_center_x = self.dashboard_width // 4 + inward_shift
-        center_x = self.dashboard_width * 3 // 4 - inward_shift
-        
-        # Render RPM gauge (left half)
-        if self._rpm_circle and self._rpm_pointer:
-            rpm_circle_rect = self._rpm_circle.get_rect(center=(left_center_x, center_y))
-            dashboard_surface.blit(self._rpm_circle, rpm_circle_rect)
-            
-            # RPM pointer rotation
-            if self._rpm_first_run:
-                if self._rpm_activation_started and self._min_rpm_display > 1e-6:
-                    # Smooth visible transition from 0 RPM to minimum RPM marker.
-                    frac_start = min(max(self._rpm_display_value / self._min_rpm_display, 0.0), 1.0)
-                    rpm_rotation_deg = -(frac_start * self._min_rpm_rotation)
-                else:
-                    rpm_rotation_deg = 0.0
-            else:
-                rpm_val = min(max(self._rpm_display_value, self._min_rpm_display), self._max_rpm_display)
-                frac = (rpm_val - self._min_rpm_display) / (self._max_rpm_display - self._min_rpm_display)
-                rpm_rotation_deg = -(
-                    self._min_rpm_rotation + frac * (self._max_rpm_rotation - self._min_rpm_rotation)
-                )
-            rotated_rpm_pointer = pygame.transform.rotozoom(self._rpm_pointer, rpm_rotation_deg, 1.0)
-            rpm_pointer_rect = rotated_rpm_pointer.get_rect(center=(left_center_x, center_y))
-            dashboard_surface.blit(rotated_rpm_pointer, rpm_pointer_rect)
-        
-        # Render velocity gauge (right half)
-        if self._velocity_circle and self._velocity_pointer:
-            circle_rect = self._velocity_circle.get_rect(center=(center_x, center_y))
-            dashboard_surface.blit(self._velocity_circle, circle_rect)
-            
-            # Velocity pointer rotation (1:1 ratio)
-            speed_clamped = min(max(velocity_kmh, 0.0), self._max_speed)
-            rotation_deg = -(speed_clamped / self._max_speed) * 100.0
-            rotated_pointer = pygame.transform.rotozoom(self._velocity_pointer, rotation_deg, 1.0)
-            pointer_rect = rotated_pointer.get_rect(center=(center_x, center_y))
-            dashboard_surface.blit(rotated_pointer, pointer_rect)
-
-        # Center car image (same placement rule as external dashboard).
-        if self._center_car_image:
-            car_center_x = self.dashboard_width // 2
-            car_center_y = int(self.dashboard_height * 0.30)
-            car_rect = self._center_car_image.get_rect(center=(car_center_x, car_center_y))
-            dashboard_surface.blit(self._center_car_image, car_rect)
-        
-        # Render turn signal arrows
-        if self._ts_arrow_left_grey and self._velocity_circle:
-            gauge_radius = self._velocity_circle.get_height() // 2
-            ts_y = center_y - int(gauge_radius * 1.1)
-            left_x = (self.dashboard_width // 4 + self.dashboard_width // 2) // 2
-            right_x = (self.dashboard_width * 3 // 4 + self.dashboard_width // 2) // 2
-            
-            left_active = self._left_indicator_on and self._blink_phase_on
-            right_active = self._right_indicator_on and self._blink_phase_on
-            
-            left_img = self._ts_arrow_left_green if left_active else self._ts_arrow_left_grey
-            right_img = self._ts_arrow_right_green if right_active else self._ts_arrow_right_grey
-            
-            dashboard_surface.blit(left_img, left_img.get_rect(center=(left_x, ts_y)))
-            dashboard_surface.blit(right_img, right_img.get_rect(center=(right_x, ts_y)))
-        
-        # Blit dashboard to main display at bottom-left corner
-        display.blit(dashboard_surface, (self.dashboard_x, self.dashboard_y))
+        # Reuse latest frame composed in update().
+        if self._dashboard_frame is None:
+            self._compose_dashboard_frame()
+        if self._dashboard_frame is not None:
+            display.blit(self._dashboard_frame, (self.dashboard_x, self.dashboard_y))
     
     def set_left_indicator(self, enabled):
         """Set left turn indicator state."""
