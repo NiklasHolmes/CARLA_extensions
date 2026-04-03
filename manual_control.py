@@ -159,7 +159,11 @@ except ImportError:
 from typing import Optional
 from generate_audio import AudioGenerator, DummyAudioGenerator
 from dashboard_renderer import DashboardRenderer
-from event_sync import EventSync
+from common.event_sync import EventSync
+from common.window_positioning import (
+    prepare_window_start_position_left,
+    apply_borderless_and_left_position_once,
+)
 
 # ==============================================================================
 # -- Audio Setup  --------------------------------------------------------------
@@ -187,8 +191,10 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 # Audio enable/disable flag
 ENABLE_AUDIO = False
 
-# Dashboard inside main window (bottom-left corner)
+# Dashboard inside main window (bottom-left corner) => client perf low! => True
 ENABLE_INSIDE_DASHBOARD = False
+# Automatically overlay dashboard window on main display (only if ENABLE_INSIDE_DASHBOARD is False)
+ENABLE_AUTOMATIC_DB_WINDOW_OVERLAY = True  
 
 def _audio_init():
     """Initialize audio generator."""
@@ -1284,10 +1290,15 @@ class HUD(object):
 
     @staticmethod
     def _compute_fps_stats(samples):
-        avg_fps = sum(samples) / len(samples)
-        var = sum((f - avg_fps) ** 2 for f in samples) / len(samples)
+        # Snapshot first to avoid "deque mutated during iteration" if another callback appends concurrently.
+        values = list(samples)
+        if not values:
+            return 0.0, 0.0, 0.0
+
+        avg_fps = sum(values) / len(values)
+        var = sum((f - avg_fps) ** 2 for f in values) / len(values)
         std_fps = var ** 0.5
-        sorted_fps = sorted(samples)
+        sorted_fps = sorted(values)
         index_1pct = max(0, int(len(sorted_fps) * 0.01) - 1)
         fps_1pct_low = sorted_fps[index_1pct]
         return avg_fps, std_fps, fps_1pct_low
@@ -2006,6 +2017,8 @@ class CameraManager(object):
 # ==============================================================================
 
 def game_loop(args):
+    prepare_window_start_position_left()
+
     pygame.init()
     pygame.font.init()
     world = None
@@ -2035,9 +2048,10 @@ def game_loop(args):
         pygame.display.set_caption(f"CARLA Manual Control [{args.input}] (joy #0)")
         display = pygame.display.set_mode(
             (args.width, args.height),
-            pygame.HWSURFACE | pygame.DOUBLEBUF)
+            pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.NOFRAME)
         display.fill((0,0,0))
         pygame.display.flip()
+        apply_borderless_and_left_position_once(pygame)
 
         _audio_init()
 
@@ -2075,11 +2089,11 @@ def game_loop(args):
             world.tick(clock)
             world.render(display)
             
-            # Update proximity alert audio (throttled internally to 0.5s)
-            if audio_manager is not None and world.obstacle_sensor is not None:
-                if world.obstacle_sensor.should_update_audio():
-                    distance_group = world.obstacle_sensor.get_distance_group()
-                    audio_manager.update_proximity_alert(distance_group)
+            # # Update proximity alert audio (throttled internally to 0.5s)
+            # if audio_manager is not None and world.obstacle_sensor is not None:
+            #     if world.obstacle_sensor.should_update_audio():
+            #         distance_group = world.obstacle_sensor.get_distance_group()
+            #         audio_manager.update_proximity_alert(distance_group)
             
             pygame.display.flip()
 
