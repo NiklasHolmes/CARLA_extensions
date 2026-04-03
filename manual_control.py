@@ -193,8 +193,14 @@ ENABLE_AUDIO = False
 
 # Dashboard inside main window (bottom-left corner) => client perf low! => True
 ENABLE_INSIDE_DASHBOARD = False
-# Automatically overlay dashboard window on main display (only if ENABLE_INSIDE_DASHBOARD is False)
-ENABLE_AUTOMATIC_DB_WINDOW_OVERLAY = True  
+
+# External dashboard config (code-only, no terminal input required)
+# Modes: 'basic', 'second_screen', 'overlapping'
+DASHBOARD_MODE = 'second_screen'
+# Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
+DASHBOARD_SIZE = (960, 540)
+# Monitor index used by second_screen mode (0-based)
+DB_SCREEN_INDEX = 2
 
 def _audio_init():
     """Initialize audio generator."""
@@ -226,7 +232,7 @@ def _audio_quit():
         audio_manager.quit()
         audio_manager = None
 
-def _start_dashboard_process(host: str, port: int, display_index: Optional[int] = None):
+def _start_dashboard_process(host: str, port: int, main_window_title: Optional[str] = None):
     """Start dashboard in a separate process to avoid pygame display conflicts."""
     global dashboard_process
     try:
@@ -235,11 +241,30 @@ def _start_dashboard_process(host: str, port: int, display_index: Optional[int] 
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
         dashboard_script = os.path.join(script_dir, 'car_dashboard.py')
-        cmd = [sys.executable, dashboard_script, '--host', host, '--port', str(port)]
-        if display_index is not None and display_index >= 0:
-            cmd.extend(['--display-index', str(display_index)])
+        mode = str(DASHBOARD_MODE).strip().lower()
+        if mode not in ('basic', 'second_screen', 'overlapping'):
+            print(f"[Dashboard] WARNING: unknown DASHBOARD_MODE='{DASHBOARD_MODE}', using 'basic'.")
+            mode = 'basic'
+        size_w = max(64, int(DASHBOARD_SIZE[0]))
+        size_h = max(64, int(DASHBOARD_SIZE[1]))
+
+        cmd = [
+            sys.executable,
+            dashboard_script,
+            '--host', host,
+            '--port', str(port),
+            '--mode', mode,
+            '--size', f'{size_w}x{size_h}',
+        ]
+
+        if mode == 'second_screen':
+            cmd.extend(['--display-index', str(max(0, int(DB_SCREEN_INDEX)))])
+        elif mode == 'overlapping':
+            if main_window_title:
+                cmd.extend(['--main-window-title', main_window_title])
+
         dashboard_process = subprocess.Popen(cmd, cwd=script_dir)
-        print("[Dashboard] External process started")
+        print(f"[Dashboard] External process started (mode={mode}, size={size_w}x{size_h})")
     except Exception as e:
         dashboard_process = None
         print(f"[Dashboard] WARNING: failed to start external process: {e}")
@@ -2045,7 +2070,8 @@ def game_loop(args):
             print("WARNING: You are currently in asynchronous mode and could "
                   "experience some issues with the traffic simulation")
 
-        pygame.display.set_caption(f"CARLA Manual Control [{args.input}] (joy #0)")
+        main_window_title = f"CARLA Manual Control [{args.input}] (joy #0)"
+        pygame.display.set_caption(main_window_title)
         display = pygame.display.set_mode(
             (args.width, args.height),
             pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.NOFRAME)
@@ -2063,7 +2089,7 @@ def game_loop(args):
             world.dashboard_renderer = DashboardRenderer(args.width, args.height, world)
             print(f"[Dashboard] Inside dashboard enabled ({args.width}x{args.height})")
         else:
-            _start_dashboard_process(args.host, args.port, args.dashboard_display)
+            _start_dashboard_process(args.host, args.port, main_window_title=main_window_title)
         event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
         world.event_sync = event_sync
         
@@ -2194,13 +2220,6 @@ def main():
         choices=['keyboard', 'gamepad'],
         default='keyboard',
         help='Select input device for this window (default: keyboard)'
-    )
-    argparser.add_argument(
-        '--dashboard-display',
-        metavar='N',
-        type=int,
-        default=0,                                      # dashbaord display SCREEN
-        help='pygame display index for external dashboard (default: 0 for screen 1)'
     )
     args = argparser.parse_args()
 

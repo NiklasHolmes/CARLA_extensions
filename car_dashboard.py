@@ -15,24 +15,50 @@ import threading
 import time
 import argparse
 import ctypes
-from ctypes import wintypes
+from common.window_positioning import (
+    get_windows_monitor_rects,
+    get_pygame_window_hwnd,
+    apply_borderless_style_windows,
+    set_window_topmost_windows,
+    set_window_noactivate_windows,
+    is_window_topmost_windows,
+    move_window_to_monitor_windows,
+    move_window_overlapping_windows,
+)
 
 # Switch window size mode:
 # - None => fullscreen on selected monitor
 # - (width, height) => fixed dashboard window size
 DEFAULT_DASHBOARD_SIZE = (960, 540)              # (960, 540)  (1920, 1080) 
-#DASHBOARD_WINDOW_SIZE = None
-DASHBOARD_WINDOW_SIZE = DEFAULT_DASHBOARD_SIZE
+DASHBOARD_DEFAULT_OVERLAP_MARGIN = (16, 16)
+
+DASHBOARD_SUPPORTED_MODES = ('basic', 'second_screen', 'overlapping')
+DEFAULT_DASHBOARD_MODE = 'basic'
 
 class CarDashboard(threading.Thread):
 
-    def __init__(self, world, window_size=None, display_index=0):
+    def __init__(
+        self,
+        world,
+        window_size=None,
+        display_index=0,
+        mode=DEFAULT_DASHBOARD_MODE,
+        main_window_title="",
+        overlap_margin=DASHBOARD_DEFAULT_OVERLAP_MARGIN,
+        always_on_top=False,
+        no_focus=False,
+    ):
         """Initialize dashboard in separate thread.
         
         Args:
             world: CARLA world object to get hero vehicle from
-            window_size: None for fullscreen, or (width, height) for fixed size
+            window_size: None for fullscreen, or (width, height) for fixed size (ignored for second_screen)
             display_index: pygame display index (0-based)
+            mode: either 'basic', 'second_screen', or 'overlapping'
+            main_window_title: target window caption for overlapping mode
+            overlap_margin: (x, y) margin in pixels for overlapping mode
+            always_on_top: keep dashboard window above normal windows (auto in overlapping)
+            no_focus: prevent dashboard from taking input focus (auto in overlapping)
         """
         # use threading to run dashboard in separate thread and avoid blocking main CARLA loop
         threading.Thread.__init__(self)
@@ -48,6 +74,23 @@ class CarDashboard(threading.Thread):
             self.width = int(window_size[0])
             self.height = int(window_size[1])
         self.display_index = max(0, int(display_index))
+        normalized_mode = str(mode).strip().lower()
+        if normalized_mode not in DASHBOARD_SUPPORTED_MODES:
+            normalized_mode = DEFAULT_DASHBOARD_MODE
+        self.mode = normalized_mode
+        if self.mode == 'second_screen':
+            self._use_fullscreen = True
+            self.width = None
+            self.height = None
+        self.main_window_title = str(main_window_title or "")
+        self.overlap_margin_x = max(0, int(overlap_margin[0]))
+        self.overlap_margin_y = max(0, int(overlap_margin[1]))
+        self.always_on_top = bool(always_on_top) or self.mode == 'overlapping'
+        self.no_focus = bool(no_focus) or self.mode == 'overlapping'
+        self._last_overlap_target = None
+        # Re-assert window policy at low rate to survive focus/z-order changes.
+        self._window_policy_refresh_interval_sec = 0.10
+        self._window_policy_timer_sec = 0.0
 
         # maximum speed the pointer can display (degrees = km/h == 1:1 ratio)
         self._max_speed = 100
@@ -102,77 +145,6 @@ class CarDashboard(threading.Thread):
         print(f"[Dashboard] display index {idx} out of range, clamped to {clamped}")
         return clamped
 
-    def _windows_monitor_rects(self):
-        """Return monitor rectangles on Windows as (left, top, right, bottom)."""
-        if os.name != 'nt':
-            return []
-
-        class RECT(ctypes.Structure):
-            _fields_ = [
-                ("left", ctypes.c_long),
-                ("top", ctypes.c_long),
-                ("right", ctypes.c_long),
-                ("bottom", ctypes.c_long),
-            ]
-
-        rects = []
-        monitor_enum_proc = ctypes.WINFUNCTYPE(
-            wintypes.BOOL,
-            wintypes.HMONITOR,
-            wintypes.HDC,
-            ctypes.POINTER(RECT),
-            wintypes.LPARAM,
-        )
-
-        def _callback(_monitor, _hdc, lprc_monitor, _data):
-            r = lprc_monitor.contents
-            rects.append((int(r.left), int(r.top), int(r.right), int(r.bottom)))
-            return 1
-
-        try:
-            ctypes.windll.user32.EnumDisplayMonitors(
-                0, 0, monitor_enum_proc(_callback), 0
-            )
-        except Exception:
-            return []
-
-        return rects
-
-    def _move_window_to_monitor_windows(self, resolved_display_index):
-        """Move pygame window to selected monitor on Windows."""
-        if os.name != 'nt':
-            return
-
-        try:
-            wm_info = pygame.display.get_wm_info()
-            hwnd = wm_info.get('window')
-            if not hwnd:
-                return
-
-            rects = self._windows_monitor_rects()
-            if not rects:
-                return
-
-            monitor_idx = self._resolve_display_index(resolved_display_index, len(rects))
-            left, top, _, _ = rects[monitor_idx]
-
-            SWP_NOSIZE = 0x0001
-            SWP_NOZORDER = 0x0004
-            SWP_NOACTIVATE = 0x0010
-
-            ctypes.windll.user32.SetWindowPos(
-                int(hwnd),
-                0,
-                int(left),
-                int(top),
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
-            )
-            print(f"[Dashboard] Window moved to monitor index {monitor_idx} at ({left}, {top})")
-        except Exception as e:
-            print(f"[Dashboard] WARNING: failed to move window to monitor: {e}")
-
     # SOCKET: 
     def _init_sync_socket(self):
         """Receive EventSync commands via localhost UDP."""
@@ -213,6 +185,52 @@ class CarDashboard(threading.Thread):
             elif cmd == "RIGHT_OFF":
                 self._right_indicator_on = False
 
+    def _apply_window_policy_windows(self, hwnd, resolved_display_index, log_output=False):
+        """Apply placement/topmost policy once; can be called periodically at low rate."""
+        if os.name != 'nt' or not hwnd:
+            return
+
+        if self.mode == 'second_screen':
+            moved = move_window_to_monitor_windows(
+                hwnd,
+                resolved_display_index,
+                resolve_display_index=self._resolve_display_index,
+            )
+            if moved is None:
+                if log_output:
+                    print("[Dashboard] WARNING: failed to move window to selected monitor")
+            elif log_output:
+                monitor_idx, left, top = moved
+                print(f"[Dashboard] Window moved to monitor index {monitor_idx} at ({left}, {top})")
+        elif self.mode == 'overlapping':
+            moved = move_window_overlapping_windows(
+                hwnd,
+                self.main_window_title,
+                (self.width, self.height),
+                (self.overlap_margin_x, self.overlap_margin_y),
+                previous_target=self._last_overlap_target,
+                show_window=log_output,
+            )
+            if moved is None:
+                if log_output:
+                    print("[Dashboard] WARNING: failed to place overlapping window")
+            elif log_output:
+                target_x, target_y = moved
+                print(
+                    f"[Dashboard] overlapping target=({target_x}, {target_y}), "
+                    f"main_window='{self.main_window_title.strip()}'"
+                )
+            if moved is not None:
+                self._last_overlap_target = moved
+
+        if self.always_on_top:
+            if not is_window_topmost_windows(hwnd):
+                if set_window_topmost_windows(hwnd, enabled=True):
+                    if log_output:
+                        print("[Dashboard] always_on_top enabled")
+                elif log_output:
+                    print("[Dashboard] WARNING: failed to enable always_on_top")
+
     def run(self):
         """Main dashboard thread loop."""
         try:
@@ -229,22 +247,24 @@ class CarDashboard(threading.Thread):
                 num_displays = 0
             resolved_display_index = self._resolve_display_index(self.display_index, num_displays)
             print(
-                f"[Dashboard] requested_display={self.display_index}, "
+                f"[Dashboard] mode={self.mode}, "
+                f"requested_display={self.display_index}, "
                 f"resolved_display={resolved_display_index}, "
                 f"num_displays={num_displays}"
             )
 
-            window_flags = 0
+            # Basic mode stays movable with normal window frame
+            borderless = (self.mode in ('second_screen', 'overlapping')) or self._use_fullscreen
+            window_flags = pygame.NOFRAME if borderless else 0
 
             if self._use_fullscreen and os.name == 'nt':
                 # Fullscreen mode on Windows: use monitor dimensions and borderless window.
-                rects = self._windows_monitor_rects()
+                rects = get_windows_monitor_rects()
                 if rects:
                     monitor_idx = self._resolve_display_index(resolved_display_index, len(rects))
                     left, top, right, bottom = rects[monitor_idx]
                     self.width = int(right - left)
                     self.height = int(bottom - top)
-                    window_flags = pygame.NOFRAME
                     print(
                         f"[Dashboard] monitor_rect=({left}, {top}, {right}, {bottom}), "
                         f"window_size={self.width}x{self.height}, borderless=True"
@@ -254,17 +274,32 @@ class CarDashboard(threading.Thread):
                 self.width, self.height = DEFAULT_DASHBOARD_SIZE
                 print(f"[Dashboard] Using fallback size: {self.width}x{self.height}")
 
+            use_display_kwarg = (
+                self.mode == 'second_screen' and
+                num_displays > 0
+            )
             try:
-                self._display = pygame.display.set_mode(
-                    (self.width, self.height),
-                    window_flags,
-                    display=resolved_display_index,
-                )
+                if use_display_kwarg:
+                    self._display = pygame.display.set_mode(
+                        (self.width, self.height),
+                        window_flags,
+                        display=resolved_display_index,
+                    )
+                else:
+                    self._display = pygame.display.set_mode((self.width, self.height), window_flags)
             except TypeError:
-                # Fallback for older pygame signatures without display keyword.
+                # Fallback for older pygame signatures without display keyword
                 self._display = pygame.display.set_mode((self.width, self.height), window_flags)
             pygame.display.set_caption("Car Dashboard")
-            self._move_window_to_monitor_windows(resolved_display_index)
+            hwnd = get_pygame_window_hwnd(pygame)
+            if borderless and hwnd and not apply_borderless_style_windows(hwnd):
+                print("[Dashboard] WARNING: failed to enforce borderless style")
+            if self.no_focus:
+                if hwnd and set_window_noactivate_windows(hwnd, enabled=True):
+                    print("[Dashboard] no_focus enabled")
+                else:
+                    print("[Dashboard] WARNING: failed to enable no_focus")
+            self._apply_window_policy_windows(hwnd, resolved_display_index, log_output=True)
 
             # scale speedometer images
             img_dir = os.path.join(os.path.dirname(__file__), 'images')
@@ -336,6 +371,14 @@ class CarDashboard(threading.Thread):
                         self.running = False
 
                 self._poll_sync_commands()
+
+                if os.name == 'nt' and self.mode == 'overlapping':
+                    self._window_policy_timer_sec += dt
+                    if self._window_policy_timer_sec >= self._window_policy_refresh_interval_sec:
+                        self._window_policy_timer_sec = 0.0
+                        if hwnd is None:
+                            hwnd = get_pygame_window_hwnd(pygame)
+                        self._apply_window_policy_windows(hwnd, resolved_display_index, log_output=False)
 
                 if self._left_indicator_on or self._right_indicator_on:
                     self._blink_timer += dt
@@ -499,9 +542,54 @@ if __name__ == '__main__':
         '--offline', action='store_true',
         help='start dashboard without CARLA server connection')
     argparser.add_argument(
-        '--display-index', metavar='N', default=2, type=int,
-        help='pygame display index (0-based, default: 2)')
+        '--display-index', metavar='N', default=0, type=int,
+        help='pygame display index (0-based, default: 0)')
+    argparser.add_argument(
+        '--mode',
+        choices=list(DASHBOARD_SUPPORTED_MODES),
+        default=DEFAULT_DASHBOARD_MODE,
+        help='dashboard placement mode (default: basic)')
+    argparser.add_argument(
+        '--size',
+        metavar='WIDTHxHEIGHT',
+        default=f'{DEFAULT_DASHBOARD_SIZE[0]}x{DEFAULT_DASHBOARD_SIZE[1]}',
+        help='dashboard window size, or fullscreen (ignored for second_screen)')
+    argparser.add_argument(
+        '--main-window-title',
+        default='',
+        help='manual_control window title used in overlapping mode')
+    argparser.add_argument(
+        '--overlap-margin',
+        metavar='X,Y',
+        default=f'{DASHBOARD_DEFAULT_OVERLAP_MARGIN[0]},{DASHBOARD_DEFAULT_OVERLAP_MARGIN[1]}',
+        help='margin from bottom-left corner of main window in overlapping mode (default: 16,16)')
+    argparser.add_argument(
+        '--always-on-top',
+        action='store_true',
+        help='keep dashboard window above normal windows')
+    argparser.add_argument(
+        '--no-focus',
+        action='store_true',
+        help='prevent dashboard window from taking input focus')
     args = argparser.parse_args()
+
+    if str(args.size).strip().lower() == 'fullscreen':
+        dashboard_window_size = None
+    else:
+        try:
+            w_str, h_str = str(args.size).lower().split('x', 1)
+            dashboard_window_size = (max(64, int(w_str)), max(64, int(h_str)))
+        except Exception:
+            dashboard_window_size = DEFAULT_DASHBOARD_SIZE
+            print(f"[Dashboard] WARNING: invalid --size '{args.size}', using {dashboard_window_size[0]}x{dashboard_window_size[1]}")
+
+    try:
+        margin_x_str, margin_y_str = str(args.overlap_margin).split(',', 1)
+        overlap_margin = (max(0, int(margin_x_str)), max(0, int(margin_y_str)))
+    except Exception:
+        overlap_margin = (16, 16)
+        print(f"[Dashboard] WARNING: invalid --overlap-margin '{args.overlap_margin}', using 16,16")
+
     dashboard = None
 
     class DummyVelocity:
@@ -526,12 +614,25 @@ if __name__ == '__main__':
     def start_dashboard_with_player(player, mode_label):
         nonlocal_dashboard = CarDashboard(
             WorldWrapper(player),
-            window_size=DASHBOARD_WINDOW_SIZE,
+            window_size=dashboard_window_size,
             display_index=args.display_index,
+            mode=args.mode,
+            main_window_title=args.main_window_title,
+            overlap_margin=overlap_margin,
+            always_on_top=args.always_on_top,
+            no_focus=args.no_focus,
         )
         nonlocal_dashboard.start()
-        size_label = "fullscreen" if DASHBOARD_WINDOW_SIZE is None else f"{DASHBOARD_WINDOW_SIZE[0]}x{DASHBOARD_WINDOW_SIZE[1]}"
-        print(f"[Dashboard] Started ({size_label}, display={args.display_index}) in {mode_label} mode. Press Ctrl+C to exit.")
+        if args.mode == 'second_screen':
+            size_label = "fullscreen"
+        else:
+            size_label = "fullscreen" if dashboard_window_size is None else f"{dashboard_window_size[0]}x{dashboard_window_size[1]}"
+        print(
+            f"[Dashboard] Started ({size_label}, mode={args.mode}, display={args.display_index}, "
+            f"always_on_top={nonlocal_dashboard.always_on_top}, "
+            f"no_focus={nonlocal_dashboard.no_focus}) "
+            f"in {mode_label} mode. Press Ctrl+C to exit."
+        )
         return nonlocal_dashboard
     
     try:
