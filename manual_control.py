@@ -864,7 +864,7 @@ class GamepadControl(object):
     - L2            :   brake
     - Cross (X)     :   hand-brake
     - Circle (O)    :   toggle reverse
-    - Horn ([])     :   honk while held down
+    - Export ([])   :   export current performance row for Excel (overwrite file)
     - Option        :   quit
 
     - L1/R1        :   blinker left/right
@@ -953,6 +953,7 @@ class GamepadControl(object):
         world.player.apply_control(self._control)
 
         prev_square = getattr(self, "_prev_square", False)
+        # Export current performance row 
         if btn_square:
             try:
                 out_path = world.hud.export_perf_row_for_excel()
