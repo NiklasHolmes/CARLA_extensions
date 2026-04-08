@@ -952,7 +952,6 @@ class GamepadControl(object):
 
         world.player.apply_control(self._control)
 
-        prev_square = getattr(self, "_prev_square", False)
         # Export current performance row 
         if btn_square:
             try:
