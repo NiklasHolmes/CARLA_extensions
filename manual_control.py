@@ -953,15 +953,14 @@ class GamepadControl(object):
         world.player.apply_control(self._control)
 
         prev_square = getattr(self, "_prev_square", False)
-        if btn_square and not prev_square:
-            # Horn: play while held down
-            if audio_manager is not None:
-                audio_manager.play_horn()
-        # Horn control: stop horn when key is released
-        elif not btn_square and prev_square:
-            if audio_manager is not None:
-                audio_manager.stop_horn(fadeout_ms=120)
-        self._prev_square = btn_square
+        if btn_square:
+            try:
+                out_path = world.hud.export_perf_row_for_excel()
+                world.hud.notification("Perf export written: %s" % os.path.basename(out_path), seconds=2.5)
+            except Exception as e:
+                world.hud.error("Perf export failed: %s" % e)
+
+
 
         prev_L1 = getattr(self, "_prev_L1", False)
         if btn_L1 and not prev_L1:
