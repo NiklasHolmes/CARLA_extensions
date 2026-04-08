@@ -1167,8 +1167,9 @@ class HUD(object):
             self.server_frame_ms,
             self.client_frame_ms,
         ]
-
-        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'perf_export_row.tsv')
+       # filename = 'perf_export_row_' + str(datetime.datetime.now().timestamp()) + '.tsv'
+        filename = 'perf_export_row.tsv'
+        out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
         with open(out_path, 'w', encoding='utf-8', newline='') as f:
             f.write('\t'.join(('%.3f' % v).replace('.', ',') for v in values) + '\n')               # get values with , for Excel
 
