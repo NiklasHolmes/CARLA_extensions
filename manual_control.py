@@ -1000,6 +1000,157 @@ class GamepadControl(object):
 
 
 # ==============================================================================
+# -- Wheel controller TM T500 RS ----------------------------------------
+# ==============================================================================
+
+class WheelControl(object):
+    """
+    Control a vehicle using a game controller via pygame.joystick.
+    - Left stick    :   steer
+    - R2            :   throttle
+    - L2            :   brake
+    - Cross (X)     :   hand-brake
+    - Circle (O)    :   toggle reverse
+    - Horn ([])     :   honk while held down
+    - Option        :   quit
+
+    - L1/R1        :   blinker left/right
+
+    """
+
+    def __init__(self, world, start_in_autopilot, deadzone=0.08, steer_sensitivity=1.0):
+        import pygame
+
+        joystick_id = 0
+        self._autopilot_enabled = start_in_autopilot
+        self._control = carla.VehicleControl()
+        self._reverse_toggle_state = False
+        self._deadzone = deadzone
+        self._steer_gain = steer_sensitivity
+        self._prev_brake = False
+
+        pygame.joystick.init()
+        count = pygame.joystick.get_count()
+        print("Gamepad Count:",count)
+        if count == 0:
+            raise RuntimeError("No game controller detected. Plug in a controller or use --input keyboard.")
+        if joystick_id < 0 or joystick_id >= count:
+            raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
+
+        self.joy = pygame.joystick.Joystick(joystick_id)
+        self.joy.init()
+        self.shifter = None
+        if pygame.joystick.get_count() > 1:
+            for i in range(count):
+                shft = pygame.joystick.Joystick(i)
+                shft.init()
+                if "shift" in shft.get_name().lower():
+                    self.shifter = shft
+                    break
+        if self.shifter == None:
+            raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
+        
+        print("Joy", self.joy.get_name())
+        print("Shifter", self.shifter.get_name())
+
+        for i in range(count):
+            print()
+
+        world.player.set_autopilot(self._autopilot_enabled)
+        world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
+
+    def _apply_deadzone(self, v):
+        return 0.0 if abs(v) < self._deadzone else v
+
+    def parse_events(self, client, world, clock, sync_mode):
+        import pygame
+
+        # pump events to update joystick state (also if window not focused)
+        pygame.event.pump()
+
+        for event in pygame.event.get(pygame.QUIT):
+            if event.type == pygame.QUIT:
+                return True
+        
+        if self.joy.get_button(6):  # close window with "options" button 
+            return True
+        
+        # only polling, no pygame.event.get()
+        steer_axis = self._apply_deadzone(self.joy.get_axis(0))
+        l2 = self.joy.get_axis(4)
+        r2 = self.joy.get_axis(5)
+
+        brake    = max(0.0, (l2 + 1.0) / 2.0)
+        throttle = max(0.0, (r2 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
+
+        speed_kmh = 0.0
+        try:
+            v = world.player.get_velocity()
+            speed_kmh = 3.6 * math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2)
+        except Exception:
+            speed_kmh = 0.0
+
+        # Brake audio - play once on L2 press (0 => 1 transition)
+        current_braking = brake > 0.1
+        if audio_manager is not None and not self._prev_brake and current_braking:
+            audio_manager.play_brake(brake_strength=brake, speed_kmh=speed_kmh)
+        self._prev_brake = current_braking
+
+        self._control.steer    = float(max(-1.0, min(1.0, steer_axis * self._steer_gain)))
+        self._control.throttle = float(max(0.0, min(1.0, throttle)))
+        self._control.brake    = float(max(0.0, min(1.0, brake)))
+
+        btn_cross  = self.joy.get_button(0)     # X
+        btn_circle = self.joy.get_button(1)     # O
+        btn_square = self.joy.get_button(2)     # []
+        btn_triangle = self.joy.get_button(3)   # /\
+        btn_L1 = self.joy.get_button(9)         # L1
+        btn_R1 = self.joy.get_button(10)        # R1
+        # 7+8 => Left/Right stick (L3/R3)
+        self._control.hand_brake = bool(btn_cross)
+        #print('0:',self.shifter.get_button(1))
+
+        if btn_circle and not getattr(self, "_prev_circle", False):
+            self._reverse_toggle_state = not self._reverse_toggle_state
+        self._prev_circle = btn_circle
+        #self._control.reverse = self._reverse_toggle_state
+        self._control.reverse = self.shifter.get_button(1)
+
+        world.player.apply_control(self._control)
+
+        prev_square = getattr(self, "_prev_square", False)
+        if btn_square and not prev_square:
+            # Horn: play while held down
+            if audio_manager is not None:
+                audio_manager.play_horn()
+        # Horn control: stop horn when key is released
+        elif not btn_square and prev_square:
+            if audio_manager is not None:
+                audio_manager.stop_horn(fadeout_ms=120)
+        self._prev_square = btn_square
+
+        prev_L1 = getattr(self, "_prev_L1", False)
+        if btn_L1 and not prev_L1:
+            if world.event_sync is not None:
+                world.event_sync.trigger_blinker_left()
+        self._prev_L1 = btn_L1
+        prev_R1 = getattr(self, "_prev_R1", False)
+        if btn_R1 and not prev_R1:
+            if world.event_sync is not None:
+                world.event_sync.trigger_blinker_right()
+        self._prev_R1 = btn_R1
+
+        # --- ENGINE AUDIO (GAMEPAD) ---
+        try:
+            if audio_manager is not None and audio_manager.engine_audio is not None:
+                audio_manager.update_engine(self._control.throttle)
+        except:
+            pass
+
+        return False
+
+
+# ==============================================================================
 # -- HUD -----------------------------------------------------------------------
 # ==============================================================================
 
@@ -1942,9 +2093,11 @@ def game_loop(args):
         _start_dashboard_process(args.host, args.port, args.dashboard_display)
         event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
         world.event_sync = event_sync
-        
+        print(args.input)
         if args.input == 'gamepad':
             controller = GamepadControl(world, args.autopilot)
+        elif args.input == 'wheel':
+            controller = WheelControl(world, args.autopilot)
         else:
             controller = KeyboardControl(world, args.autopilot)
 
@@ -2067,7 +2220,7 @@ def main():
         help='Activate synchronous mode execution')
     argparser.add_argument(                             # keyboard vs. gamepad input
         '--input',
-        choices=['keyboard', 'gamepad'],
+        choices=['keyboard', 'gamepad', 'wheel'],
         default='keyboard',
         help='Select input device for this window (default: keyboard)'
     )
