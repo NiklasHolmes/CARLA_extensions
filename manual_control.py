@@ -940,6 +940,8 @@ class GamepadControl(object):
         btn_circle = self.joy.get_button(1)     # O
         btn_square = self.joy.get_button(2)     # []
         btn_triangle = self.joy.get_button(3)   # /\
+        btn_L1 = self.joy.get_button(4)
+        btn_R1 = self.joy.get_button(5)
         # 7+8 => Left/Right stick (L3/R3)
         btn_L3 = self.joy.get_button(8)
         btn_R3 = self.joy.get_button(9)
