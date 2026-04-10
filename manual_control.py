@@ -1024,14 +1024,22 @@ class WheelControl(object):
 
         self.joy = pygame.joystick.Joystick(joystick_id)
         self.joy.init()
-
         self.shifter = None
         if pygame.joystick.get_count() > 1:
-            self.shifter = pygame.joystick.Joystick(1)
-            self.shifter.init()
-
+            for i in range(count):
+                shft = pygame.joystick.Joystick(i)
+                shft.init()
+                if "shift" in shft.get_name().lower():
+                    self.shifter = shft
+                    break
+        if self.shifter == None:
+            raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
+        
         print("Joy", self.joy.get_name())
         print("Shifter", self.shifter.get_name())
+
+        for i in range(count):
+            print()
 
         world.player.set_autopilot(self._autopilot_enabled)
         world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
