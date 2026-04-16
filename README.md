@@ -19,12 +19,15 @@ python manual_control.py --res 3840x1080 --sp 0.8
 
 # gamepad (DualShock Controller tested) input with dashboard on second monitor
 python manual_control.py --input gamepad --dashboard-display 1
+
+# gamepad (DualShock Controller tested) input with dashboard on second monitor
+python manual_control.py --profile simulator
 ```
 
 ## Window & Dashboard Modes
-- **Main window**: position and frame can be controlled via  `manual_control.py` by:
-`WINDOW_START_LEFT`: top-left of the left-most monitor on Windows
-`WINDOW_BORDERLESS`: borderless (hardly movable)
+- **Main window**: position and frame can be controlled via `manual_control.py` by:
+	- `WINDOW_START_LEFT`: top-left of the left-most monitor on Windows
+	- `WINDOW_BORDERLESS`: borderless (hardly movable)
 
 - **Dashboard modes** (set `DASHBOARD_MODE` in `manual_control.py`):
 
