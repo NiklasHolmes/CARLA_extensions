@@ -149,6 +149,9 @@ def main():
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
     synchronous_master = False
+    # Client waits for Server tick (synchronous mode) TODO: decide if just switch to asynchronous mode
+    # https://carla.readthedocs.io/en/0.9.8/adv_synchrony_timestep/
+
     random.seed(args.seed if args.seed is not None else int(time.time()))
 
     try:
