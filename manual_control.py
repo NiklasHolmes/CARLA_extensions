@@ -193,10 +193,13 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 # Audio enable/disable flag
 ENABLE_AUDIO = False
 
+# HUD config
+ENABLE_HUD = True
+
 # Window config (defaults; profile may override)
 WINDOW_START_LEFT = True
 WINDOW_BORDERLESS = True
-# Dashboard config (code-only, no terminal input required) => Modes: 'inside', 'basic', 'second_screen', 'overlapping'
+# Dashboard config (code-only, no terminal input required) => Modes: 'none', 'inside', 'basic', 'second_screen', 'overlapping'
 DASHBOARD_MODE = 'basic'
 # Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
 DASHBOARD_SIZE = (960, 540)
@@ -215,6 +218,7 @@ PROFILE_CONFIG = {
             'USE_SCENE_FINAL': True,
             'DASHBOARD_MODE': 'basic',
             'ENABLE_AUDIO': True,
+            'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
         },
@@ -229,6 +233,7 @@ PROFILE_CONFIG = {
             'USE_SCENE_FINAL': False,
             'DASHBOARD_MODE': 'basic',
             'ENABLE_AUDIO': False,
+            'ENABLE_HUD': True,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
         },
@@ -250,7 +255,7 @@ def _apply_profile(profile, args, argv):
 
     code_overrides = config.get('code_overrides', {})
     if code_overrides:
-        global USE_SCENE_FINAL, DASHBOARD_MODE, ENABLE_AUDIO
+        global USE_SCENE_FINAL, DASHBOARD_MODE, ENABLE_AUDIO, ENABLE_HUD
         global WINDOW_START_LEFT, WINDOW_BORDERLESS
         if 'USE_SCENE_FINAL' in code_overrides:
             USE_SCENE_FINAL = code_overrides['USE_SCENE_FINAL']
@@ -258,6 +263,8 @@ def _apply_profile(profile, args, argv):
             DASHBOARD_MODE = code_overrides['DASHBOARD_MODE']
         if 'ENABLE_AUDIO' in code_overrides:
             ENABLE_AUDIO = code_overrides['ENABLE_AUDIO']
+        if 'ENABLE_HUD' in code_overrides:
+            ENABLE_HUD = code_overrides['ENABLE_HUD']
         if 'WINDOW_START_LEFT' in code_overrides:
             WINDOW_START_LEFT = code_overrides['WINDOW_START_LEFT']
         if 'WINDOW_BORDERLESS' in code_overrides:
@@ -1066,7 +1073,7 @@ class GamepadControl(object):
     - Triangle (/\) :   toggle camera
     - L1            :   blinker left
     - R1            :   blinker right
-    - L3            :   export performance data
+    - L3            :   export performance data + toggle HUD
     - R3            :   respawn vehicle
     - Option        :   quit
 
@@ -1213,6 +1220,7 @@ class GamepadControl(object):
         prev_L3 = getattr(self, "_prev_L3", False)
         if btn_L3 and not prev_L3:
             _export_performance_metrics(world)
+            world.hud.toggle_info()
         self._prev_L3 = btn_L3
 
         prev_R3 = getattr(self, "_prev_R3", False)
@@ -2338,11 +2346,15 @@ def game_loop(args):
         _audio_init()
 
         hud = HUD(args.width, args.height)
+        if not ENABLE_HUD:
+            hud.toggle_info()
         world = World(sim_world, hud, args)
         
         # Initialize dashboard based on DASHBOARD_MODE
         dashboard_mode = str(DASHBOARD_MODE).strip().lower()
-        if dashboard_mode == 'inside':
+        if dashboard_mode == 'none':
+            pass
+        elif dashboard_mode == 'inside':
             world.dashboard_renderer = DashboardRenderer(args.width, args.height, world)
             print(f"[Dashboard] Inside dashboard enabled ({args.width}x{args.height})")
         else:
