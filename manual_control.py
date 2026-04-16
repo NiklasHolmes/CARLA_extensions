@@ -1186,7 +1186,6 @@ class WheelControl(object):
     - Circle (O)    :   toggle reverse
     - Horn ([])     :   honk while held down
     - Option        :   quit
-
     - L1/R1        :   blinker left/right
 
     """
