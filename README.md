@@ -21,7 +21,16 @@ python manual_control.py --input gamepad --dashboard-display 1
 ```
 
 ## Window & Dashboard Modes
-TODO
+- **Main window**: borderless and positioned at the top-left of the left-most monitor on Windows (set at startup; keeps the CARLA view aligned).
+
+- **Dashboard mode** (set `DASHBOARD_MODE` in `manual_control.py`):
+
+| Mode | Separate window | Size | Placement / behavior | Notes |
+| --- | --- | --- | --- | --- |
+| inside | no | auto (scaled from main window) | bottom-left overlay inside main window | no external process; costs client FPS |
+| basic | yes | `DASHBOARD_SIZE` | normal framed window, movable | - |
+| second_screen | yes | fullscreen | borderless fullscreen on monitor `DB_SCREEN_INDEX` | - |
+| overlapping | yes | `DASHBOARD_SIZE` | borderless, always-on-top, bottom-left over main window | tracks main window title; no focus |
 
 ## Final Scene Camera
 

@@ -191,12 +191,9 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 # Audio enable/disable flag
 ENABLE_AUDIO = False
 
-# Dashboard inside main window (bottom-left corner) => client perf low! => True
-ENABLE_INSIDE_DASHBOARD = False
-
-# External dashboard config (code-only, no terminal input required)
-# Modes: 'basic', 'second_screen', 'overlapping'
-DASHBOARD_MODE = 'second_screen'
+# Dashboard config (code-only, no terminal input required)
+# Modes: 'inside', 'basic', 'second_screen', 'overlapping'
+DASHBOARD_MODE = 'inside'
 # Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
 DASHBOARD_SIZE = (960, 540)
 # Monitor index used by second_screen mode (0-based)
@@ -600,9 +597,8 @@ class World(object):
     def render(self, display):
         self.camera_manager.render(display)
         # Render HUD or dashboard based on flag
-        if ENABLE_INSIDE_DASHBOARD:
-            if self.dashboard_renderer is not None:
-                self.dashboard_renderer.render(display)
+        if self.dashboard_renderer is not None:
+            self.dashboard_renderer.render(display)
         else:
             self.hud.render(display)
 
@@ -2265,8 +2261,9 @@ def game_loop(args):
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
         
-        # Initialize inside dashboard if enabled
-        if ENABLE_INSIDE_DASHBOARD:
+        # Initialize dashboard based on DASHBOARD_MODE
+        dashboard_mode = str(DASHBOARD_MODE).strip().lower()
+        if dashboard_mode == 'inside':
             world.dashboard_renderer = DashboardRenderer(args.width, args.height, world)
             print(f"[Dashboard] Inside dashboard enabled ({args.width}x{args.height})")
         else:
