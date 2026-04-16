@@ -8,6 +8,7 @@ Current focus on manual control and dashboard for CARLA simulator.
 - **`--sp FLOAT`**                      – Internal camera resolution scale (0.0-1.0, default: 1.0)
 - **`--sp-upscale [smooth|fast]`**      – Upscaling filter for low resolution rendering (default: fast)
 - **`--input [keyboard|gamepad]`**      – Input device (default: keyboard)
+- **`--profile [simulator|supervisor]`** – Apply preset settings (explicit CLI flags override)
 - **`--dashboard-display N`**           – Monitor index for dashboard window (default: 0)
 
 ### Examples
@@ -21,20 +22,28 @@ python manual_control.py --input gamepad --dashboard-display 1
 ```
 
 ## Window & Dashboard Modes
-- **Main window**: borderless and positioned at the top-left of the left-most monitor on Windows (set at startup; keeps the CARLA view aligned).
+- **Main window**: position and frame can be controlled via  `manual_control.py` by:
+`WINDOW_START_LEFT`: top-left of the left-most monitor on Windows
+`WINDOW_BORDERLESS`: borderless (hardly movable)
 
-- **Dashboard mode** (set `DASHBOARD_MODE` in `manual_control.py`):
+- **Dashboard modes** (set `DASHBOARD_MODE` in `manual_control.py`):
 
 | Mode | Separate window | Size | Placement / behavior | Notes |
 | --- | --- | --- | --- | --- |
 | inside | no | auto (scaled from main window) | bottom-left overlay inside main window | no external process; costs client FPS |
-| basic | yes | `DASHBOARD_SIZE` | normal framed window, movable | - |
+| basic | yes | `DASHBOARD_SIZE` | normal framed window | db movable |
 | second_screen | yes | fullscreen | borderless fullscreen on monitor `DB_SCREEN_INDEX` | - |
-| overlapping | yes | `DASHBOARD_SIZE` | borderless, always-on-top, bottom-left over main window | tracks main window title; no focus |
+| overlapping | yes | `DASHBOARD_SIZE` | borderless, always-on-top, bottom-left over main window | no focus |
+
+## Profiles
+- **simulator** (`--profile simulator`): `USE_SCENE_FINAL=True`, `DASHBOARD_MODE=basic`, `ENABLE_AUDIO=True`, `--res 3840x1080`, `--sp 0.8`, `--input wheel`, `WINDOW_START_LEFT=False`, `WINDOW_BORDERLESS=False`.
+- **supervisor** (`--profile supervisor`): `--res 1920x1080`, `--sp 0.6`.
+- Explicit CLI flags like `--res`, `--sp`, and `--input` override profile defaults.
+
 
 ## Final Scene Camera
 
-Set `USE_SCENE_FINAL_CAMERA = True` in code to enable final simulator view (first-person perspective from inside the vehicle).
+Set `USE_SCENE_FINAL = True` in code to enable final simulator view (first-person perspective from inside the vehicle).
 
 
 ## Audio Settings

@@ -163,6 +163,8 @@ from common.event_sync import EventSync
 from common.window_positioning import (
     prepare_window_start_position_left,
     apply_borderless_and_left_position_once,
+    get_pygame_window_hwnd,
+    apply_borderless_style_windows,
 )
 
 # ==============================================================================
@@ -183,7 +185,7 @@ audio_manager: Optional[AudioGenerator] = None
 dashboard_process: Optional[subprocess.Popen] = None
 
 # Camera selection
-USE_SCENE_FINAL_CAMERA = False
+USE_SCENE_FINAL = False
 
 # Performance export filename
 PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
@@ -191,13 +193,75 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 # Audio enable/disable flag
 ENABLE_AUDIO = False
 
-# Dashboard config (code-only, no terminal input required)
-# Modes: 'inside', 'basic', 'second_screen', 'overlapping'
-DASHBOARD_MODE = 'inside'
+# Window config (defaults; profile may override)
+WINDOW_START_LEFT = True
+WINDOW_BORDERLESS = True
+# Dashboard config (code-only, no terminal input required) => Modes: 'inside', 'basic', 'second_screen', 'overlapping'
+DASHBOARD_MODE = 'basic'
 # Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
 DASHBOARD_SIZE = (960, 540)
 # Monitor index used by second_screen mode (0-based)
 DB_SCREEN_INDEX = 2
+
+
+PROFILE_CONFIG = {
+    'simulator': {
+        'cli_defaults': {
+            'res': '3840x1080',
+            'sp': 1.0,
+            'input': 'wheel',
+        },
+        'code_overrides': {
+            'USE_SCENE_FINAL': True,
+            'DASHBOARD_MODE': 'basic',
+            'ENABLE_AUDIO': True,
+            'WINDOW_START_LEFT': False,
+            'WINDOW_BORDERLESS': False,
+        },
+    },
+    'supervisor': {                     # second manual car
+        'cli_defaults': {
+            'res': '1920x1080',
+            'sp': 0.6,
+            'input': 'gamepad',
+        },
+        'code_overrides': {
+            'USE_SCENE_FINAL': False,
+            'DASHBOARD_MODE': 'basic',
+            'ENABLE_AUDIO': False,
+            'WINDOW_START_LEFT': False,
+            'WINDOW_BORDERLESS': False,
+        },
+    },
+}
+
+def _apply_profile(profile, args, argv):
+    config = PROFILE_CONFIG.get(profile)
+    if not config:
+        return
+
+    cli_defaults = config.get('cli_defaults', {})
+    if '--res' not in argv and 'res' in cli_defaults:
+        args.res = cli_defaults['res']
+    if '--sp' not in argv and 'sp' in cli_defaults:
+        args.sp = cli_defaults['sp']
+    if '--input' not in argv and 'input' in cli_defaults:
+        args.input = cli_defaults['input']
+
+    code_overrides = config.get('code_overrides', {})
+    if code_overrides:
+        global USE_SCENE_FINAL, DASHBOARD_MODE, ENABLE_AUDIO
+        global WINDOW_START_LEFT, WINDOW_BORDERLESS
+        if 'USE_SCENE_FINAL' in code_overrides:
+            USE_SCENE_FINAL = code_overrides['USE_SCENE_FINAL']
+        if 'DASHBOARD_MODE' in code_overrides:
+            DASHBOARD_MODE = code_overrides['DASHBOARD_MODE']
+        if 'ENABLE_AUDIO' in code_overrides:
+            ENABLE_AUDIO = code_overrides['ENABLE_AUDIO']
+        if 'WINDOW_START_LEFT' in code_overrides:
+            WINDOW_START_LEFT = code_overrides['WINDOW_START_LEFT']
+        if 'WINDOW_BORDERLESS' in code_overrides:
+            WINDOW_BORDERLESS = code_overrides['WINDOW_BORDERLESS']
 
 def _audio_init():
     """Initialize audio generator."""
@@ -459,7 +523,7 @@ class World(object):
         # Keep same camera config if the camera manager exists.
         cam_index = self.camera_manager.index if self.camera_manager is not None else 0
         cam_pos_index = self.camera_manager.transform_index if self.camera_manager is not None else 0
-        if USE_SCENE_FINAL_CAMERA:
+        if USE_SCENE_FINAL:
             cam_index = 0
             cam_pos_index = 0
         # Get a random blueprint.
@@ -529,7 +593,7 @@ class World(object):
             self._gamma,
             screen_percentage=self._screen_percentage,
             upscale_filter=self._sp_upscale,
-            use_scene_final=USE_SCENE_FINAL_CAMERA
+            use_scene_final=USE_SCENE_FINAL
         )
         self.camera_manager.transform_index = cam_pos_index
         self.camera_manager.set_sensor(cam_index, notify=False)
@@ -2009,7 +2073,7 @@ class CameraManager(object):
         if self.use_scene_final:
             self._camera_transforms = [
                 (carla.Transform(
-                    carla.Location(x=0.80, y=0.0, z=1.30),              # CHANGE camera position here (if USE_SCENE_FINAL_CAMERA=True)
+                    carla.Location(x=0.80, y=0.0, z=1.30),              # CHANGE camera position here (if USE_SCENE_FINAL=True)
                     carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
                 ), Attachment.Rigid)
             ]
@@ -2219,7 +2283,10 @@ class CameraManager(object):
 # ==============================================================================
 
 def game_loop(args):
-    prepare_window_start_position_left()
+    prev_window_pos = None
+    if WINDOW_START_LEFT:
+        prev_window_pos = os.environ.get("SDL_VIDEO_WINDOW_POS")
+        prepare_window_start_position_left()
 
     pygame.init()
     pygame.font.init()
@@ -2249,12 +2316,24 @@ def game_loop(args):
 
         main_window_title = f"CARLA Manual Control [{args.input}] (joy #0)"
         pygame.display.set_caption(main_window_title)
-        display = pygame.display.set_mode(
-            (args.width, args.height),
-            pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.NOFRAME)
+        window_flags = pygame.HWSURFACE | pygame.DOUBLEBUF
+        if WINDOW_BORDERLESS:
+            window_flags |= pygame.NOFRAME
+        display = pygame.display.set_mode((args.width, args.height), window_flags)
         display.fill((0,0,0))
         pygame.display.flip()
-        apply_borderless_and_left_position_once(pygame)
+        if WINDOW_BORDERLESS and WINDOW_START_LEFT:
+            apply_borderless_and_left_position_once(pygame)
+        elif WINDOW_BORDERLESS:
+            hwnd = get_pygame_window_hwnd(pygame)
+            if hwnd:
+                apply_borderless_style_windows(hwnd)
+
+        if WINDOW_START_LEFT:
+            if prev_window_pos is None:
+                os.environ.pop("SDL_VIDEO_WINDOW_POS", None)
+            else:
+                os.environ["SDL_VIDEO_WINDOW_POS"] = prev_window_pos
 
         _audio_init()
 
@@ -2341,6 +2420,10 @@ def main():
         dest='debug',
         help='print debug information')
     argparser.add_argument(
+        '--profile',
+        choices=['simulator', 'supervisor'],
+        help='apply preset settings (CLI flags override)')
+    argparser.add_argument(
         '--host',
         metavar='H',
         default='127.0.0.1',
@@ -2402,6 +2485,7 @@ def main():
         help='Select input device for this window (default: keyboard)'
     )
     args = argparser.parse_args()
+    _apply_profile(args.profile, args, sys.argv[1:])
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
     if not (0.0 < args.sp <= 1.0):
