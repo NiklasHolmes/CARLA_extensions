@@ -1087,20 +1087,19 @@ class GamepadControl(object):
         btn_L1 = self.joy.get_button(9)         # L1
         btn_R1 = self.joy.get_button(10)        # R1
         btn_L3 = self.joy.get_button(7)         # L3
-        # 7+8 => Left/Right stick (L3/R3)
-        btn_L3 = self.joy.get_button(8)
-        btn_R3 = self.joy.get_button(9)
+        btn_R3 = self.joy.get_button(8)         # R3
         self._control.hand_brake = bool(btn_cross)
         
-        # XBOX controller Mapping
-        # 0 -> A
-        # 1 -> B
-        # 2 -> X
-        # 3 -> Y
-        # 4 -> L1
-        # 5 -> R1
-        # 8 -> L3
-        # 9 -> R3
+        # PS controller mapping (pygame button indices)
+        # 0 -> Cross (X)
+        # 1 -> Circle (O)
+        # 2 -> Square ([])
+        # 3 -> Triangle (/\)
+        # 6 -> Options
+        # 7 -> L3
+        # 8 -> R3
+        # 9 -> L1
+        # 10 -> R1
 
         if btn_L3:
             world.camera_manager.toggle_camera()
