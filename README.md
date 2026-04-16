@@ -20,10 +20,13 @@ python manual_control.py --res 3840x1080 --sp 0.8
 python manual_control.py --input gamepad --dashboard-display 1
 ```
 
+## Window & Dashboard Modes
+TODO
 
 ## Final Scene Camera
 
 Set `USE_SCENE_FINAL_CAMERA = True` in code to enable final simulator view (first-person perspective from inside the vehicle).
+
 
 ## Audio Settings
 
@@ -46,7 +49,9 @@ Lights & signals:
 
 Vehicle actions:
 - **Square button ([ ])** – Horn
-- **L3 button** – Export performance metrics (press left stick)
+- **Triangle button (/\)** – Toggle camera
 
 System:
+- **L3 button** – Export performance metrics (press left stick)
+- **R3 button** – Respawn vehicle (press right stick)
 - **Option button** – Quit

@@ -1003,9 +1003,11 @@ class GamepadControl(object):
     - Cross (X)     :   hand-brake
     - Circle (O)    :   toggle reverse
     - Square ([])   :   honk while held down
-    - Triangle (/\) :   export performance data
+    - Triangle (/\) :   toggle camera
     - L1            :   blinker left
     - R1            :   blinker right
+    - L3            :   export performance data
+    - R3            :   respawn vehicle
     - Option        :   quit
 
     """
@@ -1052,9 +1054,6 @@ class GamepadControl(object):
             if event.type == pygame.QUIT:
                 return True
         
-        if self.joy.get_button(6):  # close window with "options" button 
-            return True
-        
         # only polling, no pygame.event.get()
         steer_axis = self._apply_deadzone(self.joy.get_axis(0))
         l2 = self.joy.get_axis(4)
@@ -1084,6 +1083,7 @@ class GamepadControl(object):
         btn_circle = self.joy.get_button(1)     # O
         btn_square = self.joy.get_button(2)     # []
         btn_triangle = self.joy.get_button(3)   # /\
+        btn_options = self.joy.get_button(6)    # Options
         btn_L1 = self.joy.get_button(9)         # L1
         btn_R1 = self.joy.get_button(10)        # R1
         btn_L3 = self.joy.get_button(7)         # L3
@@ -1101,8 +1101,13 @@ class GamepadControl(object):
         # 9 -> L1
         # 10 -> R1
 
-        if btn_L3:
+        if btn_options:  # close window with "options" button
+            return True
+
+        prev_triangle = getattr(self, "_prev_triangle", False)
+        if btn_triangle and not prev_triangle:
             world.camera_manager.toggle_camera()
+        self._prev_triangle = btn_triangle
 
         if btn_circle and not getattr(self, "_prev_circle", False):
             self._reverse_toggle_state = not self._reverse_toggle_state
@@ -1150,6 +1155,16 @@ class GamepadControl(object):
             _export_performance_metrics(world)
         self._prev_L3 = btn_L3
 
+        prev_R3 = getattr(self, "_prev_R3", False)
+        if btn_R3 and not prev_R3:
+            if self._autopilot_enabled:
+                world.player.set_autopilot(False)
+                world.restart()
+                world.player.set_autopilot(True)
+            else:
+                world.restart()
+        self._prev_R3 = btn_R3
+
         now = time.time()
         current_lights, self._left_blinker_until, self._right_blinker_until = _apply_blinker_auto_off(
             current_lights,
@@ -1175,6 +1190,7 @@ class GamepadControl(object):
 # ==============================================================================
 # -- Wheel controller TM T500 RS ----------------------------------------
 # ==============================================================================
+# TODO: adapt for new wheel
 
 class WheelControl(object):
     """
@@ -1997,14 +2013,15 @@ class CameraManager(object):
         if self.use_scene_final:
             self._camera_transforms = [
                 (carla.Transform(
-                    carla.Location(x=0.80, y=0.0, z=1.40),              # CHANGE camera position in scene final
+                    carla.Location(x=0.80, y=0.0, z=1.30),              # CHANGE camera position here (if USE_SCENE_FINAL_CAMERA=True)
                     carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
                 ), Attachment.Rigid)
             ]
+            # TODO: set perfect camera transform for final scene camera
         elif not self._parent.type_id.startswith("walker.pedestrian"):
             self._camera_transforms = [
                 (carla.Transform(carla.Location(x=-2.0*bound_x, y=+0.0*bound_y, z=2.0*bound_z), carla.Rotation(pitch=8.0)), Attachment.SpringArmGhost),
-                (carla.Transform(carla.Location(x=+0.8*bound_x, y=+0.0*bound_y, z=1.3*bound_z)), Attachment.Rigid),
+                (carla.Transform(carla.Location(x=+0.8*bound_x, y=+0.0*bound_y, z=1.3*bound_z)), Attachment.Rigid),                 # inside car perspective
                 (carla.Transform(carla.Location(x=+1.9*bound_x, y=+1.0*bound_y, z=1.2*bound_z)), Attachment.SpringArmGhost),
                 (carla.Transform(carla.Location(x=-2.8*bound_x, y=+0.0*bound_y, z=4.6*bound_z), carla.Rotation(pitch=6.0)), Attachment.SpringArmGhost),
                 (carla.Transform(carla.Location(x=-1.0, y=-1.0*bound_y, z=0.4*bound_z)), Attachment.Rigid)]
