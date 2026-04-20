@@ -216,7 +216,7 @@ PROFILE_CONFIG = {
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'basic',
+            'DASHBOARD_MODE': 'none',
             'ENABLE_AUDIO': True,
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
