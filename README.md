@@ -70,8 +70,8 @@ Lights & signals:
 - **R1 button** – Blinker right
 
 Vehicle actions:
-- **Square button ([ ])** – Horn
-- **Triangle button (/\)** – Toggle camera
+- **Square button ** – Horn
+- **Triangle button ** – Toggle camera
 
 System:
 - **L3 button** – Export performance metrics / turn HUD on/off (press left stick)
