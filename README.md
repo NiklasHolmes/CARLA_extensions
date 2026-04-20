@@ -33,7 +33,7 @@ python manual_control.py --profile simulator
 
 | Mode | Separate window | Size | Placement / behavior | Notes |
 | --- | --- | --- | --- | --- |
-| none | no | - | no dashboard (internal or external) | - |
+| none | no | - | - | no dashboard (internal or external) |
 | inside | no | auto (scaled from main window) | bottom-left overlay inside main window | no external process; costs client FPS |
 | basic | yes | `DASHBOARD_SIZE` | normal framed window | db movable |
 | second_screen | yes | fullscreen | borderless fullscreen on monitor `DB_SCREEN_INDEX` | - |
