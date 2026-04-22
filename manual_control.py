@@ -1062,22 +1062,21 @@ class KeyboardControl(object):
 # ==============================================================================
 
 class GamepadControl(object):
-    """
-    Control a vehicle using a game controller via pygame.joystick.
-    - Left stick    :   steer
-    - R2            :   throttle
-    - L2            :   brake
-    - Cross (X)     :   hand-brake
-    - Circle (O)    :   toggle reverse
-    - Square ([])   :   honk while held down
-    - Triangle (/\) :   toggle camera
-    - L1            :   blinker left
-    - R1            :   blinker right
-    - L3            :   export performance data + toggle HUD
-    - R3            :   respawn vehicle
-    - Option        :   quit
+    
+    # Control a vehicle using a game controller via pygame.joystick.
+    # - Left stick    :   steer
+    # - R2            :   throttle
+    # - L2            :   brake
+    # - Cross (X)     :   hand-brake
+    # - Circle (O)    :   toggle reverse
+    # - Square ([])   :   honk while held down
+    # - Triangle (/\) :   toggle camera
+    # - L1            :   blinker left
+    # - R1            :   blinker right
+    # - L3            :   export performance data + toggle HUD
+    # - R3            :   respawn vehicle
+    # - Option        :   quit
 
-    """
 
     def __init__(self, world, start_in_autopilot, deadzone=0.08, steer_sensitivity=1.0):
         import pygame
@@ -1100,8 +1099,17 @@ class GamepadControl(object):
         if joystick_id < 0 or joystick_id >= count:
             raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
 
-        self.joy = pygame.joystick.Joystick(joystick_id)
-        self.joy.init()
+        self.joy = None
+        if pygame.joystick.get_count() > 1:
+            for i in range(count):
+                dev = pygame.joystick.Joystick(i)
+                print(dev.get_name())
+                dev = pygame.joystick.Joystick(i)
+                if dev.get_name() == "PS4 Controller":
+                    self.joy = dev
+                    self.joy.init()
+        if self.joy == None:
+            raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
 
         world.player.set_autopilot(self._autopilot_enabled)
         world.player.set_light_state(self._lights)
@@ -1151,30 +1159,34 @@ class GamepadControl(object):
         btn_square = self.joy.get_button(2)     # []
         btn_triangle = self.joy.get_button(3)   # /\
         btn_options = self.joy.get_button(6)    # Options
-        btn_L1 = self.joy.get_button(9)         # L1
-        btn_R1 = self.joy.get_button(10)        # R1
         btn_L3 = self.joy.get_button(7)         # L3
         btn_R3 = self.joy.get_button(8)         # R3
+        btn_L1 = self.joy.get_button(9)         # L1
+        btn_R1 = self.joy.get_button(10)        # R1
+        btn_touch = self.joy.get_button(15)
         self._control.hand_brake = bool(btn_cross)
         
-        # PS controller mapping (pygame button indices)
-        # 0 -> Cross (X)
-        # 1 -> Circle (O)
-        # 2 -> Square ([])
-        # 3 -> Triangle (/\)
+        # PS4 controller Mapping
+        # 0 -> Cross
+        # 1 -> Circle
+        # 2 -> Square
+        # 3 -> Triangle
+        # 4 -> Share
+        # 5 -> Playstation
         # 6 -> Options
-        # 7 -> L3
-        # 8 -> R3
         # 9 -> L1
         # 10 -> R1
+        # 15 -> Touchpad
 
         if btn_options:  # close window with "options" button
             return True
 
         prev_triangle = getattr(self, "_prev_triangle", False)
         if btn_triangle and not prev_triangle:
+            self._prev_triangle = btn_triangle
+
+        if btn_touch or btn_L3:
             world.camera_manager.toggle_camera()
-        self._prev_triangle = btn_triangle
 
         if btn_circle and not getattr(self, "_prev_circle", False):
             self._reverse_toggle_state = not self._reverse_toggle_state
@@ -1256,22 +1268,44 @@ class GamepadControl(object):
 
 
 # ==============================================================================
-# -- Wheel controller TM T500 RS ----------------------------------------
+# -- Wheel controller Logitech G29 ----------------------------------------
 # ==============================================================================
-# TODO: adapt for new wheel
 
 class WheelControl(object):
     """
     Control a vehicle using a game controller via pygame.joystick.
-    - Left stick    :   steer
-    - R2            :   throttle
-    - L2            :   brake
-    - Cross (X)     :   hand-brake
-    - Circle (O)    :   toggle reverse
-    - Horn ([])     :   honk while held down
-    - Option        :   quit
-    - L1/R1        :   blinker left/right
+    - Axes
+    - 0             :   Steering
+    - 1             :   Throttle
+    - 2             :   Brake
+    - 3             :   Clutch
 
+    - Buttons
+    - 0             :   Cross       :   hand-brake
+    - 1             :   Square      :   Horn
+    - 2             :   Circle      :   togggle reverse
+    - 3             :   Triangle    :
+    - 4             :   Shift Up    :   blinker right
+    - 5             :   Shift Down  :   blinker left
+    - 6             :   R2          :
+    - 7             :   L2          :
+    - 8             :   Share       :
+    - 9             :   Options     :   Quit
+    - 10            :   R3          :
+    - 11            :   L3          :
+    - 12            :   
+    - 13            :   
+    - 14            :   
+    - 15            :   
+    - 16            :   
+    - 17            :   
+    - 18            :   
+    - 19            :   Plus        :
+    - 20            :   Minus       :
+    - 21            :   Rotary Right:
+    - 22            :   Rotary Left :
+    - 23            :   Enter       :
+    - 24            :   Playstation :
     """
 
     def __init__(self, world, start_in_autopilot, deadzone=0.08, steer_sensitivity=1.0):
@@ -1293,24 +1327,23 @@ class WheelControl(object):
         if joystick_id < 0 or joystick_id >= count:
             raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
 
-        self.joy = pygame.joystick.Joystick(joystick_id)
-        self.joy.init()
+
+        self.joy = None
         self.shifter = None
         if pygame.joystick.get_count() > 1:
             for i in range(count):
-                shft = pygame.joystick.Joystick(i)
-                shft.init()
-                if "shift" in shft.get_name().lower():
-                    self.shifter = shft
+                dev = pygame.joystick.Joystick(i)
+                if dev.get_name() == "Logitech G HUB G29 Driving Force Racing Wheel USB":
+                    self.joy = dev
+                    self.joy.init()
+                if dev.get_name() == "T500 RS Gear Shift":
+                    self.shifter = dev
+                    self.shifter.init()
                     break
-        if self.shifter == None:
+        if self.shifter == None or self.joy == None:
             raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
-        
-        print("Joy", self.joy.get_name())
-        print("Shifter", self.shifter.get_name())
 
-        for i in range(count):
-            print()
+
 
         world.player.set_autopilot(self._autopilot_enabled)
         world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
@@ -1328,16 +1361,19 @@ class WheelControl(object):
             if event.type == pygame.QUIT:
                 return True
         
-        if self.joy.get_button(6):  # close window with "options" button 
+        if self.joy.get_button(9):  # close window with "options" button 
             return True
         
         # only polling, no pygame.event.get()
-        steer_axis = self._apply_deadzone(self.joy.get_axis(0))
-        l2 = self.joy.get_axis(4)
-        r2 = self.joy.get_axis(5)
+        steer_axis = self.joy.get_axis(0)
+        ax1 = self.joy.get_axis(1) * -1
+        ax2 = self.joy.get_axis(2) * -1
 
-        brake    = max(0.0, (l2 + 1.0) / 2.0)
-        throttle = max(0.0, (r2 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
+        brake    = max(0.0, (ax2 + 1.0) / 2.0)
+        throttle = max(0.0, (ax1 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
+
+        brake    = 0 if brake < 0.01 else brake # Always minimal input prevents driving -> if too small input ignore
+        throttle = 0 if throttle < 0.01 else throttle 
 
         speed_kmh = 0.0
         try:
@@ -1356,12 +1392,14 @@ class WheelControl(object):
         self._control.throttle = float(max(0.0, min(1.0, throttle)))
         self._control.brake    = float(max(0.0, min(1.0, brake)))
 
+
+
         btn_cross  = self.joy.get_button(0)     # X
-        btn_circle = self.joy.get_button(1)     # O
-        btn_square = self.joy.get_button(2)     # []
+        btn_circle = self.joy.get_button(2)     # O
+        btn_square = self.joy.get_button(1)     # []
         btn_triangle = self.joy.get_button(3)   # /\
-        btn_L1 = self.joy.get_button(9)         # L1
-        btn_R1 = self.joy.get_button(10)        # R1
+        btn_L1 = self.joy.get_button(5)         # L1
+        btn_R1 = self.joy.get_button(4)        # R1
         # 7+8 => Left/Right stick (L3/R3)
         self._control.hand_brake = bool(btn_cross)
         #print('0:',self.shifter.get_button(1))
