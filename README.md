@@ -77,3 +77,15 @@ System:
 - **L3 button** – Export performance metrics / turn HUD on/off (press left stick)
 - **R3 button** – Respawn vehicle (press right stick)
 - **Option button** – Quit
+
+## Paths
+
+Wherever possible relative paths are used - for example to access the files of the ./audio/ folder.
+
+Some situations to use absolute paths since they differ from installation to installation.
+
+In the following those scripts are listed. In case they are executed make sure that the specified paths match your CARLA installation!
+
+### Scripts Containing Absolute Paths
+
+- generate_car.py
