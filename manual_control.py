@@ -494,6 +494,35 @@ def _apply_control_vehicle_lights(current_lights, control):
 
     return current_lights
 
+
+def _get_spawn_point_for_town(map_obj):
+    """Return a town-specific spawn transform, with a safe fallback."""
+    map_name = getattr(map_obj, 'name', '') or ''
+    town_match = re.search(r'Town(?:0*(\d+))', map_name, re.IGNORECASE)
+    town_name = ''
+    if town_match:
+        town_name = 'Town%02d' % int(town_match.group(1))
+
+    town_spawn_points = {
+        'Town01': carla.Transform(
+            carla.Location(x=158.080, y=27.180, z=0.30),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+        ),
+        'Town02': carla.Transform(
+            carla.Location(x=59.600, y=306.420, z=0.50),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+        ),
+    }
+
+    if town_name in town_spawn_points:
+        return town_spawn_points[town_name]
+
+    spawn_points = map_obj.get_spawn_points()
+    if spawn_points:
+        return spawn_points[0]
+
+    return carla.Transform()
+
 # ==============================================================================
 # -- World ---------------------------------------------------------------------
 # ==============================================================================
@@ -599,19 +628,10 @@ class World(object):
                 print('There are no spawn points available in your map/town.')
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
-            spawn_points = self.map.get_spawn_points()
-            #spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
-
-            # STARTING POINT                                => coordinates from UE must be divided by 100
-            spawn_point = carla.Transform(
-                #carla.Location(x=59.6000293, y=306.420, z=0.50),       # Town2
-                carla.Location(x=247.02201, y=195.26917, z=0.30),       # Town1
-                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
-            )
+            spawn_point = _get_spawn_point_for_town(self.map)
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
             self.modify_vehicle_physics(self.player)
-
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
