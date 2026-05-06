@@ -215,6 +215,7 @@ PROFILE_CONFIG = {
             'res': '3840x1080',
             'sp': 1.0,
             'input': 'wheel',
+            'rolename': 'hero',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
@@ -228,9 +229,10 @@ PROFILE_CONFIG = {
     },
     'supervisor': {                     # second manual car
         'cli_defaults': {
-            'res': '3840x1080',
-            'sp': 1.0,
+            'res': '960x540',
+            'sp': 0.8,
             #'input': 'gamepad',
+            'rolename': 'supervisor',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
@@ -247,6 +249,7 @@ PROFILE_CONFIG = {
             'res': '960x540',
             'sp': 0.8,
             #'input': 'gamepad',
+            'rolename': 'extra',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': False,
@@ -272,6 +275,8 @@ def _apply_profile(profile, args, argv):
         args.sp = cli_defaults['sp']
     if '--input' not in argv and 'input' in cli_defaults:
         args.input = cli_defaults['input']
+    if '--rolename' not in argv and 'rolename' in cli_defaults:
+        args.rolename = cli_defaults['rolename']
 
     code_overrides = config.get('code_overrides', {})
     if code_overrides:
@@ -1214,7 +1219,7 @@ class GamepadControl(object):
             world.camera_manager.toggle_camera()
         self._prev_triangle = btn_triangle
         self._prev_touch = btn_touch
-        
+
         if btn_circle and not getattr(self, "_prev_circle", False):
             self._reverse_toggle_state = not self._reverse_toggle_state
         self._prev_circle = btn_circle
