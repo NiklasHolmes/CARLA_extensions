@@ -200,12 +200,14 @@ ENABLE_HUD = True
 WINDOW_START_LEFT = True
 WINDOW_BORDERLESS = True
 # Dashboard config (code-only, no terminal input required) => Modes: 'none', 'inside', 'basic', 'second_screen', 'overlapping'
-DASHBOARD_MODE = 'basic'
+DASHBOARD_MODE = 'none'
 # Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
 DASHBOARD_SIZE = (960, 540)
 # Monitor index used by second_screen mode (0-based)
 DB_SCREEN_INDEX = 2
 
+CHOSEN_VEHICLE = 'vehicle.lincoln.mkz_2020'
+# https://carla.readthedocs.io/en/latest/catalogue_vehicles/
 
 PROFILE_CONFIG = {
     'simulator': {
@@ -221,21 +223,39 @@ PROFILE_CONFIG = {
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
+            'chosen_vehicle': 'vehicle.lincoln.mkz_2020',
         },
     },
     'supervisor': {                     # second manual car
         'cli_defaults': {
-            'res': '1920x1080',
-            'sp': 0.6,
-            'input': 'gamepad',
+            'res': '3840x1080',
+            'sp': 1.0,
+            #'input': 'gamepad',
+        },
+        'code_overrides': {
+            'USE_SCENE_FINAL': True,
+            'DASHBOARD_MODE': 'inside',
+            'ENABLE_AUDIO': False,
+            'ENABLE_HUD': False,
+            'WINDOW_START_LEFT': True,
+            'WINDOW_BORDERLESS': True,
+            'chosen_vehicle': 'vehicle.lincoln.mkz_2020',
+        },
+    },
+    'extra': {                          # third manual car
+        'cli_defaults': {
+            'res': '960x540',
+            'sp': 0.8,
+            #'input': 'gamepad',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': False,
-            'DASHBOARD_MODE': 'basic',
+            'DASHBOARD_MODE': 'none',
             'ENABLE_AUDIO': False,
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
+            'chosen_vehicle': 'vehicle.dodge.charger_2020',
         },
     },
 }
@@ -256,7 +276,7 @@ def _apply_profile(profile, args, argv):
     code_overrides = config.get('code_overrides', {})
     if code_overrides:
         global USE_SCENE_FINAL, DASHBOARD_MODE, ENABLE_AUDIO, ENABLE_HUD
-        global WINDOW_START_LEFT, WINDOW_BORDERLESS
+        global WINDOW_START_LEFT, WINDOW_BORDERLESS, CHOSEN_VEHICLE
         if 'USE_SCENE_FINAL' in code_overrides:
             USE_SCENE_FINAL = code_overrides['USE_SCENE_FINAL']
         if 'DASHBOARD_MODE' in code_overrides:
@@ -269,6 +289,8 @@ def _apply_profile(profile, args, argv):
             WINDOW_START_LEFT = code_overrides['WINDOW_START_LEFT']
         if 'WINDOW_BORDERLESS' in code_overrides:
             WINDOW_BORDERLESS = code_overrides['WINDOW_BORDERLESS']
+        if 'chosen_vehicle' in code_overrides:
+            CHOSEN_VEHICLE = code_overrides['chosen_vehicle']
 
 def _audio_init():
     """Initialize audio generator."""
@@ -510,6 +532,7 @@ class World(object):
         self.show_vehicle_telemetry = False
         self.doors_are_open = False
         self.current_map_layer = 0
+        self.capture_full_frame_once = False
         self.map_layer_names = [
             carla.MapLayer.NONE,
             carla.MapLayer.Buildings,
@@ -539,7 +562,7 @@ class World(object):
             raise ValueError("Couldn't find any blueprints with the specified filters")
         # blueprint = random.choice(blueprint_list)
         # SET CAR TYPE
-        blueprint = self.world.get_blueprint_library().find('vehicle.lincoln.mkz_2020')
+        blueprint = self.world.get_blueprint_library().find(CHOSEN_VEHICLE)
         
         blueprint.set_attribute('role_name', self.actor_role_name)
         if blueprint.has_attribute('terramechanics'):
@@ -577,7 +600,8 @@ class World(object):
 
             # STARTING POINT                                => coordinates from UE must be divided by 100
             spawn_point = carla.Transform(
-                carla.Location(x=59.6000293, y=306.420, z=0.50),
+                #carla.Location(x=59.6000293, y=306.420, z=0.50),       # Town2
+                carla.Location(x=247.02201, y=195.26917, z=0.30),       # Town1
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
             )
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
@@ -587,7 +611,8 @@ class World(object):
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
-        self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon
+        #self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
+        self.world.set_weather(carla.WeatherParameters.ClearNoon)        #ClearNoon
 
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player, self.hud)
@@ -827,6 +852,8 @@ class KeyboardControl(object):
                     world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
                 elif event.key == K_r and not (pygame.key.get_mods() & KMOD_CTRL):
                     world.camera_manager.toggle_recording()
+                    if world.camera_manager.recording:
+                        world.capture_full_frame_once = True
                 elif event.key == K_r and (pygame.key.get_mods() & KMOD_CTRL):
                     if (world.recording_enabled):
                         client.stop_recorder()
@@ -2385,6 +2412,15 @@ def game_loop(args):
                 event_sync.update()
             world.tick(clock)
             world.render(display)
+
+            if world.capture_full_frame_once:
+                screenshot_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    '_out',
+                    f'full_frame_{world.hud.frame:08d}.png'
+                )
+                pygame.image.save(display, screenshot_path)
+                world.capture_full_frame_once = False
             
             # # Update proximity alert audio (throttled internally to 0.5s)
             # if audio_manager is not None and world.obstacle_sensor is not None:
@@ -2433,7 +2469,7 @@ def main():
         help='print debug information')
     argparser.add_argument(
         '--profile',
-        choices=['simulator', 'supervisor'],
+        choices=['simulator', 'supervisor', 'extra'],
         help='apply preset settings (CLI flags override)')
     argparser.add_argument(
         '--host',
