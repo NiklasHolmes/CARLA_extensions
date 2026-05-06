@@ -1209,12 +1209,12 @@ class GamepadControl(object):
             return True
 
         prev_triangle = getattr(self, "_prev_triangle", False)
-        if btn_triangle and not prev_triangle:
-            self._prev_triangle = btn_triangle
-
-        if btn_touch or btn_L3:
+        prev_touch = getattr(self, "_prev_touch", False)
+        if (btn_triangle and not prev_triangle) or (btn_touch and not prev_touch):
             world.camera_manager.toggle_camera()
-
+        self._prev_triangle = btn_triangle
+        self._prev_touch = btn_touch
+        
         if btn_circle and not getattr(self, "_prev_circle", False):
             self._reverse_toggle_state = not self._reverse_toggle_state
         self._prev_circle = btn_circle
@@ -1370,8 +1370,6 @@ class WheelControl(object):
         if self.shifter == None or self.joy == None:
             raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
 
-
-
         world.player.set_autopilot(self._autopilot_enabled)
         world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
 
@@ -1418,8 +1416,6 @@ class WheelControl(object):
         self._control.steer    = float(max(-1.0, min(1.0, steer_axis * self._steer_gain)))
         self._control.throttle = float(max(0.0, min(1.0, throttle)))
         self._control.brake    = float(max(0.0, min(1.0, brake)))
-
-
 
         btn_cross  = self.joy.get_button(0)     # X
         btn_circle = self.joy.get_button(2)     # O
