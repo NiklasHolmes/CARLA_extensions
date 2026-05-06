@@ -521,7 +521,6 @@ class World(object):
         self.imu_sensor = None
         self.radar_sensor = None
         self.camera_manager = None
-        self.rear_camera = None                     # rear camera for rear_view.py
         self.obstacle_sensor = None                 # Proximity alert sensor
         self.dashboard_renderer = None              # Dashboard renderer (optional)
         self._weather_presets = find_weather_presets()
@@ -636,10 +635,6 @@ class World(object):
         self.camera_manager.set_sensor(cam_index, notify=False)
         actor_type = get_actor_display_name(self.player)
         self.hud.notification(actor_type)
-
-        # --- Spawn rear camera for rear_view.py ---
-        self.rear_camera = RearCamera(self.player)
-        #print("Rear Camera spawned with ID:", self.rear_camera.sensor.id)
         
         # --- Spawn obstacle detection sensor for proximity alerts ---
         if isinstance(self.player, carla.Vehicle):
@@ -2081,47 +2076,9 @@ class RadarSensor(object):
                 persistent_lines=False,
                 color=carla.Color(r, g, b))
 
-class RearCamera(object):
-    def __init__(self, parent_actor, width=1920, height=1080, fps=10):
-        self.sensor = None
-        self._parent = parent_actor
-
-        world = parent_actor.get_world()
-        bp = world.get_blueprint_library().find('sensor.camera.rgb')
-
-        bp.set_attribute('image_size_x', str(width))
-        bp.set_attribute('image_size_y', str(height))
-        bp.set_attribute('sensor_tick', str(1.0 / fps))
-        bp.set_attribute('gamma', '2.2')
-
-        bound_x = 0.5 + parent_actor.bounding_box.extent.x
-        bound_z = 0.5 + parent_actor.bounding_box.extent.z
-
-        transform = carla.Transform(
-            carla.Location(x=-1.5 * bound_x, z=1.2 * bound_z),
-            carla.Rotation(yaw=180)
-        )
-
-        self.sensor = world.spawn_actor(
-            bp, transform,
-            attach_to=parent_actor,
-            attachment_type=carla.AttachmentType.Rigid
-        )
-
-        # VERY IMPORTANT:
-        # Kamera NICHT starten → rear_view.py übernimmt die Frames!
-        self.sensor.stop()
-
-    def destroy(self):
-        if self.sensor:
-            self.sensor.stop()
-            self.sensor.destroy()
-
-
 # ==============================================================================
 # -- CameraManager -------------------------------------------------------------
 # ==============================================================================
-
 
 class CameraManager(object):
     def __init__(self, parent_actor, hud, gamma_correction, screen_percentage=1.0, upscale_filter='fast', use_scene_final=False):
