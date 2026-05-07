@@ -567,6 +567,7 @@ def _get_spawn_point_for_town(map_obj, profile='simulator'):
 class World(object):
     def __init__(self, carla_world, hud, args):
         self.world = carla_world
+        self.args = args
         self.sync = args.sync
         self.actor_role_name = args.rolename
         self._screen_percentage = args.sp
@@ -665,7 +666,7 @@ class World(object):
                 print('There are no spawn points available in your map/town.')
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
-            spawn_point = _get_spawn_point_for_town(self.map, profile=args.profile)
+            spawn_point = _get_spawn_point_for_town(self.map, profile=self.args.profile)
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
             self.modify_vehicle_physics(self.player)
