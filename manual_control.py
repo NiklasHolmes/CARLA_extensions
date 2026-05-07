@@ -231,7 +231,7 @@ PROFILE_CONFIG = {
         'cli_defaults': {
             'res': '960x540',
             'sp': 0.8,
-            #'input': 'gamepad',
+            'input': 'gamepad',
             'rolename': 'supervisor',
         },
         'code_overrides': {
@@ -239,8 +239,8 @@ PROFILE_CONFIG = {
             'DASHBOARD_MODE': 'inside',
             'ENABLE_AUDIO': False,
             'ENABLE_HUD': False,
-            'WINDOW_START_LEFT': True,
-            'WINDOW_BORDERLESS': True,
+            'WINDOW_START_LEFT': False,
+            'WINDOW_BORDERLESS': False,
             'chosen_vehicle': 'vehicle.lincoln.mkz_2020',
         },
     },
@@ -2124,7 +2124,7 @@ class CameraManager(object):
         if self.use_scene_final:
             self._camera_transforms = [
                 (carla.Transform(
-                    carla.Location(x=0.80, y=0.0, z=1.30),              # CHANGE camera position here (if USE_SCENE_FINAL=True)
+                    carla.Location(x=0.6, y=-0.5, z=1.30),              # CHANGE camera position here (if USE_SCENE_FINAL=True)
                     carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
                 ), Attachment.Rigid)
             ]
