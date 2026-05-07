@@ -231,7 +231,7 @@ PROFILE_CONFIG = {
         'cli_defaults': {
             'res': '960x540',
             'sp': 0.8,
-            #'input': 'gamepad',
+            'input': 'gamepad',
             'rolename': 'supervisor',
         },
         'code_overrides': {
@@ -239,8 +239,8 @@ PROFILE_CONFIG = {
             'DASHBOARD_MODE': 'inside',
             'ENABLE_AUDIO': False,
             'ENABLE_HUD': False,
-            'WINDOW_START_LEFT': True,
-            'WINDOW_BORDERLESS': True,
+            'WINDOW_START_LEFT': False,
+            'WINDOW_BORDERLESS': False,
             'chosen_vehicle': 'vehicle.lincoln.mkz_2020',
         },
     },
@@ -1123,6 +1123,7 @@ class GamepadControl(object):
     # - L3            :   export performance data + toggle HUD
     # - R3            :   respawn vehicle
     # - Option        :   quit
+    # - Touchpad      :   toggle camera
 
 
     def __init__(self, world, start_in_autopilot, deadzone=0.08, steer_sensitivity=1.0):
@@ -1221,6 +1222,8 @@ class GamepadControl(object):
         # 4 -> Share
         # 5 -> Playstation
         # 6 -> Options
+        # 7 -> L3
+        # 8 -> R3
         # 9 -> L1
         # 10 -> R1
         # 15 -> Touchpad
