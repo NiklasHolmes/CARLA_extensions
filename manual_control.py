@@ -213,7 +213,7 @@ PROFILE_CONFIG = {
     'simulator': {
         'cli_defaults': {
             'res': '3840x1080',
-            'sp': 1.0,
+            'sp': 0.8,
             'input': 'wheel',
             'rolename': 'hero',
         },
@@ -230,7 +230,7 @@ PROFILE_CONFIG = {
     'supervisor': {                     # second manual car
         'cli_defaults': {
             'res': '960x540',
-            'sp': 0.8,
+            'sp': 0.6,
             #'input': 'gamepad',
             'rolename': 'supervisor',
         },
@@ -241,7 +241,7 @@ PROFILE_CONFIG = {
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': True,
             'WINDOW_BORDERLESS': True,
-            'chosen_vehicle': 'vehicle.lincoln.mkz_2020',
+            'chosen_vehicle': 'vehicle.dodge.charger_2020',
         },
     },
     'extra': {                          # third manual car
@@ -495,33 +495,70 @@ def _apply_control_vehicle_lights(current_lights, control):
     return current_lights
 
 
-def _get_spawn_point_for_town(map_obj):
-    """Return a town-specific spawn transform, with a safe fallback."""
+def _get_spawn_point_for_town(map_obj, profile='simulator'):
+    """Return a town-specific spawn transform for the given profile"""
     map_name = getattr(map_obj, 'name', '') or ''
     town_match = re.search(r'Town(?:0*(\d+))', map_name, re.IGNORECASE)
     town_name = ''
     if town_match:
         town_name = 'Town%02d' % int(town_match.group(1))
 
+    # profile-aware spawn points: each town provides coordinates per profile
     town_spawn_points = {
-        'Town01': carla.Transform(
-            carla.Location(x=158.080, y=27.180, z=0.30),
-            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
-        ),
-        'Town02': carla.Transform(
-            carla.Location(x=59.600, y=306.420, z=0.50),
-            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
-        ),
+        'Town01': {
+            'simulator': carla.Transform(
+                carla.Location(x=158.080, y=27.180, z=0.30),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+            'supervisor': carla.Transform(
+                carla.Location(x=158.110, y=45.070, z=0.30),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+        },
+        'Town02': {
+            'simulator': carla.Transform(
+                carla.Location(x=59.600, y=306.420, z=0.50),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+            'supervisor': carla.Transform(
+                carla.Location(x=14.010, y=306.420, z=0.50),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+        },
+        'Town03': {
+            'simulator': carla.Transform(
+                carla.Location(x=-118.079287, y=0.275539, z=0.27530716),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+            'supervisor': carla.Transform(
+                carla.Location(x=-136.979023, y=0.178358, z=0.27530716),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+        },
+        'Town10': {
+            'simulator': carla.Transform(
+                carla.Location(x=-28.58173096, y=140.53555, z=0.60),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+            'supervisor': carla.Transform(
+                carla.Location(x=-56.86616211, y=140.53555, z=0.60),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+        },
     }
 
     if town_name in town_spawn_points:
-        return town_spawn_points[town_name]
-
-    spawn_points = map_obj.get_spawn_points()
-    if spawn_points:
-        return spawn_points[0]
-
-    return carla.Transform()
+        town_profiles = town_spawn_points[town_name]
+        if profile in town_profiles:
+            return town_profiles[profile]
+        if 'simulator' in town_profiles:
+            return town_profiles['simulator']
+        return list(town_profiles.values())[0]
+    else:
+        spawn_points = map_obj.get_spawn_points()
+        if spawn_points:
+            return spawn_points[0]
+        return carla.Transform()
 
 # ==============================================================================
 # -- World ---------------------------------------------------------------------
@@ -530,6 +567,7 @@ def _get_spawn_point_for_town(map_obj):
 class World(object):
     def __init__(self, carla_world, hud, args):
         self.world = carla_world
+        self.args = args
         self.sync = args.sync
         self.actor_role_name = args.rolename
         self._screen_percentage = args.sp
@@ -628,7 +666,7 @@ class World(object):
                 print('There are no spawn points available in your map/town.')
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
-            spawn_point = _get_spawn_point_for_town(self.map)
+            spawn_point = _get_spawn_point_for_town(self.map, profile=self.args.profile)
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
             self.modify_vehicle_physics(self.player)
