@@ -56,6 +56,11 @@ To enable audio (engine, horn, blinker, brake, proximity alerts), set `ENABLE_AU
 Default: `ENABLE_AUDIO = False` (uses DummyAudioGenerator for performance)
 
 
+## Keyboard Controls
+
+- **F** – Throw a cola can from the right window
+
+
 ## Gamepad Controls (PS4/DualShock)
 
 Driving:

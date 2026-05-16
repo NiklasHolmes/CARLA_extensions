@@ -33,6 +33,7 @@ Use ARROWS or WASD keys for control.
     ` or N       : next sensor
     [1-9]        : change to sensor [1-9]
     G            : toggle radar visualization
+    F            : throw a cola can from the right window
     C            : change weather (Shift+C reverse)
     Backspace    : change vehicle
 
@@ -587,6 +588,7 @@ class World(object):
         self.gnss_sensor = None
         self.imu_sensor = None
         self.radar_sensor = None
+        self.thrown_prop = None
         self.camera_manager = None
         self.obstacle_sensor = None                 # Proximity alert sensor
         self.dashboard_renderer = None              # Dashboard renderer (optional)
@@ -732,6 +734,63 @@ class World(object):
             self.radar_sensor.sensor.destroy()
             self.radar_sensor = None
 
+    def throw_prop_from_right_window(self):
+        if not isinstance(self.player, carla.Vehicle):
+            return
+
+        blueprint_library = self.world.get_blueprint_library()
+        try:
+            blueprint = blueprint_library.find('static.prop.colacan')
+        except KeyError:
+            self.hud.notification('Cola can blueprint not found')
+            return
+
+        if self.thrown_prop is not None:
+            try:
+                self.thrown_prop.destroy()
+            except Exception:
+                pass
+            self.thrown_prop = None
+
+        vehicle_transform = self.player.get_transform()
+        forward_vector = vehicle_transform.get_forward_vector()
+        right_vector = vehicle_transform.get_right_vector()
+        up_vector = vehicle_transform.get_up_vector()
+
+        spawn_location = vehicle_transform.location + carla.Location(
+            x=forward_vector.x * 0.9 + right_vector.x * 1.15 + up_vector.x * 1.0,
+            y=forward_vector.y * 0.9 + right_vector.y * 1.15 + up_vector.y * 1.0,
+            z=forward_vector.z * 0.9 + right_vector.z * 1.15 + up_vector.z * 1.0,
+        )
+        spawn_transform = carla.Transform(
+            spawn_location,
+            carla.Rotation(
+                pitch=vehicle_transform.rotation.pitch,
+                yaw=vehicle_transform.rotation.yaw,
+                roll=vehicle_transform.rotation.roll,
+            ),
+        )
+
+        prop = self.world.try_spawn_actor(blueprint, spawn_transform)
+        if prop is None:
+            self.hud.notification('Could not spawn cola can')
+            return
+
+        try:
+            prop.set_simulate_physics(True)
+            prop.set_enable_gravity(True)
+            impulse = carla.Vector3D(
+                x=forward_vector.x * 2.0 + right_vector.x * 11.0 + up_vector.x * 2.5,
+                y=forward_vector.y * 2.0 + right_vector.y * 11.0 + up_vector.y * 2.5,
+                z=forward_vector.z * 2.0 + right_vector.z * 11.0 + up_vector.z * 2.5,
+            )
+            prop.apply_impulse(impulse)
+        except Exception:
+            pass
+
+        self.thrown_prop = prop
+        self.hud.notification('Thrown cola can')
+
     def modify_vehicle_physics(self, actor):
         #If actor is not a vehicle, we cannot use the physics control
         try:
@@ -777,6 +836,13 @@ class World(object):
                 sensors.append(self.obstacle_sensor.sensor_front)
             if self.obstacle_sensor.sensor_rear is not None:
                 sensors.append(self.obstacle_sensor.sensor_rear)
+
+        if self.thrown_prop is not None:
+            try:
+                self.thrown_prop.destroy()
+            except Exception:
+                pass
+            self.thrown_prop = None
         
         for sensor in sensors:
             if sensor is not None:
@@ -864,6 +930,14 @@ class KeyboardControl(object):
                     world.next_weather()
                 elif event.key == K_g:
                     world.toggle_radar()
+                # Ackermann controller toggle kept here only as a commented reference.
+                # elif event.key == K_f and pygame.key.get_mods() & KMOD_SHIFT:
+                #     self._ackermann_enabled = not self._ackermann_enabled
+                #     world.hud.show_ackermann_info(self._ackermann_enabled)
+                #     world.hud.notification("Ackermann Controller %s" %
+                #                            ("Enabled" if self._ackermann_enabled else "Disabled"))
+                elif event.key == K_f:
+                    world.throw_prop_from_right_window()
                 elif event.key == K_BACKQUOTE:
                     world.camera_manager.next_sensor()
                 elif event.key == K_n:
@@ -954,12 +1028,12 @@ class KeyboardControl(object):
                         audio_manager.stop_horn(fadeout_ms=120)
 
                 if isinstance(self._control, carla.VehicleControl):
-                    if event.key == K_f:
-                        # Toggle ackermann controller
-                        self._ackermann_enabled = not self._ackermann_enabled
-                        world.hud.show_ackermann_info(self._ackermann_enabled)
-                        world.hud.notification("Ackermann Controller %s" %
-                                               ("Enabled" if self._ackermann_enabled else "Disabled"))
+                    # if event.key == K_f:
+                    #    # Toggle ackermann controller
+                    #    self._ackermann_enabled = not self._ackermann_enabled
+                    #    world.hud.show_ackermann_info(self._ackermann_enabled)
+                    #    world.hud.notification("Ackermann Controller %s" %
+                    #                           ("Enabled" if self._ackermann_enabled else "Disabled"))
                     if event.key == K_q:
                         if not self._ackermann_enabled:
                             self._control.gear = 1 if self._control.reverse else -1
