@@ -248,8 +248,8 @@ PROFILE_CONFIG = {
         'cli_defaults': {
             'res': '960x540',
             'sp': 0.8,
-            #'input': 'gamepad',
-            'rolename': 'extra',
+            'input': 'keyboard',
+            'rolename': 'hero',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': False,
