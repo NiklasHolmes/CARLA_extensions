@@ -254,7 +254,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': False,
             'DASHBOARD_MODE': 'none',
-            'ENABLE_AUDIO': False,
+            'ENABLE_AUDIO': True,
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
@@ -673,8 +673,8 @@ class World(object):
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
-        #self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
-        self.world.set_weather(carla.WeatherParameters.ClearNoon)        #ClearNoon
+        self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
+        #self.world.set_weather(carla.WeatherParameters.ClearNoon)        #ClearNoon
 
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player, self.hud)
@@ -1186,7 +1186,7 @@ class GamepadControl(object):
             raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
 
         self.joy = None
-        if pygame.joystick.get_count() > 1:
+        if pygame.joystick.get_count() > 1:                     # change on Laptop to 0
             for i in range(count):
                 dev = pygame.joystick.Joystick(i)
                 print(dev.get_name())
@@ -1427,7 +1427,6 @@ class WheelControl(object):
                 if dev.get_name() == "T500 RS Gear Shift":
                     self.shifter = dev
                     self.shifter.init()
-                    break
         if self.shifter == None or self.joy == None:
             raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
 
