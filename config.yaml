@@ -1,0 +1,9 @@
+monitor:
+  simulator: "C49HG9x"
+  rear: "SAMSUNG"
+  supervisor: "LEN T24d-10"
+
+input: 
+  wheel: "Logitech G HUB G29 Driving Force Racing Wheel USB"
+  shifter: "T500 RS Gear Shift"
+  controller: "PS4 Controller"
