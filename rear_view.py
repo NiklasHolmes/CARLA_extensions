@@ -5,6 +5,9 @@ import pygame
 from pygame.locals import K_ESCAPE
 import numpy as np
 import time
+import yaml
+from screeninfo import get_monitors
+import os
 
 # ==============================================================================
 # -- Rear View Configuration (defined ONCE, used everywhere) ------------------
@@ -14,6 +17,33 @@ REAR_VIEW_HEIGHT = 1080
 REAR_VIEW_SCREEN_PERCENTAGE = 0.3
 REAR_VIEW_FPS = 10
 REAR_VIEW_ROLE_NAME = "hero"
+
+# ==============================================================================
+# -- Hardware Config  ----------------------------------------------------------
+# ==============================================================================
+
+with open("config.yaml") as f:
+    cfg = yaml.load(f,Loader=yaml.FullLoader)
+
+monitors = cfg["monitor"]
+
+target_x, target_y = 0, 0
+target_width, target_height = 0, 0
+monitor_index = 0
+found = False
+
+for i, monitor in enumerate(get_monitors()):
+    if monitor.name == monitors["rear"]:
+        target_x = monitor.x
+        target_y = monitor.y
+        target_width = monitor.width
+        target_height = monitor.height
+        monitor_index = i
+        found = True
+        break
+
+if not found:
+    print("Monitor not found!")
 
 
 def parse_args():
@@ -95,7 +125,12 @@ def main():
     pygame.init()
     pygame.display.set_caption("Rear View Camera")
 
-    window = pygame.display.set_mode((REAR_VIEW_WIDTH, REAR_VIEW_HEIGHT))
+    if found:
+        os.environ['SDL_VIDEO_WINDOW_POS'] = f"{target_x},{target_y}"
+        window = pygame.display.set_mode((target_width, target_height), display=monitor_index)
+    else:
+        window = pygame.display.set_mode((REAR_VIEW_WIDTH, REAR_VIEW_HEIGHT))
+
     clock = pygame.time.Clock()
 
     surface = None

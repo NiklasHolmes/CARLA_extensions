@@ -99,6 +99,7 @@ import subprocess
 import time
 import weakref
 import yaml
+from screeninfo import get_monitors
 
 os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
 os.environ["SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS"] = "1"
@@ -395,6 +396,10 @@ with open("config.yaml") as f:
 monitors = cfg["monitor"]
 input_devices = cfg["input"]
 
+target_x, target_y = 0, 0
+target_width, target_height = 0, 0
+monitor_index = 0
+found = False
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
@@ -2494,7 +2499,14 @@ def game_loop(args):
         window_flags = pygame.HWSURFACE | pygame.DOUBLEBUF
         if WINDOW_BORDERLESS:
             window_flags |= pygame.NOFRAME
-        display = pygame.display.set_mode((args.width, args.height), window_flags)
+
+        print("configure monitor")
+        if found:
+            os.environ['SDL_VIDEO_WINDOW_POS'] = f"{target_x},{target_y}"
+            display = pygame.display.set_mode((target_width, target_height), display=monitor_index)
+        else:
+            display = pygame.display.set_mode((args.width, args.height), window_flags)
+
         display.fill((0,0,0))
         pygame.display.flip()
         if WINDOW_BORDERLESS and WINDOW_START_LEFT:
@@ -2674,6 +2686,22 @@ def main():
     )
     args = argparser.parse_args()
     _apply_profile(args.profile, args, sys.argv[1:])
+
+    print("Load Monitor:", args.profile)
+
+    global target_x, target_y, target_width, target_height, monitor_index, found
+
+    for i, monitor in enumerate(get_monitors()):
+        if monitor.name == monitors[args.profile]: # Warning "extra" not set default value used
+            target_x = monitor.x
+            target_y = monitor.y
+            target_width = monitor.width
+            target_height = monitor.height
+            monitor_index = i
+            found = True
+            break
+    if not found:
+        print("Monitor not found!")
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
     if not (0.0 < args.sp <= 1.0):

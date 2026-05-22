@@ -1,7 +1,7 @@
 monitor:
-  simulator: "C49HG9x"
-  rear: "SAMSUNG"
-  supervisor: "LEN T24d-10"
+  simulator: "\\\\.\\DISPLAY1"
+  rear: "\\\\.\\DISPLAY3"
+  supervisor: "\\\\.\\DISPLAY2"
 
 input: 
   wheel: "Logitech G HUB G29 Driving Force Racing Wheel USB"
