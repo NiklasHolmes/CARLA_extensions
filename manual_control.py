@@ -690,7 +690,7 @@ class World(object):
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
-        self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
+        #self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
         #self.world.set_weather(carla.WeatherParameters.ClearNoon)        #ClearNoon
 
         # Set up the sensors.
@@ -2500,7 +2500,6 @@ def game_loop(args):
         if WINDOW_BORDERLESS:
             window_flags |= pygame.NOFRAME
 
-        print("configure monitor")
         if found:
             os.environ['SDL_VIDEO_WINDOW_POS'] = f"{target_x},{target_y}"
             display = pygame.display.set_mode((target_width, target_height), display=monitor_index)
@@ -2686,8 +2685,6 @@ def main():
     )
     args = argparser.parse_args()
     _apply_profile(args.profile, args, sys.argv[1:])
-
-    print("Load Monitor:", args.profile)
 
     global target_x, target_y, target_width, target_height, monitor_index, found
 
