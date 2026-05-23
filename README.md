@@ -2,6 +2,13 @@
 
 Current focus on manual control and dashboard for CARLA simulator.
 
+## Installation
+
+- Shared packages: `pip install -r requirements.txt`
+- Main computer (simulator FHTW): `pip install -r requirements.main.txt`
+- Local machine: `pip install -r requirements.local.txt`
+
+
 ## Command Line Parameters
 
 - **`--res WIDTHxHEIGHT`**              – Display resolution (default: 1280x720)
