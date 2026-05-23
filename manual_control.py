@@ -2778,17 +2778,21 @@ def main():
 
     global target_x, target_y, target_width, target_height, monitor_index, found
 
-    for i, monitor in enumerate(get_monitors()):
-        if monitor.name == monitors[args.profile]: # Warning "extra" not set default value used
-            target_x = monitor.x
-            target_y = monitor.y
-            target_width = monitor.width
-            target_height = monitor.height
-            monitor_index = i
-            found = True
-            break
-    if not found:
-        print("Monitor not found!")
+    found = False
+    if args.profile != 'simulator4home':
+        for i, monitor in enumerate(get_monitors()):
+            if monitor.name == monitors[args.profile]: # Warning "extra" not set default value used
+                target_x = monitor.x
+                target_y = monitor.y
+                target_width = monitor.width
+                target_height = monitor.height
+                monitor_index = i
+                found = True
+                break
+        if not found:
+            print("Monitor not found!")
+    else:
+        print("simulator4home: skipping monitor lookup + using the configured (e.g. 3840x1080) window size")
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
     if not (0.0 < args.sp <= 1.0):

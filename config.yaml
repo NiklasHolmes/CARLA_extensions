@@ -1,7 +1,9 @@
 monitor:
   simulator: "\\\\.\\DISPLAY1"
+  simulator4home: "\\\\.\\DISPLAY1"
   rear: "\\\\.\\DISPLAY3"
   supervisor: "\\\\.\\DISPLAY2"
+  supervisor4home: "\\\\.\\DISPLAY2"
 
 input: 
   wheel: "Logitech G HUB G29 Driving Force Racing Wheel USB"
