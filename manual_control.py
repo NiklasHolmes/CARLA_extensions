@@ -196,6 +196,14 @@ PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 # Audio enable/disable flag
 ENABLE_AUDIO = False
 
+# Optional obstacle sensors can be disabled to avoid startup crashes on some
+# simulator/API combinations.
+ENABLE_OBSTACLE_SENSOR = False
+
+# Hero marker refresh interval in seconds. Set to 0 to draw every frame.
+# Default 2.0s per your request (low-frequency overview).
+HERO_MARKER_INTERVAL = 2.0
+
 # HUD config
 ENABLE_HUD = True
 
@@ -247,10 +255,27 @@ PROFILE_CONFIG = {
             'chosen_vehicle': 'vehicle.dodge.charger_2020',
         },
     },
-    'extra': {                          # third manual car
+    'simulator4home': {
+        'cli_defaults': {
+            'res': '3840x1080',
+            'sp': 0.8,
+            'input': 'keyboard',
+            'rolename': 'hero',
+        },
+        'code_overrides': {
+            'USE_SCENE_FINAL': True,
+            'DASHBOARD_MODE': 'none',
+            'ENABLE_AUDIO': False,
+            'ENABLE_HUD': True,
+            'WINDOW_START_LEFT': True,
+            'WINDOW_BORDERLESS': True,
+            'chosen_vehicle': 'vehicle.lincoln.mkz_2020',
+        },
+    },
+    'supervisor4home': {
         'cli_defaults': {
             'res': '960x540',
-            'sp': 0.8,
+            'sp': 0.7,
             'input': 'keyboard',
             'rolename': 'hero',
         },
@@ -511,18 +536,22 @@ def _apply_control_vehicle_lights(current_lights, control):
     return current_lights
 
 
-def _get_spawn_point_for_town(map_obj, profile='simulator'):
-    """Return a town-specific spawn transform for the given profile"""
+def _get_spawn_point_for_town(map_obj, rolename='hero'):
+    """Return a town-specific spawn transform for the given role name."""
     map_name = getattr(map_obj, 'name', '') or ''
     town_match = re.search(r'Town(?:0*(\d+))', map_name, re.IGNORECASE)
     town_name = ''
     if town_match:
         town_name = 'Town%02d' % int(town_match.group(1))
 
-    # profile-aware spawn points: each town provides coordinates per profile
+    role_key = str(rolename).strip().lower() or 'hero'
+    if role_key not in ('hero', 'supervisor'):
+        role_key = 'hero'
+
+    # role-aware spawn points: each town provides coordinates per rolename
     town_spawn_points = {
         'Town01': {
-            'simulator': carla.Transform(
+            'hero': carla.Transform(
                 carla.Location(x=158.080, y=27.180, z=0.30),
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
             ),
@@ -532,7 +561,7 @@ def _get_spawn_point_for_town(map_obj, profile='simulator'):
             ),
         },
         'Town02': {
-            'simulator': carla.Transform(
+            'hero': carla.Transform(
                 carla.Location(x=59.600, y=306.420, z=0.50),
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
             ),
@@ -542,7 +571,7 @@ def _get_spawn_point_for_town(map_obj, profile='simulator'):
             ),
         },
         'Town03': {
-            'simulator': carla.Transform(
+            'hero': carla.Transform(
                 carla.Location(x=-118.079287, y=0.275539, z=0.27530716),
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
             ),
@@ -551,8 +580,36 @@ def _get_spawn_point_for_town(map_obj, profile='simulator'):
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
             ),
         },
+        'Town04': {
+            'hero': carla.Transform(
+                carla.Location(x=150.60, y=-173.30, z=0.70),
+                carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+            ),
+            'supervisor': carla.Transform(
+                carla.Location(x=167.60, y=-173.30, z=0.20),
+                carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+            ),
+        },
+        'Town05': {
+            'hero': carla.Transform(
+                carla.Location(x=24.5994,y=31.59789,z=0.30),
+                carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0)
+            ),
+        },
+        'Town06': {
+            'hero': carla.Transform(
+                carla.Location(x=94.83,y=150.31,z=0.30),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+            ),
+        },
+        'Town07': {
+            'hero': carla.Transform(
+                carla.Location(x=-11.674381,y=-108.930371,z=0.40),
+                carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+            ),
+        },
         'Town10': {
-            'simulator': carla.Transform(
+            'hero': carla.Transform(
                 carla.Location(x=-28.58173096, y=140.53555, z=0.60),
                 carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
             ),
@@ -565,10 +622,10 @@ def _get_spawn_point_for_town(map_obj, profile='simulator'):
 
     if town_name in town_spawn_points:
         town_profiles = town_spawn_points[town_name]
-        if profile in town_profiles:
-            return town_profiles[profile]
-        if 'simulator' in town_profiles:
-            return town_profiles['simulator']
+        if role_key in town_profiles:
+            return town_profiles[role_key]
+        if 'hero' in town_profiles:
+            return town_profiles['hero']
         return list(town_profiles.values())[0]
     else:
         spawn_points = map_obj.get_spawn_points()
@@ -683,7 +740,7 @@ class World(object):
                 print('There are no spawn points available in your map/town.')
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
-            spawn_point = _get_spawn_point_for_town(self.map, profile=self.args.profile)
+            spawn_point = _get_spawn_point_for_town(self.map, rolename=self.actor_role_name)
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
             self.modify_vehicle_physics(self.player)
@@ -712,7 +769,7 @@ class World(object):
         self.hud.notification(actor_type)
         
         # --- Spawn obstacle detection sensor for proximity alerts ---
-        if isinstance(self.player, carla.Vehicle):
+        if ENABLE_OBSTACLE_SENSOR and isinstance(self.player, carla.Vehicle):
             self.obstacle_sensor = ObstacleDetectionSensor(self.player)
 
         if self.sync:
@@ -2478,7 +2535,17 @@ def game_loop(args):
         client = carla.Client(args.host, args.port)
         client.set_timeout(2000.0)
 
+        # PoC:
+        # Load a specific map immediately (user-requested): Town02_Opt
+        #try:
+        #    sim_world = client.load_world('Town02_Opt')
+        #    print("[Info] Loaded world 'Town02_Opt'")
+        #except Exception as e:
+        #    print(f"[Warning] Failed to load 'Town02_Opt': {e}. Falling back to current world.")
+        #    sim_world = client.get_world()
+
         sim_world = client.get_world()
+        
         if args.sync:
             original_settings = sim_world.get_settings()
             settings = sim_world.get_settings()
@@ -2527,6 +2594,8 @@ def game_loop(args):
         if not ENABLE_HUD:
             hud.toggle_info()
         world = World(sim_world, hud, args)
+        # Timestamp for last hero marker draw
+        hero_marker_last = 0.0
         
         # Initialize dashboard based on DASHBOARD_MODE
         dashboard_mode = str(DASHBOARD_MODE).strip().lower()
@@ -2578,6 +2647,27 @@ def game_loop(args):
             #     if world.obstacle_sensor.should_update_audio():
             #         distance_group = world.obstacle_sensor.get_distance_group()
             #         audio_manager.update_proximity_alert(distance_group)
+
+            try:
+                interval = float(HERO_MARKER_INTERVAL) if HERO_MARKER_INTERVAL is not None else 0.0
+                now = time.time()
+                if interval <= 0.0 or (now - hero_marker_last) >= interval:
+                    hero = world.player
+                    if hero is not None:
+                        debug = world.world.debug
+                        hero_location = hero.get_location()
+                        marker_location = hero_location + carla.Location(z=20.0)
+                        box = carla.BoundingBox(marker_location, carla.Vector3D(1.5, 1.5, 0.01))
+                        debug.draw_box(
+                            box,
+                            carla.Rotation(),
+                            thickness=0.5,
+                            color=carla.Color(255, 0, 0),
+                            life_time=(interval if interval > 0.0 else 0.5),
+                        )
+                    hero_marker_last = now
+            except Exception:
+                pass
             
             pygame.display.flip()
 
@@ -2620,7 +2710,7 @@ def main():
         help='print debug information')
     argparser.add_argument(
         '--profile',
-        choices=['simulator', 'supervisor', 'extra'],
+        choices=list(PROFILE_CONFIG.keys()),
         help='apply preset settings (CLI flags override)')
     argparser.add_argument(
         '--host',
