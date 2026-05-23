@@ -1,0 +1,3 @@
+# Local override for the main computer
+-r requirements.txt
+carla @ file:///C:/Users/department/Documents/CarlaQuick/PythonAPI/carla/dist/carla-0.9.16-cp312-cp312-win_amd64.whl#sha256=b4700a1cfff8a9bda1018a233b25045ce6e00a7b180b8bd0edea6366c3f7c9eb
