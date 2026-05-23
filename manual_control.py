@@ -98,6 +98,8 @@ import re
 import subprocess
 import time
 import weakref
+import yaml
+from screeninfo import get_monitors
 
 os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
 os.environ["SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS"] = "1"
@@ -384,7 +386,20 @@ def _stop_dashboard_process():
     finally:
         dashboard_process = None
 
+# ==============================================================================
+# -- Hardware Config  ----------------------------------------------------------
+# ==============================================================================
 
+with open("config.yaml") as f:
+    cfg = yaml.load(f,Loader=yaml.FullLoader)
+
+monitors = cfg["monitor"]
+input_devices = cfg["input"]
+
+target_x, target_y = 0, 0
+target_width, target_height = 0, 0
+monitor_index = 0
+found = False
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
@@ -675,7 +690,7 @@ class World(object):
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
-        self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
+        #self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
         #self.world.set_weather(carla.WeatherParameters.ClearNoon)        #ClearNoon
 
         # Set up the sensors.
@@ -1265,11 +1280,11 @@ class GamepadControl(object):
                 dev = pygame.joystick.Joystick(i)
                 print(dev.get_name())
                 dev = pygame.joystick.Joystick(i)
-                if dev.get_name() == "PS4 Controller":
+                if dev.get_name() == input_devices["controller"]:
                     self.joy = dev
                     self.joy.init()
         if self.joy == None:
-            raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
+            raise RuntimeError("Need controller") #TODO change in future with failsafe
 
         world.player.set_autopilot(self._autopilot_enabled)
         world.player.set_light_state(self._lights)
@@ -1495,10 +1510,10 @@ class WheelControl(object):
         if pygame.joystick.get_count() > 1:
             for i in range(count):
                 dev = pygame.joystick.Joystick(i)
-                if dev.get_name() == "Logitech G HUB G29 Driving Force Racing Wheel USB":
+                if dev.get_name() == input_devices["wheel"]:
                     self.joy = dev
                     self.joy.init()
-                if dev.get_name() == "T500 RS Gear Shift":
+                if dev.get_name() == input_devices["shifter"]:
                     self.shifter = dev
                     self.shifter.init()
         if self.shifter == None or self.joy == None:
@@ -2484,7 +2499,13 @@ def game_loop(args):
         window_flags = pygame.HWSURFACE | pygame.DOUBLEBUF
         if WINDOW_BORDERLESS:
             window_flags |= pygame.NOFRAME
-        display = pygame.display.set_mode((args.width, args.height), window_flags)
+
+        if found:
+            os.environ['SDL_VIDEO_WINDOW_POS'] = f"{target_x},{target_y}"
+            display = pygame.display.set_mode((target_width, target_height), display=monitor_index)
+        else:
+            display = pygame.display.set_mode((args.width, args.height), window_flags)
+
         display.fill((0,0,0))
         pygame.display.flip()
         if WINDOW_BORDERLESS and WINDOW_START_LEFT:
@@ -2664,6 +2685,20 @@ def main():
     )
     args = argparser.parse_args()
     _apply_profile(args.profile, args, sys.argv[1:])
+
+    global target_x, target_y, target_width, target_height, monitor_index, found
+
+    for i, monitor in enumerate(get_monitors()):
+        if monitor.name == monitors[args.profile]: # Warning "extra" not set default value used
+            target_x = monitor.x
+            target_y = monitor.y
+            target_width = monitor.width
+            target_height = monitor.height
+            monitor_index = i
+            found = True
+            break
+    if not found:
+        print("Monitor not found!")
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
     if not (0.0 < args.sp <= 1.0):

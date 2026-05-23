@@ -1,0 +1,9 @@
+monitor:
+  simulator: "\\\\.\\DISPLAY1"
+  rear: "\\\\.\\DISPLAY3"
+  supervisor: "\\\\.\\DISPLAY2"
+
+input: 
+  wheel: "Logitech G HUB G29 Driving Force Racing Wheel USB"
+  shifter: "T500 RS Gear Shift"
+  controller: "PS4 Controller"
