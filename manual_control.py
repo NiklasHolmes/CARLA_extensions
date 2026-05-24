@@ -553,11 +553,11 @@ def _get_spawn_point_for_town(map_obj, rolename='hero'):
         'Town01': {
             'hero': carla.Transform(
                 carla.Location(x=158.080, y=27.180, z=0.30),
-                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
             ),
             'supervisor': carla.Transform(
                 carla.Location(x=158.110, y=45.070, z=0.30),
-                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
             ),
         },
         'Town02': {
@@ -747,8 +747,8 @@ class World(object):
 
         # SET WEATHER:
         # https://carla.org/Doxygen/html/db/ddb/classcarla_1_1rpc_1_1WeatherParameters.html
-        #self.world.set_weather(carla.WeatherParameters.Default)      #CloudyNoon?
-        #self.world.set_weather(carla.WeatherParameters.ClearNoon)        #ClearNoon
+        #self.world.set_weather(carla.WeatherParameters.Default)            #CloudyNoon?
+        #self.world.set_weather(carla.WeatherParameters.ClearNoon)          #ClearNoon
 
         # Set up the sensors.
         self.collision_sensor = CollisionSensor(self.player, self.hud)
