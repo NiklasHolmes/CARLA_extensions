@@ -2531,6 +2531,7 @@ def game_loop(args):
     world = None
     original_settings = None
     event_sync = None
+    stop_signal_seen = False
 
     try:
         client = carla.Client(args.host, args.port)
@@ -2624,6 +2625,20 @@ def game_loop(args):
             if event_sync is not None:
                 event_sync.update()
             world.tick(clock)
+
+            if not stop_signal_seen and getattr(args, 'scenario_stop_file', None):
+                if os.path.exists(args.scenario_stop_file):
+                    stop_signal_seen = True
+                    if world.player is not None and isinstance(world.player, carla.Vehicle):
+                        brake_control = carla.VehicleControl()
+                        brake_control.brake = 1.0
+                        brake_control.hand_brake = True
+                        brake_control.throttle = 0.0
+                        brake_control.reverse = False
+                        world.player.apply_control(brake_control)
+                    print('[Scenario00] Stop signal received from session_runner. Braking hero and exiting manual_control.')
+                    return
+
             world.render(display)
 
 
@@ -2706,6 +2721,10 @@ def main():
         '--profile',
         choices=list(PROFILE_CONFIG.keys()),
         help='apply preset settings (CLI flags override)')
+    argparser.add_argument(
+        '--scenario-stop-file',
+        default=None,
+        help='path to a stop signal file written by session_runner when the scenario ends')
     argparser.add_argument(
         '--host',
         metavar='H',
