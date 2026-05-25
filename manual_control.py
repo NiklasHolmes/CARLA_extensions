@@ -257,7 +257,7 @@ PROFILE_CONFIG = {
     },
     'simulator4home': {
         'cli_defaults': {
-            'res': '960x540',
+            'res': '3840x1080',
             'sp': 0.8,
             'input': 'keyboard',
             'rolename': 'hero',
@@ -410,7 +410,6 @@ def _stop_dashboard_process():
             pass
     finally:
         dashboard_process = None
-
 
 # ==============================================================================
 # -- Hardware Config  ----------------------------------------------------------
@@ -1299,7 +1298,7 @@ class GamepadControl(object):
     # - Left stick    :   steer
     # - R2            :   throttle
     # - L2            :   brake
-    # - Cross (X)     :   hand-brake
+    # - Cross (X)     :   all lights together (fog etc.)
     # - Circle (O)    :   toggle reverse
     # - Square ([])   :   honk while held down
     # - Triangle (/\) :   toggle camera
@@ -1333,16 +1332,28 @@ class GamepadControl(object):
             raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
 
         self.joy = None
-        if pygame.joystick.get_count() > 1:                     # change on Laptop to 0
+        self.shifter = None
+        profile = getattr(world.args, 'profile', None)
+        joystick_threshold = 0 if profile in ('simulator4home', 'supervisor4home') else 1           # for home use
+        if pygame.joystick.get_count() > joystick_threshold:
             for i in range(count):
                 dev = pygame.joystick.Joystick(i)
-                print(dev.get_name())
-                dev = pygame.joystick.Joystick(i)
-                if dev.get_name() == input_devices["controller"]:
-                    self.joy = dev
-                    self.joy.init()
-        if self.joy == None:
-            raise RuntimeError("Need controller") #TODO change in future with failsafe
+                if profile in ('simulator4home', 'supervisor4home'):
+                    if dev.get_name() == input_devices["controller"]:
+                        self.joy = dev
+                        self.joy.init()
+                else:
+                    if dev.get_name() == input_devices["wheel"]:
+                        self.joy = dev
+                        self.joy.init()
+                    if dev.get_name() == input_devices["shifter"]:
+                        self.shifter = dev
+                        self.shifter.init()
+        if profile in ('simulator4home', 'supervisor4home'):
+            if self.joy is None:
+                raise RuntimeError("Need PS4 Controller")
+        elif self.shifter == None or self.joy == None:
+            raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
 
         world.player.set_autopilot(self._autopilot_enabled)
         world.player.set_light_state(self._lights)
@@ -1397,7 +1408,20 @@ class GamepadControl(object):
         btn_L1 = self.joy.get_button(9)         # L1
         btn_R1 = self.joy.get_button(10)        # R1
         btn_touch = self.joy.get_button(15)
-        self._control.hand_brake = bool(btn_cross)
+        prev_cross = getattr(self, "_prev_cross", False)
+        if btn_cross and not prev_cross:
+            front_mask = (
+                carla.VehicleLightState.Position |
+                carla.VehicleLightState.LowBeam |
+                carla.VehicleLightState.Fog
+            )
+            if (current_lights & front_mask) == front_mask:
+                current_lights &= ~front_mask
+                world.hud.notification("Front lights off")
+            else:
+                current_lights |= front_mask
+                world.hud.notification("Front lights")
+        self._prev_cross = btn_cross
         
         # PS4 controller Mapping
         # 0 -> Cross
@@ -2535,7 +2559,7 @@ def game_loop(args):
 
     try:
         client = carla.Client(args.host, args.port)
-        client.set_timeout(30.0)
+        client.set_timeout(2000.0)
 
         sim_world = client.get_world()
         
@@ -2609,7 +2633,6 @@ def game_loop(args):
         else:
             controller = KeyboardControl(world, args.autopilot)
 
-
         if args.sync:
             sim_world.tick()
         else:
@@ -2640,7 +2663,6 @@ def game_loop(args):
                     return
 
             world.render(display)
-
 
             if world.capture_full_frame_once:
                 screenshot_path = os.path.join(
@@ -2834,4 +2856,3 @@ def main():
 if __name__ == '__main__':
 
     main()
-
