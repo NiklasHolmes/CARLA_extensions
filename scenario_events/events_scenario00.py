@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import os
 import random
 import time
 import sys
@@ -22,7 +23,7 @@ PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
 PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=216.3, y=4.9, z=1.85)
 PEDESTRIAN_TARGET_LOCATION = carla.Location(x=306.7, y=4.9, z=0.35)
 PEDESTRIAN_MAX_SPEED = 3
-PEDESTRIAN_WAIT_TIMEOUT_S = 180.0
+PEDESTRIAN_WAIT_TIMEOUT_S = 15.0
 PEDESTRIAN_STEP_S = 0.05
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 SIM_STEP_S = 0.05
@@ -89,11 +90,12 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
     return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
 
 class Scenario00Runner:
-    def __init__(self, host, port, tm_port):
+    def __init__(self, host, port, tm_port, done_file=None):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
         self._tm_port = tm_port
+        self._done_file = done_file
         self._rng = random.Random()
         
         self._start_sim_time = None
@@ -328,16 +330,30 @@ class Scenario00Runner:
             pass
         finally:
             self.destroy()
+            self._signal_done()
 
     def destroy(self):
         print("[Scenario00] Cleanup...")
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids + self._walker_controller_ids
         self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])
 
+    def _signal_done(self):
+        if not self._done_file:
+            return
+        try:
+            done_dir = os.path.dirname(self._done_file)
+            if done_dir:
+                os.makedirs(done_dir, exist_ok=True)
+            with open(self._done_file, 'w', encoding='utf-8') as done_handle:
+                done_handle.write('done\n')
+        except Exception as exc:
+            print(f"[Scenario00] WARNING: could not write done signal file: {exc}")
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', default=2000, type=int)
     parser.add_argument('--tm-port', default=8000, type=int)
+    parser.add_argument('--done-file', default=None)
     args = parser.parse_args()
-    Scenario00Runner(args.host, args.port, args.tm_port).run()
+    Scenario00Runner(args.host, args.port, args.tm_port, args.done_file).run()
