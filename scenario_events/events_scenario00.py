@@ -1,30 +1,30 @@
 #!/usr/bin/env python
 
-import logging
+#import logging
 import os
 import random
 import time
-import sys
 import argparse
-from typing import List, Optional, Tuple
 import carla
+
+from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
 
 # Constants
 TRAFFIC_SPAWN_DELAY_SECONDS = 5.0
 VEHICLE_ACTIVE_SECONDS = 0.0                    # if > 0 => vehicles will be removed; if = 0 => stay infinitely
-PEDESTRIAN_AFTER_VEHICLES_SECONDS = 2.0
-PEDESTRIAN_SPAWN_DELAY_SECONDS = TRAFFIC_SPAWN_DELAY_SECONDS + max(VEHICLE_ACTIVE_SECONDS, 0.0) + PEDESTRIAN_AFTER_VEHICLES_SECONDS
+CAR_TO_PED_DELAY_SECONDS = 5.0
+PED_TO_SONG_DELAY_SECONDS = 7.0
+SONG_TO_END_DELAY_SECONDS = 5.0
+SONG_PLAY_DURATION_SECONDS = 20.0
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-HERO_GREEN_LIGHT_MAX_DISTANCE = 25.0
 SPAWN_CARS = 15
-SPAWN_BIKES = 5
 ENABLE_ROUTE_PEDESTRIANS = True
 PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
-PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=216.3, y=4.9, z=1.85)
+PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=216.3, y=4.9, z=0.35)
 PEDESTRIAN_TARGET_LOCATION = carla.Location(x=306.7, y=4.9, z=0.35)
-PEDESTRIAN_MAX_SPEED = 3
-PEDESTRIAN_WAIT_TIMEOUT_S = 15.0
-PEDESTRIAN_STEP_S = 0.05
+PEDESTRIAN_MAX_SPEED = 2.5
+PEDESTRIAN_COUNT = 3
+PEDESTRIAN_WAIT_TIMEOUT_S = 40.0
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 SIM_STEP_S = 0.05
 
@@ -34,7 +34,10 @@ BLOCKED_VEHICLE_KEYWORDS = (
 
 MIN_SPAWN_DISTANCE = 90.0
 MAX_SPAWN_DISTANCE = 260.0
-PREFERRED_SPAWN_DISTANCE = 140.0
+PEDESTRIAN_MIN_HIDDEN_DISTANCE = 1.5
+PEDESTRIAN_MAX_HIDDEN_DISTANCE = 100.0
+PEDESTRIAN_MIN_ROUTE_DISTANCE = 5.0
+PEDESTRIAN_NAV_SAMPLES = 96
 
 STATIC_PROP_SPAWNS = [
     {
@@ -97,24 +100,40 @@ class Scenario00Runner:
         self._tm_port = tm_port
         self._done_file = done_file
         self._rng = random.Random()
+        # set up logger for spawn/debug output
+        # self.logger = logging.getLogger('scenario00')
+        # self.logger.setLevel(logging.INFO)
+        # try:
+        #     log_dir = os.path.join(os.path.dirname(__file__), '..', '_out')
+        #     os.makedirs(log_dir, exist_ok=True)
+        #     fh = logging.FileHandler(os.path.join(log_dir, 'scenario00_spawn.log'), mode='a', encoding='utf-8')
+        #     fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+        #     if not any(isinstance(h, logging.FileHandler) for h in self.logger.handlers):
+        #         self.logger.addHandler(fh)
+        # except Exception:
+        #     pass
         
         self._start_sim_time = None
         self._traffic_spawned = False
         self._traffic_spawn_time = None
         self._vehicles_cleared = False
-        self._pedestrian_spawned = False
-        self._pedestrian_started = False
-        self._pedestrian_done = False
+        self._pedestrians_spawned = False
+        self._pedestrians_started = False
+        self._pedestrians_done = False
         self._pedestrian_spawn_time = None
-        self._pedestrian_walker_id = None
-        self._pedestrian_controller_id = None
+        self._pedestrian_routes = []
+        self._song_started = False
+        self._song_start_time = None
+        self._song_finished = False
+        self._song_finish_time = None
+        self._scenario_done = False
+        self._cars_phase_done = False
+        self._pedestrians_phase_done = False
         
         self._static_actor_ids = []
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
         self._walker_controller_ids = []
-        self._last_forced_light_id = None
-        self._last_forced_light_time = None
 
     def _get_traffic_manager(self):
         try:
@@ -134,7 +153,6 @@ class Scenario00Runner:
             return carla.Location(x=location.x, y=location.y, z=location.z)
         nav_location = waypoint.transform.location
         return carla.Location(x=nav_location.x, y=nav_location.y, z=location.z)
-
 
     def find_hero(self):
         for actor in self.world.get_actors():
@@ -169,15 +187,46 @@ class Scenario00Runner:
             #f"requested={len(car_points)}, blueprint_count={len(vehicle_bps)}"
         )
         self._spawn_batch_vehicles(car_points, vehicle_bps, tm)
+        self._cars_phase_done = True
 
     def _pick_hidden_points(self, points, ego_transform, count):
         if not ego_transform: return points[:count]
         hidden = []
         for p in points:
-            dist = p.location.distance(ego_transform.location)
-            if MIN_SPAWN_DISTANCE < dist < MAX_SPAWN_DISTANCE:
+            if is_transform_hidden_from_hero(p, ego_transform, MIN_SPAWN_DISTANCE, MAX_SPAWN_DISTANCE):
                 hidden.append(p)
         return hidden[:count]
+
+    def _pick_hidden_navigation_location(self, ego_transform, used_locations=None, min_distance=MIN_SPAWN_DISTANCE, max_distance=MAX_SPAWN_DISTANCE):
+        hidden_location = pick_hidden_navigation_location(
+            self.world,
+            ego_transform,
+            used_locations=used_locations,
+            min_distance=min_distance,
+            max_distance=max_distance,
+            min_route_distance=PEDESTRIAN_MIN_ROUTE_DISTANCE,
+            sample_count=PEDESTRIAN_NAV_SAMPLES,
+        )
+        if hidden_location is not None:
+            return hidden_location
+
+        if ego_transform is not None:
+            projected_hero_location = self._project_location_to_navigation(ego_transform.location)
+            if is_transform_hidden_from_hero(carla.Transform(projected_hero_location), ego_transform, min_distance, max_distance):
+                return projected_hero_location
+
+        return None
+
+    def _get_random_pedestrian_blueprint(self):
+        blueprints = get_actor_blueprints(self.world, "walker.pedestrian.*")
+        if not blueprints:
+            return self.world.get_blueprint_library().find(PEDESTRIAN_BLUEPRINT_ID)
+        walker_bp = self._rng.choice(blueprints)
+        if walker_bp.has_attribute("is_invincible"):
+            walker_bp.set_attribute("is_invincible", "false")
+        if walker_bp.has_attribute("can_use_wheelchair") and self._rng.randint(0, 100) < 11:
+            walker_bp.set_attribute("use_wheelchair", "true")
+        return walker_bp
 
     def _spawn_batch_vehicles(self, points, bps, tm):
         batch = []
@@ -202,83 +251,213 @@ class Scenario00Runner:
                 tl.set_state(carla.TrafficLightState.Green)
                 tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
 
-    def _spawn_single_pedestrian(self):
-        walker_bp = self.world.get_blueprint_library().find(PEDESTRIAN_BLUEPRINT_ID)
-        if walker_bp.has_attribute("is_invincible"):
-            walker_bp.set_attribute("is_invincible", "false")
+    def _spawn_pedestrians(self, ego_transform=None):
+        walker_controller_bp = self.world.get_blueprint_library().find("controller.ai.walker")
+        walker_batch = []
+        pedestrian_routes = []
+        used_locations = []
+        # self.logger.info(f"_spawn_pedestrians called; ego_transform={ego_transform}")
 
-        print(f"[Scenario00] Spawne Pedestrian bei {PEDESTRIAN_SPAWN_LOCATION}...")
-        walker = self.world.spawn_actor(walker_bp, carla.Transform(PEDESTRIAN_SPAWN_LOCATION))
-        controller = self.world.spawn_actor(
-            self.world.get_blueprint_library().find("controller.ai.walker"),
-            carla.Transform(),
-            walker,
-        )
+        for index in range(PEDESTRIAN_COUNT):
+            walker_bp = self._get_random_pedestrian_blueprint()
+            if index == 0:
+                target_location = carla.Location(
+                    x=PEDESTRIAN_TARGET_LOCATION.x,
+                    y=PEDESTRIAN_TARGET_LOCATION.y,
+                    z=PEDESTRIAN_TARGET_LOCATION.z,
+                )
+                spawn_location = carla.Location(
+                    x=PEDESTRIAN_SPAWN_LOCATION.x,
+                    y=PEDESTRIAN_SPAWN_LOCATION.y,
+                    z=PEDESTRIAN_SPAWN_LOCATION.z,
+                )
+                if not is_transform_hidden_from_hero(carla.Transform(spawn_location), ego_transform, PEDESTRIAN_MIN_HIDDEN_DISTANCE, PEDESTRIAN_MAX_HIDDEN_DISTANCE):
+                    msg = "feste Pedestrian-Spawnposition ist sichtbar; suche alternativen Hidden-Spawn."
+                    print(f"[Scenario00] WARNUNG: {msg}")
+                    # self.logger.info(msg + f" spawn_location={spawn_location}")
+                    spawn_location = pick_hidden_navigation_location_near(
+                        self.world,
+                        spawn_location,
+                        ego_transform,
+                        used_locations,
+                        PEDESTRIAN_MIN_HIDDEN_DISTANCE,
+                        PEDESTRIAN_MAX_HIDDEN_DISTANCE,
+                        min_route_distance=PEDESTRIAN_MIN_ROUTE_DISTANCE,
+                        sample_count=PEDESTRIAN_NAV_SAMPLES * 2,
+                    )
+                    if spawn_location is None:
+                        msg = "kein Hidden-Spawn gefunden; überspringe den festen Pedestrian."
+                        print(f"[Scenario00] WARNUNG: {msg}")
+                        # self.logger.info(msg)
+                        continue
+            else:
+                spawn_location = self._pick_hidden_navigation_location(
+                    ego_transform,
+                    used_locations,
+                    PEDESTRIAN_MIN_HIDDEN_DISTANCE,
+                    PEDESTRIAN_MAX_HIDDEN_DISTANCE,
+                )
+                if spawn_location is None:
+                    continue
+                target_location = carla.Location(
+                    x=PEDESTRIAN_TARGET_LOCATION.x,
+                    y=PEDESTRIAN_TARGET_LOCATION.y,
+                    z=PEDESTRIAN_TARGET_LOCATION.z,
+                )
 
-        self._walker_actor_ids.append(walker.id)
-        self._walker_controller_ids.append(controller.id)
+            used_locations.append(spawn_location)
+            # self.logger.info(f"selected spawn_location={spawn_location} target={target_location}")
+            walker_batch.append(carla.command.SpawnActor(walker_bp, carla.Transform(spawn_location)))
+            pedestrian_routes.append({
+                "spawn_location": spawn_location,
+                "target_location": target_location,
+                "current_target_location": target_location,
+                "heading_to_target": True,
+                "done": False,
+            })
 
+        print(f"[Scenario00] Spawne {PEDESTRIAN_COUNT} Pedestrians an zufälligen Hidden-Navigation-Punkten...")
+        walker_results = self.client.apply_batch_sync(walker_batch, False)
+
+        spawned_walkers = []
+        for index, result in enumerate(walker_results):
+            if result.error:
+                print(f"[Scenario00] WARNUNG: Pedestrian konnte nicht gespawnt werden: {result.error}")
+                continue
+            spawned_walkers.append((result.actor_id, pedestrian_routes[index]))
+
+        controller_batch = []
+        for walker_id, _ in spawned_walkers:
+            controller_batch.append(carla.command.SpawnActor(walker_controller_bp, carla.Transform(), walker_id))
+
+        controller_results = self.client.apply_batch_sync(controller_batch, False)
+
+        successful_routes = []
+        controller_index = 0
+        for walker_id, route in spawned_walkers:
+            if controller_index >= len(controller_results):
+                break
+            controller_result = controller_results[controller_index]
+            controller_index += 1
+            if controller_result.error:
+                print(f"[Scenario00] WARNUNG: Pedestrian-Controller konnte nicht gespawnt werden: {controller_result.error}")
+                continue
+
+            route["walker_id"] = walker_id
+            route["controller_id"] = controller_result.actor_id
+            successful_routes.append(route)
+            self._walker_actor_ids.append(walker_id)
+            self._walker_controller_ids.append(controller_result.actor_id)
+
+        self._pedestrian_routes = successful_routes
         self._pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
-        self._pedestrian_walker_id = walker.id
-        self._pedestrian_controller_id = controller.id
-        self._pedestrian_spawned = True
-        self._pedestrian_started = False
-        self._pedestrian_done = False
+        self._pedestrians_spawned = True
+        self._pedestrians_started = False
+        self._pedestrians_done = len(self._pedestrian_routes) == 0
+        self._pedestrians_phase_done = True
 
-    def _start_single_pedestrian(self):
-        walker = self.world.get_actor(self._pedestrian_walker_id)
-        controller = self.world.get_actor(self._pedestrian_controller_id)
-        if walker is None or controller is None:
-            self._pedestrian_done = True
+    def _start_pedestrians(self):
+        if not self._pedestrian_routes:
+            self._pedestrians_done = True
             return
 
-        controller.start()
-        controller.go_to_location(PEDESTRIAN_TARGET_LOCATION)
-        controller.set_max_speed(PEDESTRIAN_MAX_SPEED)
-        print(f"[Scenario00] Pedestrian {walker.id} ist jetzt unterwegs.")
-        self._pedestrian_started = True
+        for route in self._pedestrian_routes:
+            walker = self.world.get_actor(route.get("walker_id"))
+            controller = self.world.get_actor(route.get("controller_id"))
+            if walker is None or controller is None:
+                route["done"] = True
+                continue
 
-    def _update_single_pedestrian(self, sim_time):
-        if self._pedestrian_done:
+            controller.start()
+            route["heading_to_target"] = True
+            route["current_target_location"] = route["target_location"]
+            controller.go_to_location(route["current_target_location"])
+            controller.set_max_speed(PEDESTRIAN_MAX_SPEED)
+            print(f"[Scenario00] Pedestrian {walker.id} ist jetzt unterwegs.")
+
+        self._pedestrians_started = True
+
+    def _start_song(self, sim_time):
+        if self._song_started:
+            return
+        self._song_started = True
+        self._song_start_time = sim_time
+        print(f"[Scenario00] Song started at sim_time={sim_time:.2f}s")
+        self._play_song()
+
+    def _play_song(self):
+        pass
+
+    def _update_song(self, sim_time):
+        if not self._song_started or self._song_finished:
             return
 
-        if not self._pedestrian_spawned:
-            if sim_time >= PEDESTRIAN_SPAWN_DELAY_SECONDS:
-                self._spawn_single_pedestrian()
+        if self._song_start_time is None:
+            self._song_start_time = sim_time
+
+        if (sim_time - self._song_start_time) >= SONG_PLAY_DURATION_SECONDS:
+            self._song_finished = True
+            self._song_finish_time = sim_time
+            print(f"[Scenario00] Song finished at sim_time={sim_time:.2f}s")
+
+    def _update_pedestrians(self, sim_time):
+        if self._pedestrians_done:
             return
 
-        if not self._pedestrian_started:
-            self._start_single_pedestrian()
+        if not self._pedestrians_spawned:
             return
 
-        walker = self.world.get_actor(self._pedestrian_walker_id)
-        if walker is None:
-            self._pedestrian_done = True
+        if not self._pedestrians_started:
+            self._start_pedestrians()
             return
 
-        loc = walker.get_location()
-        distance = ((loc.x - PEDESTRIAN_TARGET_LOCATION.x) ** 2 + (loc.y - PEDESTRIAN_TARGET_LOCATION.y) ** 2 + (loc.z - PEDESTRIAN_TARGET_LOCATION.z) ** 2) ** 0.5
-        if distance <= PEDESTRIAN_ARRIVE_THRESH:
-            print("[Scenario00] Pedestrian angekommen.")
-            self._pedestrian_done = True
+        group_timed_out = self._pedestrian_spawn_time is not None and (sim_time - self._pedestrian_spawn_time) > PEDESTRIAN_WAIT_TIMEOUT_S
+        if group_timed_out:
+            print("[Scenario00] Pedestrian Timeout.")           # doesn't delete them, just makes sure the pedestrian phase is at least that long
+            for route in self._pedestrian_routes:
+                route["done"] = True
+            self._pedestrians_done = True
             return
 
-        if self._pedestrian_spawn_time is not None and (sim_time - self._pedestrian_spawn_time) > PEDESTRIAN_WAIT_TIMEOUT_S:
-            print("[Scenario00] Pedestrian Timeout.")
-            self._pedestrian_done = True
+        all_done = True
+        for route in self._pedestrian_routes:
+            if route.get("done"):
+                continue
 
-    def _destroy_pedestrian(self):
-        controller = self.world.get_actor(self._pedestrian_controller_id) if self._pedestrian_controller_id is not None else None
-        walker = self.world.get_actor(self._pedestrian_walker_id) if self._pedestrian_walker_id is not None else None
-        if controller is not None:
-            try:
-                controller.stop()
-            except Exception:
-                pass
-        if walker is not None:
-            walker.destroy()
-        if controller is not None:
-            controller.destroy()
+            walker = self.world.get_actor(route.get("walker_id"))
+            if walker is None:
+                route["done"] = True
+                continue
+
+            loc = walker.get_location()
+            target_location = route.get("current_target_location", route["target_location"])
+            distance = ((loc.x - target_location.x) ** 2 + (loc.y - target_location.y) ** 2 + (loc.z - target_location.z) ** 2) ** 0.5
+            if distance <= PEDESTRIAN_ARRIVE_THRESH:
+                if route.get("heading_to_target", True):
+                    next_target = route["spawn_location"]
+                    route["heading_to_target"] = False
+                else:
+                    next_target = route["target_location"]
+                    route["heading_to_target"] = True
+                route["current_target_location"] = next_target
+                controller = self.world.get_actor(route.get("controller_id"))
+                if controller is not None:
+                    controller.go_to_location(next_target)
+                print(f"[Scenario00] Pedestrian {walker.id} wechselt Richtung.")
+            else:
+                all_done = False
+
+        self._pedestrians_done = False
+        return all_done
+
+    def _should_spawn_pedestrians(self, sim_time):
+        return self._cars_phase_done and not self._pedestrians_spawned and (sim_time - self._traffic_spawn_time) >= CAR_TO_PED_DELAY_SECONDS
+
+    def _should_start_song(self, sim_time):
+        return self._pedestrians_phase_done and not self._song_started and (sim_time - self._pedestrian_spawn_time) >= PED_TO_SONG_DELAY_SECONDS
+
+    def _should_end_scenario(self, sim_time):
+        return self._song_finished and self._song_finish_time is not None and (sim_time - self._song_finish_time) >= SONG_TO_END_DELAY_SECONDS
 
     def run(self):
         print("[Scenario00] Running...")
@@ -318,9 +497,20 @@ class Scenario00Runner:
                         self._vehicles_cleared = True
 
                 if ENABLE_ROUTE_PEDESTRIANS:
-                    self._update_single_pedestrian(sim_time)
-                    if self._pedestrian_done:
-                        self._destroy_pedestrian()
+                    if self._should_spawn_pedestrians(sim_time):
+                        self._spawn_pedestrians(ego_transform)
+                    else:
+                        self._update_pedestrians(sim_time)
+
+                    if self._pedestrians_spawned and not self._song_started and self._should_start_song(sim_time):
+                        self._start_song(sim_time)
+
+                    self._update_song(sim_time)
+
+                    if self._should_end_scenario(sim_time):
+                        self._scenario_done = True
+
+                    if self._scenario_done:
                         return
                 
                 if ego:
