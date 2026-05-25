@@ -1,7 +1,30 @@
 #!/usr/bin/env python
 
+import glob
 import math
 # import logging
+import os
+import sys
+
+try:
+    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+except IndexError:
+    pass
+
+if __package__ in (None, ""):
+    _scenario_dir = os.path.dirname(__file__)
+    _extensions_dir = os.path.abspath(os.path.join(_scenario_dir, ".."))
+    _repo_root = os.path.abspath(os.path.join(_scenario_dir, "..", ".."))
+    if _extensions_dir not in sys.path:
+        sys.path.append(_extensions_dir)
+    _carla_egg_candidates = glob.glob(os.path.join(_repo_root, "Build", "**", "PythonAPI", "carla", "dist", "carla-*.egg"), recursive=True)
+    if not _carla_egg_candidates:
+        _carla_egg_candidates = glob.glob(os.path.join(_repo_root, "PythonAPI", "carla", "dist", "carla-*.egg"), recursive=True)
+    if _carla_egg_candidates:
+        sys.path.append(_carla_egg_candidates[0])
 
 import carla
 

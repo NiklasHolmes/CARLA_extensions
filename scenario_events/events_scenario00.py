@@ -6,8 +6,12 @@ import random
 import time
 import argparse
 import carla
-
-from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+try:
+    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+except ModuleNotFoundError:
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
+from generate_audio import SongAudio
 
 # Constants
 TRAFFIC_SPAWN_DELAY_SECONDS = 5.0
@@ -15,7 +19,10 @@ VEHICLE_ACTIVE_SECONDS = 0.0                    # if > 0 => vehicles will be rem
 CAR_TO_PED_DELAY_SECONDS = 5.0
 PED_TO_SONG_DELAY_SECONDS = 7.0
 SONG_TO_END_DELAY_SECONDS = 5.0
-SONG_PLAY_DURATION_SECONDS = 20.0
+SONG_START_OFFSET_SECONDS = 30.0
+SONG_PLAY_DURATION_SECONDS = 30.0
+SONG_FADE_IN_MS = 3000
+SONG_FADE_OUT_MS = 3000
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 SPAWN_CARS = 15
 ENABLE_ROUTE_PEDESTRIANS = True
@@ -126,6 +133,15 @@ class Scenario00Runner:
         self._song_start_time = None
         self._song_finished = False
         self._song_finish_time = None
+        self._song_audio = SongAudio(
+            NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH,
+            start_seconds=SONG_START_OFFSET_SECONDS,
+            play_seconds=SONG_PLAY_DURATION_SECONDS,
+            fade_in_ms=SONG_FADE_IN_MS,
+            fade_out_ms=SONG_FADE_OUT_MS,
+            volume=0.85,
+            channel_index=6,
+        )
         self._scenario_done = False
         self._cars_phase_done = False
         self._pedestrians_phase_done = False
@@ -383,10 +399,13 @@ class Scenario00Runner:
         self._song_started = True
         self._song_start_time = sim_time
         print(f"[Scenario00] Song started at sim_time={sim_time:.2f}s")
-        self._play_song()
+        if not self._play_song(sim_time):
+            print("[Scenario00] WARNUNG: Song konnte nicht gestartet werden; fahre ohne Song fort.")
+            self._song_finished = True
+            self._song_finish_time = sim_time
 
-    def _play_song(self):
-        pass
+    def _play_song(self, sim_time):
+        return self._song_audio.play(sim_time)
 
     def _update_song(self, sim_time):
         if not self._song_started or self._song_finished:
@@ -395,7 +414,9 @@ class Scenario00Runner:
         if self._song_start_time is None:
             self._song_start_time = sim_time
 
-        if (sim_time - self._song_start_time) >= SONG_PLAY_DURATION_SECONDS:
+        self._song_audio.update(sim_time)
+
+        if self._song_audio.is_finished:
             self._song_finished = True
             self._song_finish_time = sim_time
             print(f"[Scenario00] Song finished at sim_time={sim_time:.2f}s")
