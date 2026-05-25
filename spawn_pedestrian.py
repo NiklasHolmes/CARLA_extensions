@@ -8,6 +8,8 @@ TIMEOUT_S = 180.0           # safety timeout
 ARRIVE_THRESH = 1.0         # meters
 STEP_S = 0.05               # tick step
 
+# important: NAV and TM folder must exist!
+
 def main():
     client = carla.Client("127.0.0.1", 2000)
     client.set_timeout(5.0)
