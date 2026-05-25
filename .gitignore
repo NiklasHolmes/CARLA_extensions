@@ -4,3 +4,4 @@ __pycache__/
 .env
 requirements.local.txt
 manual_control_OLD.py
+spawn_pedestrian_file_2.py
