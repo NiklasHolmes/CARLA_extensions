@@ -4,6 +4,7 @@ Centralized audio management for CARLA extensions
 
 import pygame
 import pygame.mixer
+import numpy as np
 import time
 import os
 from typing import Optional, List, Dict
@@ -121,7 +122,7 @@ class EngineAudio(BaseAudioGenerator):
     
     def __init__(self, channel_pool: ChannelPool, idle_path: str, 
                  mid_path: Optional[str] = None, high_path: Optional[str] = None,
-                 base_volume: float = 0.75):
+                 base_volume: float = 0.1):
         """
         Initialize engine audio with three RPM levels.
         
@@ -616,6 +617,166 @@ class ProximityAlertAudio(BaseAudioGenerator):
             self.current_channel = None
         self.is_playing = False
         self.beep_mode = "off"
+
+
+class SongAudio:
+    """Single music track playback with offset, fade-in, and scheduled fade-out."""
+
+    def __init__(
+        self,
+        song_path: str,
+        start_seconds: float = 0.0,
+        play_seconds: float = 30.0,
+        fade_in_ms: int = 3000,
+        fade_out_ms: int = 3000,
+        volume: float = 0.8,
+        channel_index: int = 6,
+    ):
+        self.song_path = song_path
+        self.start_seconds = max(0.0, float(start_seconds))
+        self.play_seconds = max(0.0, float(play_seconds))
+        self.fade_in_ms = max(0, int(fade_in_ms))
+        self.fade_out_ms = max(0, int(fade_out_ms))
+        self.volume = max(0.0, min(1.0, float(volume)))
+        self.channel_index = int(channel_index)
+
+        self._source_sound: Optional[pygame.mixer.Sound] = None
+        self._trimmed_sound: Optional[pygame.mixer.Sound] = None
+        self._channel: Optional[pygame.mixer.Channel] = None
+        self._sound_loaded = False
+        self._play_started = False
+        self._fadeout_started = False
+        self._finished = False
+        self._start_time: Optional[float] = None
+
+    def _resolve_song_path(self) -> str:
+        if os.path.isabs(self.song_path):
+            return self.song_path
+
+        base_dir = os.path.dirname(__file__)
+        return os.path.normpath(os.path.join(base_dir, self.song_path))
+
+    @property
+    def is_finished(self) -> bool:
+        return self._finished
+
+    def _ensure_mixer(self):
+        if pygame.mixer.get_init():
+            return True
+
+        try:
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+            return True
+        except Exception as exc:
+            print(f"[SongAudio] ERROR initializing mixer: {exc}")
+            return False
+
+    def _ensure_channel(self):
+        if not pygame.mixer.get_init():
+            return False
+
+        try:
+            if pygame.mixer.get_num_channels() <= self.channel_index:
+                pygame.mixer.set_num_channels(self.channel_index + 1)
+            if self._channel is None:
+                self._channel = pygame.mixer.Channel(self.channel_index)
+            return True
+        except Exception as exc:
+            print(f"[SongAudio] ERROR allocating channel {self.channel_index}: {exc}")
+            return False
+
+    def _load_sound(self):
+        if self._sound_loaded:
+            return
+
+        if not self._ensure_mixer():
+            return
+
+        resolved_song_path = self._resolve_song_path()
+
+        if not os.path.exists(resolved_song_path):
+            print(f"[SongAudio] ERROR: File not found: {resolved_song_path}")
+            return
+
+        try:
+            self._source_sound = pygame.mixer.Sound(resolved_song_path)
+            source_array = pygame.sndarray.array(self._source_sound)
+            sample_rate = pygame.mixer.get_init()[0]
+            start_sample = int(self.start_seconds * sample_rate)
+            segment_seconds = self.play_seconds + (self.fade_out_ms / 1000.0)
+            segment_samples = max(1, int(segment_seconds * sample_rate))
+            end_sample = start_sample + segment_samples
+            trimmed_array = source_array[start_sample:end_sample]
+
+            if trimmed_array.size == 0:
+                print(f"[SongAudio] ERROR: Segment is empty after trimming: {self.song_path}")
+                return
+
+            self._trimmed_sound = pygame.sndarray.make_sound(np.ascontiguousarray(trimmed_array))
+            self._trimmed_sound.set_volume(self.volume)
+            self._sound_loaded = True
+            print(
+                f"[SongAudio] Loaded segment: path={resolved_song_path} start={self.start_seconds:.2f}s "
+                f"play={self.play_seconds:.2f}s fade_out={self.fade_out_ms}ms"
+            )
+        except Exception as exc:
+            print(f"[SongAudio] ERROR loading {resolved_song_path}: {exc}")
+
+    def play(self, sim_time: Optional[float] = None):
+        if self._finished:
+            return False
+
+        if not self._sound_loaded:
+            self._load_sound()
+
+        if self._trimmed_sound is None or not self._ensure_channel():
+            return False
+
+        if self._channel.get_busy():
+            return True
+
+        self._channel.play(self._trimmed_sound, fade_ms=self.fade_in_ms)
+        self._channel.set_volume(self.volume)
+        self._play_started = True
+        self._fadeout_started = False
+        self._finished = False
+        self._start_time = float(sim_time) if sim_time is not None else time.time()
+        print(f"[SongAudio] Playback started on channel {self.channel_index}")
+        return True
+
+    def update(self, sim_time: Optional[float] = None):
+        if not self._play_started or self._finished:
+            return
+
+        if self._start_time is None:
+            self._start_time = float(sim_time) if sim_time is not None else time.time()
+
+        now = float(sim_time) if sim_time is not None else time.time()
+        elapsed = now - self._start_time
+
+        if (not self._fadeout_started) and elapsed >= self.play_seconds:
+            if self._channel is not None:
+                self._channel.fadeout(self.fade_out_ms)
+            self._fadeout_started = True
+            print(f"[SongAudio] Fade-out started after {elapsed:.2f}s")
+
+        if self._fadeout_started and self._channel is not None and not self._channel.get_busy():
+            self._finished = True
+            print("[SongAudio] Playback finished")
+
+    def stop(self, fadeout_ms: Optional[int] = None):
+        if fadeout_ms is None:
+            fadeout_ms = self.fade_out_ms
+
+        if self._channel is not None:
+            if fadeout_ms > 0:
+                self._channel.fadeout(int(fadeout_ms))
+            else:
+                self._channel.stop()
+
+        self._play_started = False
+        self._fadeout_started = False
+        self._finished = True
 
 class DummyAudioGenerator:
     """No-op audio generator - does nothing when audio is disabled."""
