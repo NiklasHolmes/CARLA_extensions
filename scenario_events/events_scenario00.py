@@ -21,7 +21,7 @@ ENABLE_ROUTE_PEDESTRIANS = True
 PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
 PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=216.3, y=4.9, z=1.85)
 PEDESTRIAN_TARGET_LOCATION = carla.Location(x=306.7, y=4.9, z=0.35)
-PEDESTRIAN_MAX_SPEED = 1.4
+PEDESTRIAN_MAX_SPEED = 3
 PEDESTRIAN_WAIT_TIMEOUT_S = 180.0
 PEDESTRIAN_STEP_S = 0.05
 PEDESTRIAN_ARRIVE_THRESH = 1.0
@@ -114,18 +114,13 @@ class Scenario00Runner:
         self._last_forced_light_id = None
         self._last_forced_light_time = None
 
-    def _ensure_synchronous_mode(self):
-        settings = self.world.get_settings()
-        if not settings.synchronous_mode or settings.fixed_delta_seconds != 0.05:
-            settings.synchronous_mode = True
-            settings.fixed_delta_seconds = 0.05
-            self.world.apply_settings(settings)
-
+    def _get_traffic_manager(self):
         try:
             tm = self.client.get_trafficmanager(self._tm_port)
         except Exception:
             tm = self.client.get_trafficmanager()
-        tm.set_synchronous_mode(True)
+        tm.set_synchronous_mode(self.world.get_settings().synchronous_mode)
+        return tm
 
     def _project_location_to_navigation(self, location):
         waypoint = self.world.get_map().get_waypoint(
@@ -159,11 +154,7 @@ class Scenario00Runner:
                 if actor: self._static_actor_ids.append(actor.id)
 
     def _spawn_dynamic_traffic(self, ego_transform, sim_time):
-        try:
-            tm = self.client.get_trafficmanager(self._tm_port)
-            tm.set_synchronous_mode(self.world.get_settings().synchronous_mode)
-        except:
-            tm = self.client.get_trafficmanager()
+        tm = self._get_traffic_manager()
             
         spawn_points = list(self.world.get_map().get_spawn_points())
         self._rng.shuffle(spawn_points)
@@ -289,11 +280,10 @@ class Scenario00Runner:
 
     def run(self):
         print("[Scenario00] Running...")
-        self._ensure_synchronous_mode()
         self._spawn_static_prop_once()
         try:
             while True:
-                self.world.tick()
+                self.world.wait_for_tick()
                 snapshot = self.world.get_snapshot()
                 sim_time = snapshot.timestamp.elapsed_seconds
                 if self._start_sim_time is None: self._start_sim_time = sim_time

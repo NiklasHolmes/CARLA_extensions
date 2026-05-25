@@ -257,7 +257,7 @@ PROFILE_CONFIG = {
     },
     'simulator4home': {
         'cli_defaults': {
-            'res': '3840x1080',
+            'res': '960x540',
             'sp': 0.8,
             'input': 'keyboard',
             'rolename': 'hero',
@@ -410,6 +410,7 @@ def _stop_dashboard_process():
             pass
     finally:
         dashboard_process = None
+
 
 # ==============================================================================
 # -- Hardware Config  ----------------------------------------------------------
@@ -2533,16 +2534,7 @@ def game_loop(args):
 
     try:
         client = carla.Client(args.host, args.port)
-        client.set_timeout(2000.0)
-
-        # PoC:
-        # Load a specific map immediately (user-requested): Town02_Opt
-        #try:
-        #    sim_world = client.load_world('Town02_Opt')
-        #    print("[Info] Loaded world 'Town02_Opt'")
-        #except Exception as e:
-        #    print(f"[Warning] Failed to load 'Town02_Opt': {e}. Falling back to current world.")
-        #    sim_world = client.get_world()
+        client.set_timeout(30.0)
 
         sim_world = client.get_world()
         
@@ -2616,6 +2608,7 @@ def game_loop(args):
         else:
             controller = KeyboardControl(world, args.autopilot)
 
+
         if args.sync:
             sim_world.tick()
         else:
@@ -2632,6 +2625,7 @@ def game_loop(args):
                 event_sync.update()
             world.tick(clock)
             world.render(display)
+
 
             if world.capture_full_frame_once:
                 screenshot_path = os.path.join(
@@ -2821,3 +2815,4 @@ def main():
 if __name__ == '__main__':
 
     main()
+
