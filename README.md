@@ -74,7 +74,7 @@ Driving:
 - **Left stick** – Steer
 - **R2 trigger** – Throttle
 - **L2 trigger** – Brake
-- **X button** – Hand-brake
+- **X button** – Toogle all lights together (fog etc.)
 - **O button** – Toggle reverse
 
 Lights & signals:
