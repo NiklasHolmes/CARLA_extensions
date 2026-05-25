@@ -3,3 +3,4 @@ __pycache__/
 .vscode/
 .env
 requirements.local.txt
+manual_control_OLD.py

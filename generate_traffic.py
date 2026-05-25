@@ -11,7 +11,10 @@
 import carla
 
 from carla import VehicleLightState as vls
-from carla.command import SpawnActor, SetAutopilot, FutureActor, DestroyActor
+SpawnActor = carla.command.SpawnActor
+SetAutopilot = carla.command.SetAutopilot
+FutureActor = carla.command.FutureActor
+DestroyActor = carla.command.DestroyActor
 
 import argparse
 import logging
