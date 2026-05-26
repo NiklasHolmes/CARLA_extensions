@@ -213,7 +213,7 @@ WINDOW_BORDERLESS = True
 # Dashboard config (code-only, no terminal input required) => Modes: 'none', 'inside', 'basic', 'second_screen', 'overlapping'
 DASHBOARD_MODE = 'none'
 # Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
-DASHBOARD_SIZE = (960, 540)
+DASHBOARD_SIZE = (800, 450)
 # Monitor index used by second_screen mode (0-based)
 DB_SCREEN_INDEX = 2
 
@@ -264,7 +264,7 @@ PROFILE_CONFIG = {
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'none',
+            'DASHBOARD_MODE': 'overlapping',
             'ENABLE_AUDIO': False,
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,

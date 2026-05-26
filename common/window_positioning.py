@@ -254,7 +254,7 @@ def move_window_overlapping_windows(
     min_delta=1,
     show_window=True,
 ):
-    """Place a window at bottom-left of another window and above it. Returns (x, y) or None."""
+    """Place a window at bottom-center of another window and above it. Returns (x, y) or None."""
     if os.name != 'nt' or not hwnd:
         return None
 
@@ -277,14 +277,13 @@ def move_window_overlapping_windows(
         margin_x = max(0, int(overlap_margin[0]))
         margin_y = max(0, int(overlap_margin[1]))
 
-        target_x = int(rect.left + margin_x)
-        target_y = int(rect.bottom - height - margin_y)
+        target_x = int(rect.left + (rect.right - rect.left - width) / 2 + margin_x)
+        target_y = int(rect.bottom - height - margin_y + height * 0.10)
 
         rects = _windows_monitor_rects()
         for left, top, right, bottom in rects:
             if left <= rect.left < right and top <= rect.top < bottom:
-                target_x = max(left, min(target_x, right - width))
-                target_y = max(top, min(target_y, bottom - height))
+                target_y = max(top, target_y)
                 break
 
         if previous_target is not None:

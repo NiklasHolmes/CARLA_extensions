@@ -29,8 +29,8 @@ from common.window_positioning import (
 # Switch window size mode:
 # - None => fullscreen on selected monitor
 # - (width, height) => fixed dashboard window size
-DEFAULT_DASHBOARD_SIZE = (960, 540)              # (960, 540)  (1920, 1080) 
-DASHBOARD_DEFAULT_OVERLAP_MARGIN = (16, 16)
+DEFAULT_DASHBOARD_SIZE = (800, 450)              # (960, 540)  (1920, 1080) 
+DASHBOARD_DEFAULT_OVERLAP_MARGIN = (0, 0)
 
 DASHBOARD_SUPPORTED_MODES = ('basic', 'second_screen', 'overlapping')
 DEFAULT_DASHBOARD_MODE = 'basic'
@@ -562,7 +562,7 @@ if __name__ == '__main__':
         '--overlap-margin',
         metavar='X,Y',
         default=f'{DASHBOARD_DEFAULT_OVERLAP_MARGIN[0]},{DASHBOARD_DEFAULT_OVERLAP_MARGIN[1]}',
-        help='margin from bottom-left corner of main window in overlapping mode (default: 16,16)')
+        help='offset from bottom-center of main window in overlapping mode (default: 0,0)')
     argparser.add_argument(
         '--always-on-top',
         action='store_true',
