@@ -7,9 +7,9 @@ import time
 import argparse
 import carla
 try:
-    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
 from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
 from generate_audio import SongAudio
 
@@ -233,16 +233,7 @@ class Scenario00Runner:
 
         return None
 
-    def _get_random_pedestrian_blueprint(self):
-        blueprints = get_actor_blueprints(self.world, "walker.pedestrian.*")
-        if not blueprints:
-            return self.world.get_blueprint_library().find(PEDESTRIAN_BLUEPRINT_ID)
-        walker_bp = self._rng.choice(blueprints)
-        if walker_bp.has_attribute("is_invincible"):
-            walker_bp.set_attribute("is_invincible", "false")
-        if walker_bp.has_attribute("can_use_wheelchair") and self._rng.randint(0, 100) < 11:
-            walker_bp.set_attribute("use_wheelchair", "true")
-        return walker_bp
+    # pedestrian blueprint selection delegated to scenario_helper.get_random_pedestrian_blueprint
 
     def _get_random_pedestrian_speed(self):
         min_speed = 1.5
@@ -286,7 +277,7 @@ class Scenario00Runner:
         # self.logger.info(f"_spawn_pedestrians called; ego_transform={ego_transform}")
 
         for index in range(PEDESTRIAN_COUNT):
-            walker_bp = self._get_random_pedestrian_blueprint()
+            walker_bp = get_random_pedestrian_blueprint(self.world, self._rng, excluded_ids=None, max_numeric_id=50)
             if index == 0:
                 target_location = carla.Location(
                     x=PEDESTRIAN_TARGET_LOCATION.x,

@@ -5,6 +5,7 @@ import math
 # import logging
 import os
 import sys
+import re
 
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
@@ -139,3 +140,43 @@ def pick_hidden_navigation_location_near(world, center_location, ego_transform, 
         return location
 
     return None
+
+
+def get_random_pedestrian_blueprint(world, rng, excluded_ids=None, max_numeric_id=50, fallback_bp_id="walker.pedestrian.0046"):
+    """Return a randomized pedestrian blueprint from the world's blueprint library.
+
+    - Filters walker.pedestrian.* blueprints to those whose trailing numeric ID <= max_numeric_id.
+    - Respects an optional set of excluded blueprint IDs.
+    - Applies the same attribute tweaks (is_invincible=false, occasional wheelchair) as before.
+    - Falls back to `fallback_bp_id` if no blueprints are found.
+    """
+    def _get_actor_blueprints(filter_pattern):
+        bps = list(world.get_blueprint_library().filter(filter_pattern))
+        return bps
+
+    blueprints = _get_actor_blueprints("walker.pedestrian.*")
+    if not blueprints:
+        return world.get_blueprint_library().find(fallback_bp_id)
+
+    filtered_by_id = []
+    for bp in blueprints:
+        m = re.search(r"(\d+)$", bp.id)
+        if m:
+            try:
+                if int(m.group(1)) <= int(max_numeric_id):
+                    filtered_by_id.append(bp)
+            except Exception:
+                continue
+    if filtered_by_id:
+        blueprints = filtered_by_id
+
+    excluded_ids = set(excluded_ids or [])
+    available_blueprints = [bp for bp in blueprints if bp.id not in excluded_ids]
+    pool = available_blueprints if available_blueprints else blueprints
+
+    walker_bp = rng.choice(pool)
+    if walker_bp.has_attribute("is_invincible"):
+        walker_bp.set_attribute("is_invincible", "false")
+    if walker_bp.has_attribute("can_use_wheelchair") and rng.randint(0, 100) < 11:
+        walker_bp.set_attribute("use_wheelchair", "true")
+    return walker_bp

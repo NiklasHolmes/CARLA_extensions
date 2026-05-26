@@ -3,13 +3,14 @@
 #import logging
 import os
 import random
+import re
 import time
 import argparse
 import carla
 try:
-    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
@@ -214,10 +215,20 @@ class Scenario04Runner:
 
         return None
 
-    def _get_random_pedestrian_blueprint(self, excluded_ids=None):
-        blueprints = get_actor_blueprints(self.world, "walker.pedestrian.*")
-        if not blueprints:
-            return self.world.get_blueprint_library().find(PEDESTRIAN_BLUEPRINT_ID)
+    # pedestrian blueprint selection delegated to scenario_helper.get_random_pedestrian_blueprint
+    # The method _get_random_pedestrian_blueprint has been removed to avoid duplication.
+        # Filter blueprints to only those with a numeric suffix <= 0050 (inclusive).
+        filtered_by_id = []
+        for bp in blueprints:
+            m = re.search(r"(\d+)$", bp.id)
+            if m:
+                try:
+                    if int(m.group(1)) <= 50:
+                        filtered_by_id.append(bp)
+                except Exception:
+                    continue
+        if filtered_by_id:
+            blueprints = filtered_by_id
 
         excluded_ids = set(excluded_ids or [])
         available_blueprints = [bp for bp in blueprints if bp.id not in excluded_ids]
@@ -306,7 +317,7 @@ class Scenario04Runner:
             #     )
             # spawn_location = nav_spawn_location
 
-            walker_bp = self._get_random_pedestrian_blueprint(used_blueprint_ids)
+            walker_bp = get_random_pedestrian_blueprint(self.world, self._rng, excluded_ids=used_blueprint_ids, max_numeric_id=50)
             used_blueprint_ids.add(walker_bp.id)
 
             used_locations.append(spawn_location)
