@@ -129,6 +129,7 @@ class Scenario04Runner:
         self._duck_pedestrian_spawned = False
         self._duck_pedestrian_actor_id = None
         self._duck_pedestrian_spawn_time = None
+        self._duck_spawn_last_warning_time = None
         self._enter_requested = threading.Event()
         self._enter_listener_started = False
         self._song_started = False
@@ -434,6 +435,7 @@ class Scenario04Runner:
         walker_bp = self.world.get_blueprint_library().find(blueprint_id)
         if walker_bp.has_attribute("is_invincible"):
             walker_bp.set_attribute("is_invincible", "false")
+        sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
         # First try to spawn in front of the ego on the sidewalk
         front_transform = self._find_sidewalk_spawn_transform(
             ego_transform,
@@ -477,15 +479,19 @@ class Scenario04Runner:
                 return actor
 
         if last_spawn_transform is None:
-            print(
-                f"[Scenario04] WARNUNG: Kein Gehsteig-Spawnpunkt für {label} gefunden | "
-                f"max_distance={max_distance:.1f}m"
-            )
+            if self._duck_spawn_last_warning_time is None or (sim_time - self._duck_spawn_last_warning_time) >= 10.0:
+                print(
+                    f"[Scenario04] WARNUNG: Kein Gehsteig-Spawnpunkt für {label} gefunden | "
+                    f"max_distance={max_distance:.1f}m"
+                )
+                self._duck_spawn_last_warning_time = sim_time
         else:
-            print(
-                f"[Scenario04] WARNUNG: {label} konnte nicht gespawnt werden | "
-                f"spawn=({last_spawn_transform.location.x:.2f}, {last_spawn_transform.location.y:.2f}, {last_spawn_transform.location.z:.2f})"
-            )
+            if self._duck_spawn_last_warning_time is None or (sim_time - self._duck_spawn_last_warning_time) >= 10.0:
+                print(
+                    f"[Scenario04] WARNUNG: {label} konnte nicht gespawnt werden | "
+                    f"spawn=({last_spawn_transform.location.x:.2f}, {last_spawn_transform.location.y:.2f}, {last_spawn_transform.location.z:.2f})"
+                )
+                self._duck_spawn_last_warning_time = sim_time
         return None
 
     def _spawn_duck_pedestrian(self, ego_transform):
@@ -780,11 +786,7 @@ class Scenario04Runner:
         if self._duck_pedestrian_spawned and self._duck_pedestrian_spawn_time is not None:
             return (sim_time - self._duck_pedestrian_spawn_time) >= DUCK_TO_END_DELAY_SECONDS
 
-        return (
-            self._song_finished
-            and self._song_finish_time is not None
-            and (sim_time - self._song_finish_time) >= (SONG_TO_DUCK_DELAY_SECONDS + DUCK_SPAWN_MAX_WAIT_SECONDS)
-        )
+        return False
 
     def _start_enter_listener(self):
         if self._enter_listener_started:
