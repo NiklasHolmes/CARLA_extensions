@@ -120,6 +120,22 @@ def pick_hidden_navigation_location(world, ego_transform, used_locations=None, m
     return None
 
 
+def pick_navigation_location(world, used_locations=None, min_route_distance=5.0, sample_count=96):
+    used_locations = used_locations or []
+
+    for _ in range(sample_count):
+        location = world.get_random_location_from_navigation()
+        if location is None:
+            continue
+
+        if any(location.distance(existing) < min_route_distance for existing in used_locations):
+            continue
+
+        return location
+
+    return None
+
+
 def pick_hidden_navigation_location_near(world, center_location, ego_transform, used_locations=None, min_distance=90.0, max_distance=260.0, min_route_distance=5.0, sample_count=192, search_radius=35.0):
     used_locations = used_locations or []
 
