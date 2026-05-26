@@ -15,11 +15,12 @@ from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
 # Constants
-ANIMPED_TO_SONG_DELAY_SECONDS = 4.0
-SONG_TO_DUCK_DELAY_SECONDS = 5.0
+ANIMPED_TO_SONG_DELAY_SECONDS = 2.0
+SONG_TO_DUCK_DELAY_SECONDS = 2.0
+DUCK_TO_END_DELAY_SECONDS = 300.0
 
 SONG_START_OFFSET_SECONDS = 30.0
-SONG_PLAY_DURATION_SECONDS = 30.0
+SONG_PLAY_DURATION_SECONDS = 2.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
@@ -44,6 +45,17 @@ PEDESTRIAN_NAV_SAMPLES = 96
 ANIMATED_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
 ANIMATED_PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=284.90, y=-180.30, z=0.30)
 ANIMATED_PEDESTRIAN_SPAWN_ROTATION = carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+DUCK_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
+DUCK_MAX_DISTANCE = 50.0
+DUCK_MIN_DISTANCE = 0.0
+DUCK_SEARCH_SAMPLES = 128
+DUCK_SPAWN_CLEARANCE_METERS = 2.0
+DUCK_SPAWN_HEIGHT_OFFSET = 1.0
+DUCK_MAX_SPAWN_ATTEMPTS = 12
+DUCK_VISIBLE_SECONDS = 60.0
+DUCK_SPAWN_MAX_WAIT_SECONDS = 20.0
+DUCK_PREFERRED_AHEAD_DISTANCE = 50.0
+DUCK_AHEAD_SEARCH_RADIUS = 20.0
 
 PEDESTRIAN_START_LOCATIONS = [
     carla.Location(x=137.80, y=-178.60, z=0.40),
@@ -114,6 +126,9 @@ class Scenario04Runner:
         self._animated_pedestrian_spawned = False
         self._animated_pedestrian_actor_id = None
         self._animated_pedestrian_spawn_time = None
+        self._duck_pedestrian_spawned = False
+        self._duck_pedestrian_actor_id = None
+        self._duck_pedestrian_spawn_time = None
         self._enter_requested = threading.Event()
         self._enter_listener_started = False
         self._song_started = False
@@ -252,6 +267,245 @@ class Scenario04Runner:
         )
         return True
 
+    def _find_sidewalk_spawn_transform(self, ego_transform, prefer_ahead=True, ahead_distance=DUCK_PREFERRED_AHEAD_DISTANCE, search_radius=DUCK_AHEAD_SEARCH_RADIUS, min_distance=DUCK_MIN_DISTANCE, max_distance=DUCK_MAX_DISTANCE, used_locations=None):
+        """Find a sidewalk spawn transform near ego.
+
+        If prefer_ahead is True, first search navigation samples near a point
+        ahead of the ego (centered at ahead_distance, within search_radius).
+        If that fails (or prefer_ahead is False), perform a broader random
+        navigation sampling constrained by min/max distance from ego.
+
+        Returns a carla.Transform or None.
+        """
+        if ego_transform is None:
+            return None
+
+        used_locations = used_locations or []
+        ego_location = ego_transform.location
+        car_map = self.world.get_map()
+
+        # Build list of existing actor locations for clearance checks
+        actor_locations = []
+        for actor in self.world.get_actors():
+            try:
+                actor_locations.append(actor.get_location())
+            except Exception:
+                continue
+
+        # Define a generator for candidate locations depending on mode
+        def candidate_iterator(prefer_center=None):
+            for _ in range(DUCK_SEARCH_SAMPLES):
+                loc = self.world.get_random_location_from_navigation()
+                if loc is None:
+                    continue
+                if prefer_center is not None and loc.distance(prefer_center) > search_radius:
+                    continue
+                yield loc
+
+        # Try preferred-ahead sampling first
+        if prefer_ahead:
+            forward = ego_transform.get_forward_vector()
+            center = carla.Location(
+                x=ego_location.x + forward.x * ahead_distance,
+                y=ego_location.y + forward.y * ahead_distance,
+                z=ego_location.z,
+            )
+            for location in candidate_iterator(prefer_center=center):
+                distance = location.distance(ego_location)
+                if distance < min_distance or distance > max_distance:
+                    continue
+                if any(location.distance(existing) < PEDESTRIAN_MIN_ROUTE_DISTANCE for existing in used_locations):
+                    continue
+                waypoint = car_map.get_waypoint(
+                    location,
+                    project_to_road=False,
+                    lane_type=carla.LaneType.Sidewalk,
+                )
+                if waypoint is None:
+                    continue
+                waypoint_location = waypoint.transform.location
+                if waypoint_location.distance(ego_location) > max_distance:
+                    continue
+                if any(waypoint_location.distance(existing) < DUCK_SPAWN_CLEARANCE_METERS for existing in actor_locations):
+                    continue
+                spawn_location = carla.Location(
+                    x=waypoint_location.x,
+                    y=waypoint_location.y,
+                    z=waypoint_location.z + DUCK_SPAWN_HEIGHT_OFFSET,
+                )
+                base_rot = waypoint.transform.rotation
+                rot = carla.Rotation(pitch=base_rot.pitch, yaw=base_rot.yaw + 90.0, roll=base_rot.roll)
+                return carla.Transform(spawn_location, rot)
+
+        # Fallback to broader sampling around the map
+        for location in candidate_iterator(prefer_center=None):
+            distance = location.distance(ego_location)
+            if distance < min_distance or distance > max_distance:
+                continue
+            if any(location.distance(existing) < PEDESTRIAN_MIN_ROUTE_DISTANCE for existing in used_locations):
+                continue
+            waypoint = car_map.get_waypoint(
+                location,
+                project_to_road=False,
+                lane_type=carla.LaneType.Sidewalk,
+            )
+            if waypoint is None:
+                continue
+            waypoint_location = waypoint.transform.location
+            if waypoint_location.distance(ego_location) > max_distance:
+                continue
+            if any(waypoint_location.distance(existing) < DUCK_SPAWN_CLEARANCE_METERS for existing in actor_locations):
+                continue
+            spawn_location = carla.Location(
+                x=waypoint_location.x,
+                y=waypoint_location.y,
+                z=waypoint_location.z + DUCK_SPAWN_HEIGHT_OFFSET,
+            )
+            base_rot = waypoint.transform.rotation
+            rot = carla.Rotation(pitch=base_rot.pitch, yaw=base_rot.yaw + 90.0, roll=base_rot.roll)
+            return carla.Transform(spawn_location, rot)
+
+        return None
+
+    def _find_sidewalk_spawn_transform_in_front_of_ego(self, ego_transform, ahead_distance=DUCK_PREFERRED_AHEAD_DISTANCE, search_radius=DUCK_AHEAD_SEARCH_RADIUS, min_distance=DUCK_MIN_DISTANCE, max_distance=DUCK_MAX_DISTANCE, used_locations=None):
+        if ego_transform is None:
+            return None
+
+        used_locations = used_locations or []
+        ego_location = ego_transform.location
+        forward = ego_transform.get_forward_vector()
+        center = carla.Location(
+            x=ego_location.x + forward.x * ahead_distance,
+            y=ego_location.y + forward.y * ahead_distance,
+            z=ego_location.z,
+        )
+        car_map = self.world.get_map()
+
+        actor_locations = []
+        for actor in self.world.get_actors():
+            try:
+                actor_locations.append(actor.get_location())
+            except Exception:
+                continue
+
+        for _ in range(DUCK_SEARCH_SAMPLES):
+            location = self.world.get_random_location_from_navigation()
+            if location is None:
+                continue
+
+            if location.distance(center) > search_radius:
+                continue
+
+            distance = location.distance(ego_location)
+            if distance < min_distance or distance > max_distance:
+                continue
+
+            if any(location.distance(existing) < PEDESTRIAN_MIN_ROUTE_DISTANCE for existing in used_locations):
+                continue
+
+            waypoint = car_map.get_waypoint(
+                location,
+                project_to_road=False,
+                lane_type=carla.LaneType.Sidewalk,
+            )
+            if waypoint is None:
+                continue
+
+            waypoint_location = waypoint.transform.location
+            if waypoint_location.distance(ego_location) > max_distance:
+                continue
+
+            if any(waypoint_location.distance(existing) < DUCK_SPAWN_CLEARANCE_METERS for existing in actor_locations):
+                continue
+
+            spawn_location = carla.Location(
+                x=waypoint_location.x,
+                y=waypoint_location.y,
+                z=waypoint_location.z + DUCK_SPAWN_HEIGHT_OFFSET,
+            )
+
+            base_rot = waypoint.transform.rotation
+            rot = carla.Rotation(pitch=base_rot.pitch, yaw=base_rot.yaw + 90.0, roll=base_rot.roll)
+            return carla.Transform(spawn_location, rot)
+
+        return None
+
+    def _spawn_stationary_pedestrian(self, blueprint_id, ego_transform, label, min_distance=DUCK_MIN_DISTANCE, max_distance=DUCK_MAX_DISTANCE, used_locations=None):
+        walker_bp = self.world.get_blueprint_library().find(blueprint_id)
+        if walker_bp.has_attribute("is_invincible"):
+            walker_bp.set_attribute("is_invincible", "false")
+        # First try to spawn in front of the ego on the sidewalk
+        front_transform = self._find_sidewalk_spawn_transform(
+            ego_transform,
+            prefer_ahead=True,
+            ahead_distance=DUCK_PREFERRED_AHEAD_DISTANCE,
+            search_radius=DUCK_AHEAD_SEARCH_RADIUS,
+            min_distance=min_distance,
+            max_distance=max_distance,
+            used_locations=used_locations,
+        )
+        if front_transform is not None:
+            actor = self.world.try_spawn_actor(walker_bp, front_transform)
+            if actor is not None:
+                self._walker_actor_ids.append(actor.id)
+                print(
+                    f"[Scenario04] {label} gespawnt (vor dem Auto): id={actor.id}, blueprint={blueprint_id}, "
+                    f"spawn=({front_transform.location.x:.2f}, {front_transform.location.y:.2f}, {front_transform.location.z:.2f})"
+                )
+                return actor
+
+        last_spawn_transform = None
+        for _ in range(DUCK_MAX_SPAWN_ATTEMPTS):
+            spawn_transform = self._find_sidewalk_spawn_transform(
+                ego_transform,
+                prefer_ahead=False,
+                min_distance=min_distance,
+                max_distance=max_distance,
+                used_locations=used_locations,
+            )
+            if spawn_transform is None:
+                continue
+
+            last_spawn_transform = spawn_transform
+            actor = self.world.try_spawn_actor(walker_bp, spawn_transform)
+            if actor is not None:
+                self._walker_actor_ids.append(actor.id)
+                print(
+                    f"[Scenario04] {label} gespawnt: id={actor.id}, blueprint={blueprint_id}, "
+                    f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
+                )
+                return actor
+
+        if last_spawn_transform is None:
+            print(
+                f"[Scenario04] WARNUNG: Kein Gehsteig-Spawnpunkt für {label} gefunden | "
+                f"max_distance={max_distance:.1f}m"
+            )
+        else:
+            print(
+                f"[Scenario04] WARNUNG: {label} konnte nicht gespawnt werden | "
+                f"spawn=({last_spawn_transform.location.x:.2f}, {last_spawn_transform.location.y:.2f}, {last_spawn_transform.location.z:.2f})"
+            )
+        return None
+
+    def _spawn_duck_pedestrian(self, ego_transform):
+        if self._duck_pedestrian_spawned:
+            return True
+
+        actor = self._spawn_stationary_pedestrian(
+            DUCK_PEDESTRIAN_BLUEPRINT_ID,
+            ego_transform,
+            "Duck",
+            max_distance=DUCK_MAX_DISTANCE,
+        )
+        if actor is None:
+            return False
+
+        self._duck_pedestrian_spawned = True
+        self._duck_pedestrian_actor_id = actor.id
+        self._duck_pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        return True
+
     def _should_spawn_animated_pedestrian(self):
         if self._animated_pedestrian_spawned:
             return False
@@ -264,6 +518,14 @@ class Scenario04Runner:
             and not self._song_started
             and self._animated_pedestrian_spawn_time is not None
             and (sim_time - self._animated_pedestrian_spawn_time) >= ANIMPED_TO_SONG_DELAY_SECONDS
+        )
+
+    def _should_spawn_duck_pedestrian(self, sim_time):
+        return (
+            self._song_finished
+            and not self._duck_pedestrian_spawned
+            and self._song_finish_time is not None
+            and (sim_time - self._song_finish_time) >= SONG_TO_DUCK_DELAY_SECONDS
         )
 
     def _get_random_pedestrian_speed(self):
@@ -515,7 +777,14 @@ class Scenario04Runner:
         return all_done
 
     def _should_end_scenario(self, sim_time):
-        return self._song_finished and self._song_finish_time is not None and (sim_time - self._song_finish_time) >= SONG_TO_DUCK_DELAY_SECONDS
+        if self._duck_pedestrian_spawned and self._duck_pedestrian_spawn_time is not None:
+            return (sim_time - self._duck_pedestrian_spawn_time) >= DUCK_TO_END_DELAY_SECONDS
+
+        return (
+            self._song_finished
+            and self._song_finish_time is not None
+            and (sim_time - self._song_finish_time) >= (SONG_TO_DUCK_DELAY_SECONDS + DUCK_SPAWN_MAX_WAIT_SECONDS)
+        )
 
     def _start_enter_listener(self):
         if self._enter_listener_started:
@@ -566,6 +835,9 @@ class Scenario04Runner:
                         self._start_enter_listener()
 
                     self._update_song(sim_time)
+
+                    if self._should_spawn_duck_pedestrian(sim_time):
+                        self._spawn_duck_pedestrian(ego_transform)
 
                     if self._should_end_scenario(sim_time):
                         self._scenario_done = True
