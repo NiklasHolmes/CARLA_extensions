@@ -244,6 +244,15 @@ class Scenario00Runner:
             walker_bp.set_attribute("use_wheelchair", "true")
         return walker_bp
 
+    def _get_random_pedestrian_speed(self):
+        min_speed = 1.5
+        max_speed = PEDESTRIAN_MAX_SPEED
+        steps = int(round((max_speed - min_speed) / 0.5))
+        if steps <= 0:
+            return max_speed
+        speed = min_speed + (0.5 * self._rng.randint(0, steps))
+        return min(speed, max_speed)
+
     def _spawn_batch_vehicles(self, points, bps, tm):
         batch = []
         for p in points:
@@ -272,6 +281,8 @@ class Scenario00Runner:
         walker_batch = []
         pedestrian_routes = []
         used_locations = []
+        skipped_visible_count = 0
+        skipped_no_target_count = 0
         # self.logger.info(f"_spawn_pedestrians called; ego_transform={ego_transform}")
 
         for index in range(PEDESTRIAN_COUNT):
@@ -305,7 +316,13 @@ class Scenario00Runner:
                         msg = "kein Hidden-Spawn gefunden; überspringe den festen Pedestrian."
                         print(f"[Scenario00] WARNUNG: {msg}")
                         # self.logger.info(msg)
+                        skipped_no_target_count += 1
                         continue
+                target_location = carla.Location(
+                    x=PEDESTRIAN_TARGET_LOCATION.x,
+                    y=PEDESTRIAN_TARGET_LOCATION.y,
+                    z=PEDESTRIAN_TARGET_LOCATION.z,
+                )
             else:
                 spawn_location = self._pick_hidden_navigation_location(
                     ego_transform,
@@ -314,6 +331,7 @@ class Scenario00Runner:
                     PEDESTRIAN_MAX_HIDDEN_DISTANCE,
                 )
                 if spawn_location is None:
+                    skipped_no_target_count += 1
                     continue
                 target_location = carla.Location(
                     x=PEDESTRIAN_TARGET_LOCATION.x,
@@ -330,15 +348,27 @@ class Scenario00Runner:
                 "current_target_location": target_location,
                 "heading_to_target": True,
                 "done": False,
+                "max_speed": self._get_random_pedestrian_speed(),
             })
 
-        print(f"[Scenario00] Spawne {PEDESTRIAN_COUNT} Pedestrians an zufälligen Hidden-Navigation-Punkten...")
+        print(
+            f"[Scenario00] Pedestrian-Anfrage: total={PEDESTRIAN_COUNT}, "
+            f"used={len(pedestrian_routes)}, skipped={skipped_visible_count + skipped_no_target_count} "
+            f"(visible={skipped_visible_count}, no_target={skipped_no_target_count})"
+        )
         walker_results = self.client.apply_batch_sync(walker_batch, False)
 
         spawned_walkers = []
+        collision_count = 0
         for index, result in enumerate(walker_results):
             if result.error:
-                print(f"[Scenario00] WARNUNG: Pedestrian konnte nicht gespawnt werden: {result.error}")
+                collision_count += 1
+                route = pedestrian_routes[index]
+                spawn_location = route["spawn_location"]
+                print(
+                    f"[Scenario00] WARNUNG: Pedestrian konnte nicht gespawnt werden: {result.error} | "
+                    f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
+                )
                 continue
             spawned_walkers.append((result.actor_id, pedestrian_routes[index]))
 
@@ -365,6 +395,12 @@ class Scenario00Runner:
             self._walker_actor_ids.append(walker_id)
             self._walker_controller_ids.append(controller_result.actor_id)
 
+        print(
+            f"[Scenario00] Pedestrian-Spawn-Resultat: success={len(successful_routes)}, "
+            f"collision={collision_count}, skipped={skipped_visible_count + skipped_no_target_count} "
+            f"(visible={skipped_visible_count}, no_target={skipped_no_target_count})"
+        )
+
         self._pedestrian_routes = successful_routes
         self._pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
         self._pedestrians_spawned = True
@@ -388,8 +424,8 @@ class Scenario00Runner:
             route["heading_to_target"] = True
             route["current_target_location"] = route["target_location"]
             controller.go_to_location(route["current_target_location"])
-            controller.set_max_speed(PEDESTRIAN_MAX_SPEED)
-            print(f"[Scenario00] Pedestrian {walker.id} ist jetzt unterwegs.")
+            controller.set_max_speed(route.get("max_speed", PEDESTRIAN_MAX_SPEED))
+            print(f"[Scenario00] Pedestrian {walker.id} ist jetzt unterwegs mit speed={route.get('max_speed', PEDESTRIAN_MAX_SPEED):.1f}.")
 
         self._pedestrians_started = True
 
