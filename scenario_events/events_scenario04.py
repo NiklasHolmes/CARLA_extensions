@@ -3,23 +3,21 @@
 #import logging
 import os
 import random
-import re
+import threading
 import time
 import argparse
 import carla
 try:
-    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
+    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_navigation_location, get_random_pedestrian_blueprint
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_navigation_location, get_random_pedestrian_blueprint
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
 # Constants
-TRAFFIC_SPAWN_DELAY_SECONDS = 5.0
-VEHICLE_ACTIVE_SECONDS = 0.0                    # if > 0 => vehicles will be removed; if = 0 => stay infinitely
-CAR_TO_PED_DELAY_SECONDS = 2.0
-PED_TO_SONG_DELAY_SECONDS = 7.0
-SONG_TO_END_DELAY_SECONDS = 5.0
+ANIMPED_TO_SONG_DELAY_SECONDS = 4.0
+SONG_TO_DUCK_DELAY_SECONDS = 5.0
+
 SONG_START_OFFSET_SECONDS = 30.0
 SONG_PLAY_DURATION_SECONDS = 30.0
 SONG_FADE_IN_MS = 3000
@@ -29,8 +27,7 @@ SPAWN_CARS = 5                              # 15?
 ENABLE_ROUTE_PEDESTRIANS = True
 PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
 PEDESTRIAN_MAX_SPEED = 3.5
-PEDESTRIAN_COUNT = 5                        # 15? 24 = no pedestrian walks
-PEDESTRIAN_WAIT_TIMEOUT_S = 40.0
+PEDESTRIAN_COUNT = 15                        # 15? 24 = no pedestrian walks
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 SIM_STEP_S = 0.05
 
@@ -44,6 +41,9 @@ PEDESTRIAN_MIN_HIDDEN_DISTANCE = 2.0
 PEDESTRIAN_MAX_HIDDEN_DISTANCE = 500.0
 PEDESTRIAN_MIN_ROUTE_DISTANCE = 5.0
 PEDESTRIAN_NAV_SAMPLES = 96
+ANIMATED_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
+ANIMATED_PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=284.90, y=-180.30, z=0.30)
+ANIMATED_PEDESTRIAN_SPAWN_ROTATION = carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
 
 PEDESTRIAN_START_LOCATIONS = [
     carla.Location(x=137.80, y=-178.60, z=0.40),
@@ -111,6 +111,11 @@ class Scenario04Runner:
         self._pedestrians_done = False
         self._pedestrian_spawn_time = None
         self._pedestrian_routes = []
+        self._animated_pedestrian_spawned = False
+        self._animated_pedestrian_actor_id = None
+        self._animated_pedestrian_spawn_time = None
+        self._enter_requested = threading.Event()
+        self._enter_listener_started = False
         self._song_started = False
         self._song_start_time = None
         self._song_finished = False
@@ -215,31 +220,51 @@ class Scenario04Runner:
 
         return None
 
-    # pedestrian blueprint selection delegated to scenario_helper.get_random_pedestrian_blueprint
-    # The method _get_random_pedestrian_blueprint has been removed to avoid duplication.
-        # Filter blueprints to only those with a numeric suffix <= 0050 (inclusive).
-        filtered_by_id = []
-        for bp in blueprints:
-            m = re.search(r"(\d+)$", bp.id)
-            if m:
-                try:
-                    if int(m.group(1)) <= 50:
-                        filtered_by_id.append(bp)
-                except Exception:
-                    continue
-        if filtered_by_id:
-            blueprints = filtered_by_id
+    def _spawn_animated_pedestrian(self):
+        if self._animated_pedestrian_spawned:
+            return True
 
-        excluded_ids = set(excluded_ids or [])
-        available_blueprints = [bp for bp in blueprints if bp.id not in excluded_ids]
-        pool = available_blueprints if available_blueprints else blueprints
-
-        walker_bp = self._rng.choice(pool)
+        walker_bp = self.world.get_blueprint_library().find(ANIMATED_PEDESTRIAN_BLUEPRINT_ID)
         if walker_bp.has_attribute("is_invincible"):
+            # Keep the animation actor as a normal physical walker.
             walker_bp.set_attribute("is_invincible", "false")
-        if walker_bp.has_attribute("can_use_wheelchair") and self._rng.randint(0, 100) < 11:
-            walker_bp.set_attribute("use_wheelchair", "true")
-        return walker_bp
+
+        transform = carla.Transform(
+            ANIMATED_PEDESTRIAN_SPAWN_LOCATION,
+            ANIMATED_PEDESTRIAN_SPAWN_ROTATION,
+        )
+        actor = self.world.try_spawn_actor(walker_bp, transform)
+        if actor is None:
+            print(
+                f"[Scenario04] WARNUNG: Animierter Pedestrian konnte nicht gespawnt werden | "
+                f"spawn=({transform.location.x:.2f}, {transform.location.y:.2f}, {transform.location.z:.2f})"
+            )
+            return False
+
+        self._animated_pedestrian_spawned = True
+        self._animated_pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        self._animated_pedestrian_actor_id = actor.id
+        self._walker_actor_ids.append(actor.id)
+        print(
+            f"[Scenario04] Animierter Pedestrian gespawnt: id={actor.id}, "
+            f"blueprint={ANIMATED_PEDESTRIAN_BLUEPRINT_ID}, "
+            f"spawn=({transform.location.x:.2f}, {transform.location.y:.2f}, {transform.location.z:.2f})"
+        )
+        return True
+
+    def _should_spawn_animated_pedestrian(self):
+        if self._animated_pedestrian_spawned:
+            return False
+
+        return self._enter_requested.is_set()
+
+    def _should_start_song(self, sim_time):
+        return (
+            self._animated_pedestrian_spawned
+            and not self._song_started
+            and self._animated_pedestrian_spawn_time is not None
+            and (sim_time - self._animated_pedestrian_spawn_time) >= ANIMPED_TO_SONG_DELAY_SECONDS
+        )
 
     def _get_random_pedestrian_speed(self):
         min_speed = 1.5
@@ -297,14 +322,23 @@ class Scenario04Runner:
                 skipped_visible_count += 1
                 continue
 
-            target_location = self._pick_hidden_navigation_location(
-                ego_transform,
+            target_location = pick_navigation_location(
+                self.world,
                 used_locations + [spawn_location],
-                PEDESTRIAN_MIN_HIDDEN_DISTANCE,
-                PEDESTRIAN_MAX_HIDDEN_DISTANCE,
+                min_route_distance=PEDESTRIAN_MIN_ROUTE_DISTANCE,
+                sample_count=PEDESTRIAN_NAV_SAMPLES,
             )
             if target_location is None:
-                print(f"[Scenario04] WARNUNG: Kein Hidden-Ziel gefunden für Startpunkt #{candidate_index + 1}; überspringe ihn.")
+                target_location = self._project_location_to_navigation(spawn_location)
+            if target_location is None:
+                target_location = self._pick_hidden_navigation_location(
+                    ego_transform,
+                    used_locations + [spawn_location],
+                    PEDESTRIAN_MIN_HIDDEN_DISTANCE,
+                    PEDESTRIAN_MAX_HIDDEN_DISTANCE,
+                )
+            if target_location is None:
+                print(f"[Scenario04] WARNUNG: Kein Ziel auf Navigation gefunden für Startpunkt #{candidate_index + 1}; überspringe ihn.")
                 skipped_no_target_count += 1
                 continue
 
@@ -449,14 +483,6 @@ class Scenario04Runner:
             self._start_pedestrians()
             return
 
-        group_timed_out = self._pedestrian_spawn_time is not None and (sim_time - self._pedestrian_spawn_time) > PEDESTRIAN_WAIT_TIMEOUT_S
-        if group_timed_out:
-            print("[Scenario04] Pedestrian Timeout.")           # doesn't delete them, just makes sure the pedestrian phase is at least that long
-            for route in self._pedestrian_routes:
-                route["done"] = True
-            self._pedestrians_done = True
-            return
-
         all_done = True
         for route in self._pedestrian_routes:
             if route.get("done"):
@@ -488,14 +514,24 @@ class Scenario04Runner:
         self._pedestrians_done = False
         return all_done
 
-    def _should_spawn_pedestrians(self, sim_time):
-        return self._cars_phase_done and not self._pedestrians_spawned and (sim_time - self._traffic_spawn_time) >= CAR_TO_PED_DELAY_SECONDS
-
-    def _should_start_song(self, sim_time):
-        return self._pedestrians_phase_done and not self._song_started and (sim_time - self._pedestrian_spawn_time) >= PED_TO_SONG_DELAY_SECONDS
-
     def _should_end_scenario(self, sim_time):
-        return self._song_finished and self._song_finish_time is not None and (sim_time - self._song_finish_time) >= SONG_TO_END_DELAY_SECONDS
+        return self._song_finished and self._song_finish_time is not None and (sim_time - self._song_finish_time) >= SONG_TO_DUCK_DELAY_SECONDS
+
+    def _start_enter_listener(self):
+        if self._enter_listener_started:
+            return
+        self._enter_listener_started = True
+
+        def _wait_for_enter():
+            try:
+                input()
+                self._enter_requested.set()
+                print("[Scenario04] Enter received; animated pedestrian spawn requested.")
+            except EOFError:
+                print("[Scenario04] WARNUNG: Kein stdin verfügbar; Enter-Trigger deaktiviert.")
+
+        listener_thread = threading.Thread(target=_wait_for_enter, daemon=True)
+        listener_thread.start()
 
     def run(self):
         print("[Scenario04] Running...")
@@ -514,37 +550,20 @@ class Scenario04Runner:
                     carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
                 )
                 
-                elapsed = sim_time - self._start_sim_time
-                if not self._traffic_spawned and elapsed >= TRAFFIC_SPAWN_DELAY_SECONDS:
+                if not self._traffic_spawned:
                     self._spawn_dynamic_traffic(ego_transform, sim_time)
                     self._traffic_spawned = True
                     self._traffic_spawn_time = sim_time
-                
-                if self._traffic_spawned and not self._vehicles_cleared:
-                    if VEHICLE_ACTIVE_SECONDS > 0 and (sim_time - self._traffic_spawn_time) >= VEHICLE_ACTIVE_SECONDS:
-                        destroyed_count = len(self._vehicle_actor_ids)
-                        print(
-                            f"[Scenario04] Destroying vehicles at sim_time={sim_time:.2f}s after "
-                            f"{sim_time - self._traffic_spawn_time:.2f}s active time: count={destroyed_count}"
-                        )
-                        self.client.apply_batch([carla.command.DestroyActor(x) for x in self._vehicle_actor_ids])
-                        self._vehicle_actor_ids = []
-                        self._vehicles_cleared = True
-                    elif VEHICLE_ACTIVE_SECONDS <= 0 and self._traffic_spawned and not self._vehicles_cleared:
-                        print(
-                            f"[Scenario04] Vehicle lifetime is infinite (VEHICLE_ACTIVE_SECONDS={VEHICLE_ACTIVE_SECONDS}); "
-                            f"keeping {len(self._vehicle_actor_ids)} vehicles active."
-                        )
-                        self._vehicles_cleared = True
+
+                if not self._pedestrians_spawned and ENABLE_ROUTE_PEDESTRIANS:
+                    self._spawn_pedestrians(ego_transform)
 
                 if ENABLE_ROUTE_PEDESTRIANS:
-                    if self._should_spawn_pedestrians(sim_time):
-                        self._spawn_pedestrians(ego_transform)
-                    else:
-                        self._update_pedestrians(sim_time)
+                    self._update_pedestrians(sim_time)
 
-                    if self._pedestrians_spawned and not self._song_started and self._should_start_song(sim_time):
-                        self._start_song(sim_time)
+                    if self._pedestrians_started and not self._enter_listener_started:
+                        print("[Scenario04] Dancing Manuel spawnen? Press Enter to start.", flush=True)
+                        self._start_enter_listener()
 
                     self._update_song(sim_time)
 
@@ -553,6 +572,12 @@ class Scenario04Runner:
 
                     if self._scenario_done:
                         return
+
+                if self._should_spawn_animated_pedestrian():
+                    self._spawn_animated_pedestrian()
+
+                if self._should_start_song(sim_time):
+                    self._start_song(sim_time)
                 
                 if ego:
                     self._force_green_light(ego, sim_time)
