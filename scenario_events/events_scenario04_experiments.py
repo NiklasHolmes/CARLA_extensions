@@ -16,8 +16,8 @@ from generate_audio import SongAudio
 
 # Constants
 ANIMPED_TO_SONG_DELAY_SECONDS = 2.0
-SONG_TO_DUCK_DELAY_SECONDS = 2.0
-DUCK_TO_END_DELAY_SECONDS = 300.0
+SONG_TO_DANCINGM_DELAY_SECONDS = 2.0
+DANCINGM_TO_END_DELAY_SECONDS = 300.0
 
 SONG_START_OFFSET_SECONDS = 30.0
 SONG_PLAY_DURATION_SECONDS = 2.0
@@ -45,17 +45,23 @@ PEDESTRIAN_NAV_SAMPLES = 96
 ANIMATED_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
 ANIMATED_PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=284.90, y=-180.30, z=0.30)
 ANIMATED_PEDESTRIAN_SPAWN_ROTATION = carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
-DUCK_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
-DUCK_MAX_DISTANCE = 50.0
-DUCK_MIN_DISTANCE = 0.0
-DUCK_SEARCH_SAMPLES = 128
-DUCK_SPAWN_CLEARANCE_METERS = 2.0
-DUCK_SPAWN_HEIGHT_OFFSET = 1.0
-DUCK_MAX_SPAWN_ATTEMPTS = 12
-DUCK_VISIBLE_SECONDS = 60.0
-DUCK_SPAWN_MAX_WAIT_SECONDS = 20.0
-DUCK_PREFERRED_AHEAD_DISTANCE = 50.0
-DUCK_AHEAD_SEARCH_RADIUS = 20.0
+DANCINGM_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
+DANCINGM_MAX_DISTANCE = 50.0
+DANCINGM_MIN_DISTANCE = 0.0
+DANCINGM_SEARCH_SAMPLES = 128
+DANCINGM_SPAWN_CLEARANCE_METERS = 2.0
+DANCINGM_SPAWN_HEIGHT_OFFSET = 1.0
+DANCINGM_MAX_SPAWN_ATTEMPTS = 12
+DANCINGM_VISIBLE_SECONDS = 60.0
+DANCINGM_SPAWN_MAX_WAIT_SECONDS = 20.0
+DANCINGM_PREFERRED_AHEAD_DISTANCE = 50.0
+DANCINGM_AHEAD_SEARCH_RADIUS = 20.0
+DANCINGM_FORWARD_MIN_DISTANCE = 45.0
+DANCINGM_FORWARD_MAX_DISTANCE = 55.0
+DANCINGM_TRAFFIC_LIGHT_LOOKAHEAD_METERS = 90.0
+DANCINGM_TRAFFIC_LIGHT_SPAWN_RADIUS = 18.0
+DANCINGM_TRAFFIC_LIGHT_RED_HOLD_SECONDS = 10.0
+DANCINGM_TRAFFIC_LIGHT_GREEN_RELEASE_SECONDS = 10.0
 
 PEDESTRIAN_START_LOCATIONS = [
     carla.Location(x=137.80, y=-178.60, z=0.40),
@@ -82,18 +88,6 @@ PEDESTRIAN_START_LOCATIONS = [
     carla.Location(x=89.0, y=365.30, z=-0.80),
     carla.Location(x=418.20, y=90.80, z=-0.70),
     carla.Location(x=405.80, y=93.90, z=-1.50),
-]
-
-STATIC_PROP_SPAWNS = [
-    {
-        "name": "mailbox",
-        "blueprints": ["static.prop.mailbox"],
-        "transform": carla.Transform(
-            carla.Location(x=249.20, y=127.00, z=0.10),
-            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-        ),
-        "scale": None,
-    }
 ]
 
 def get_actor_blueprints(world, filter_pattern):
@@ -126,10 +120,18 @@ class Scenario04Runner:
         self._animated_pedestrian_spawned = False
         self._animated_pedestrian_actor_id = None
         self._animated_pedestrian_spawn_time = None
-        self._duck_pedestrian_spawned = False
-        self._duck_pedestrian_actor_id = None
-        self._duck_pedestrian_spawn_time = None
-        self._duck_spawn_last_warning_time = None
+        self._dancingm_pedestrian_spawned = False
+        self._dancingm_pedestrian_actor_id = None
+        self._dancingm_pedestrian_spawn_time = None
+        self._dancingm_spawn_last_warning_time = None
+        self._dancingm_traffic_light_actor_id = None
+        self._dancingm_traffic_light_original_state = None
+        self._dancingm_traffic_light_forced_time = None
+        self._dancingm_confirmation_pending = False
+        self._dancingm_confirmation_listener_started = False
+        self._dancingm_confirmation_response = None
+        self._dancingm_release_active = False
+        self._dancingm_release_start_time = None
         self._enter_requested = threading.Event()
         self._enter_listener_started = False
         self._song_started = False
@@ -268,24 +270,56 @@ class Scenario04Runner:
         )
         return True
 
-    def _find_sidewalk_spawn_transform(self, ego_transform, prefer_ahead=True, ahead_distance=DUCK_PREFERRED_AHEAD_DISTANCE, search_radius=DUCK_AHEAD_SEARCH_RADIUS, min_distance=DUCK_MIN_DISTANCE, max_distance=DUCK_MAX_DISTANCE, used_locations=None):
-        """Find a sidewalk spawn transform near ego.
+    def _find_upcoming_traffic_light(self, ego_transform, lookahead_meters=DANCINGM_TRAFFIC_LIGHT_LOOKAHEAD_METERS):
+        if ego_transform is None:
+            return None
 
-        If prefer_ahead is True, first search navigation samples near a point
-        ahead of the ego (centered at ahead_distance, within search_radius).
-        If that fails (or prefer_ahead is False), perform a broader random
-        navigation sampling constrained by min/max distance from ego.
+        ego_location = ego_transform.location
+        ego_forward = ego_transform.get_forward_vector()
+        best_light = None
+        best_distance = None
 
-        Returns a carla.Transform or None.
+        for landmark in self.world.get_map().get_all_landmarks_of_type('1000001'):
+            if landmark.id == '':
+                continue
+
+            traffic_light = self.world.get_traffic_light(landmark)
+            if traffic_light is None:
+                continue
+
+            light_location = traffic_light.get_transform().location
+            dx = light_location.x - ego_location.x
+            dy = light_location.y - ego_location.y
+            dz = light_location.z - ego_location.z
+            distance = (dx * dx + dy * dy + dz * dz) ** 0.5
+            if distance > lookahead_meters:
+                continue
+
+            forward_dot = ego_forward.x * dx + ego_forward.y * dy + ego_forward.z * dz
+            if forward_dot <= 0.0:
+                continue
+
+            if best_distance is None or distance < best_distance:
+                best_light = traffic_light
+                best_distance = distance
+
+        return best_light
+
+    def _find_sidewalk_spawn_transform(self, ego_transform, center_location=None, ahead_distance=DANCINGM_PREFERRED_AHEAD_DISTANCE, search_radius=DANCINGM_AHEAD_SEARCH_RADIUS, min_distance=DANCINGM_MIN_DISTANCE, max_distance=DANCINGM_MAX_DISTANCE, min_forward_distance=DANCINGM_FORWARD_MIN_DISTANCE, max_forward_distance=DANCINGM_FORWARD_MAX_DISTANCE, used_locations=None):
+        """Find a sidewalk spawn transform that stays in front of ego.
+
+        If center_location is set, candidates are sampled near that point.
+        Otherwise the search is centered ahead of the ego by ahead_distance.
+        In both cases the candidate must remain within the forward distance band.
         """
         if ego_transform is None:
             return None
 
         used_locations = used_locations or []
         ego_location = ego_transform.location
+        ego_forward = ego_transform.get_forward_vector()
         car_map = self.world.get_map()
 
-        # Build list of existing actor locations for clearance checks
         actor_locations = []
         for actor in self.world.get_actors():
             try:
@@ -293,112 +327,21 @@ class Scenario04Runner:
             except Exception:
                 continue
 
-        # Define a generator for candidate locations depending on mode
-        def candidate_iterator(prefer_center=None):
-            for _ in range(DUCK_SEARCH_SAMPLES):
-                loc = self.world.get_random_location_from_navigation()
-                if loc is None:
-                    continue
-                if prefer_center is not None and loc.distance(prefer_center) > search_radius:
-                    continue
-                yield loc
-
-        # Try preferred-ahead sampling first
-        if prefer_ahead:
-            forward = ego_transform.get_forward_vector()
+        if center_location is not None:
+            center = center_location
+        else:
             center = carla.Location(
-                x=ego_location.x + forward.x * ahead_distance,
-                y=ego_location.y + forward.y * ahead_distance,
+                x=ego_location.x + ego_forward.x * ahead_distance,
+                y=ego_location.y + ego_forward.y * ahead_distance,
                 z=ego_location.z,
             )
-            for location in candidate_iterator(prefer_center=center):
-                distance = location.distance(ego_location)
-                if distance < min_distance or distance > max_distance:
-                    continue
-                if any(location.distance(existing) < PEDESTRIAN_MIN_ROUTE_DISTANCE for existing in used_locations):
-                    continue
-                waypoint = car_map.get_waypoint(
-                    location,
-                    project_to_road=False,
-                    lane_type=carla.LaneType.Sidewalk,
-                )
-                if waypoint is None:
-                    continue
-                waypoint_location = waypoint.transform.location
-                if waypoint_location.distance(ego_location) > max_distance:
-                    continue
-                if any(waypoint_location.distance(existing) < DUCK_SPAWN_CLEARANCE_METERS for existing in actor_locations):
-                    continue
-                spawn_location = carla.Location(
-                    x=waypoint_location.x,
-                    y=waypoint_location.y,
-                    z=waypoint_location.z + DUCK_SPAWN_HEIGHT_OFFSET,
-                )
-                base_rot = waypoint.transform.rotation
-                rot = carla.Rotation(pitch=base_rot.pitch, yaw=base_rot.yaw + 90.0, roll=base_rot.roll)
-                return carla.Transform(spawn_location, rot)
 
-        # Fallback to broader sampling around the map
-        for location in candidate_iterator(prefer_center=None):
-            distance = location.distance(ego_location)
-            if distance < min_distance or distance > max_distance:
-                continue
-            if any(location.distance(existing) < PEDESTRIAN_MIN_ROUTE_DISTANCE for existing in used_locations):
-                continue
-            waypoint = car_map.get_waypoint(
-                location,
-                project_to_road=False,
-                lane_type=carla.LaneType.Sidewalk,
-            )
-            if waypoint is None:
-                continue
-            waypoint_location = waypoint.transform.location
-            if waypoint_location.distance(ego_location) > max_distance:
-                continue
-            if any(waypoint_location.distance(existing) < DUCK_SPAWN_CLEARANCE_METERS for existing in actor_locations):
-                continue
-            spawn_location = carla.Location(
-                x=waypoint_location.x,
-                y=waypoint_location.y,
-                z=waypoint_location.z + DUCK_SPAWN_HEIGHT_OFFSET,
-            )
-            base_rot = waypoint.transform.rotation
-            rot = carla.Rotation(pitch=base_rot.pitch, yaw=base_rot.yaw + 90.0, roll=base_rot.roll)
-            return carla.Transform(spawn_location, rot)
-
-        return None
-
-    def _find_sidewalk_spawn_transform_in_front_of_ego(self, ego_transform, ahead_distance=DUCK_PREFERRED_AHEAD_DISTANCE, search_radius=DUCK_AHEAD_SEARCH_RADIUS, min_distance=DUCK_MIN_DISTANCE, max_distance=DUCK_MAX_DISTANCE, used_locations=None):
-        if ego_transform is None:
-            return None
-
-        used_locations = used_locations or []
-        ego_location = ego_transform.location
-        forward = ego_transform.get_forward_vector()
-        center = carla.Location(
-            x=ego_location.x + forward.x * ahead_distance,
-            y=ego_location.y + forward.y * ahead_distance,
-            z=ego_location.z,
-        )
-        car_map = self.world.get_map()
-
-        actor_locations = []
-        for actor in self.world.get_actors():
-            try:
-                actor_locations.append(actor.get_location())
-            except Exception:
-                continue
-
-        for _ in range(DUCK_SEARCH_SAMPLES):
+        for _ in range(DANCINGM_SEARCH_SAMPLES):
             location = self.world.get_random_location_from_navigation()
             if location is None:
                 continue
 
-            if location.distance(center) > search_radius:
-                continue
-
-            distance = location.distance(ego_location)
-            if distance < min_distance or distance > max_distance:
+            if center is not None and location.distance(center) > search_radius:
                 continue
 
             if any(location.distance(existing) < PEDESTRIAN_MIN_ROUTE_DISTANCE for existing in used_locations):
@@ -413,25 +356,32 @@ class Scenario04Runner:
                 continue
 
             waypoint_location = waypoint.transform.location
-            if waypoint_location.distance(ego_location) > max_distance:
+            dx = waypoint_location.x - ego_location.x
+            dy = waypoint_location.y - ego_location.y
+            dz = waypoint_location.z - ego_location.z
+            forward_distance = ego_forward.x * dx + ego_forward.y * dy + ego_forward.z * dz
+            if forward_distance < min_forward_distance or forward_distance > max_forward_distance:
                 continue
 
-            if any(waypoint_location.distance(existing) < DUCK_SPAWN_CLEARANCE_METERS for existing in actor_locations):
+            euclidean_distance = (dx * dx + dy * dy + dz * dz) ** 0.5
+            if euclidean_distance < min_distance or euclidean_distance > max_distance:
+                continue
+
+            if any(waypoint_location.distance(existing) < DANCINGM_SPAWN_CLEARANCE_METERS for existing in actor_locations):
                 continue
 
             spawn_location = carla.Location(
                 x=waypoint_location.x,
                 y=waypoint_location.y,
-                z=waypoint_location.z + DUCK_SPAWN_HEIGHT_OFFSET,
+                z=waypoint_location.z + DANCINGM_SPAWN_HEIGHT_OFFSET,
             )
-
             base_rot = waypoint.transform.rotation
             rot = carla.Rotation(pitch=base_rot.pitch, yaw=base_rot.yaw + 90.0, roll=base_rot.roll)
             return carla.Transform(spawn_location, rot)
 
         return None
 
-    def _spawn_stationary_pedestrian(self, blueprint_id, ego_transform, label, min_distance=DUCK_MIN_DISTANCE, max_distance=DUCK_MAX_DISTANCE, used_locations=None):
+    def _spawn_stationary_pedestrian(self, blueprint_id, ego_transform, label, min_distance=DANCINGM_MIN_DISTANCE, max_distance=DANCINGM_MAX_DISTANCE, used_locations=None):
         walker_bp = self.world.get_blueprint_library().find(blueprint_id)
         if walker_bp.has_attribute("is_invincible"):
             walker_bp.set_attribute("is_invincible", "false")
@@ -439,9 +389,8 @@ class Scenario04Runner:
         # First try to spawn in front of the ego on the sidewalk
         front_transform = self._find_sidewalk_spawn_transform(
             ego_transform,
-            prefer_ahead=True,
-            ahead_distance=DUCK_PREFERRED_AHEAD_DISTANCE,
-            search_radius=DUCK_AHEAD_SEARCH_RADIUS,
+            ahead_distance=DANCINGM_PREFERRED_AHEAD_DISTANCE,
+            search_radius=DANCINGM_AHEAD_SEARCH_RADIUS,
             min_distance=min_distance,
             max_distance=max_distance,
             used_locations=used_locations,
@@ -457,10 +406,9 @@ class Scenario04Runner:
                 return actor
 
         last_spawn_transform = None
-        for _ in range(DUCK_MAX_SPAWN_ATTEMPTS):
+        for _ in range(DANCINGM_MAX_SPAWN_ATTEMPTS):
             spawn_transform = self._find_sidewalk_spawn_transform(
                 ego_transform,
-                prefer_ahead=False,
                 min_distance=min_distance,
                 max_distance=max_distance,
                 used_locations=used_locations,
@@ -479,38 +427,211 @@ class Scenario04Runner:
                 return actor
 
         if last_spawn_transform is None:
-            if self._duck_spawn_last_warning_time is None or (sim_time - self._duck_spawn_last_warning_time) >= 10.0:
+            if self._dancingm_spawn_last_warning_time is None or (sim_time - self._dancingm_spawn_last_warning_time) >= 10.0:
                 print(
                     f"[Scenario04] WARNUNG: Kein Gehsteig-Spawnpunkt für {label} gefunden | "
                     f"max_distance={max_distance:.1f}m"
                 )
-                self._duck_spawn_last_warning_time = sim_time
+                self._dancingm_spawn_last_warning_time = sim_time
         else:
-            if self._duck_spawn_last_warning_time is None or (sim_time - self._duck_spawn_last_warning_time) >= 10.0:
+            if self._dancingm_spawn_last_warning_time is None or (sim_time - self._dancingm_spawn_last_warning_time) >= 10.0:
                 print(
                     f"[Scenario04] WARNUNG: {label} konnte nicht gespawnt werden | "
                     f"spawn=({last_spawn_transform.location.x:.2f}, {last_spawn_transform.location.y:.2f}, {last_spawn_transform.location.z:.2f})"
                 )
-                self._duck_spawn_last_warning_time = sim_time
+                self._dancingm_spawn_last_warning_time = sim_time
         return None
 
-    def _spawn_duck_pedestrian(self, ego_transform):
-        if self._duck_pedestrian_spawned:
+    def _spawn_dancingm_pedestrian(self, ego_transform):
+        if self._dancingm_pedestrian_spawned:
             return True
 
-        actor = self._spawn_stationary_pedestrian(
-            DUCK_PEDESTRIAN_BLUEPRINT_ID,
-            ego_transform,
-            "Duck",
-            max_distance=DUCK_MAX_DISTANCE,
-        )
+        actor = None
+        traffic_light = self._find_upcoming_traffic_light(ego_transform)
+        if traffic_light is not None:
+            traffic_light_location = traffic_light.get_transform().location
+            spawn_transform = self._find_sidewalk_spawn_transform(
+                ego_transform,
+                center_location=traffic_light_location,
+                min_distance=DANCINGM_MIN_DISTANCE,
+                max_distance=DANCINGM_MAX_DISTANCE,
+                used_locations=None,
+            )
+            if spawn_transform is not None:
+                actor = self.world.try_spawn_actor(
+                    self.world.get_blueprint_library().find(DANCINGM_PEDESTRIAN_BLUEPRINT_ID),
+                    spawn_transform,
+                )
+                if actor is not None:
+                    self._walker_actor_ids.append(actor.id)
+                    self._dancingm_traffic_light_actor_id = traffic_light.id
+                    try:
+                        self._dancingm_traffic_light_original_state = traffic_light.get_state()
+                    except Exception:
+                        self._dancingm_traffic_light_original_state = None
+                    try:
+                        traffic_light.set_state(carla.TrafficLightState.Red)
+                        self._dancingm_traffic_light_forced_time = self.world.get_snapshot().timestamp.elapsed_seconds
+                        print(
+                            f"[Scenario04] DANCINGM gespawnt bei Ampel: id={actor.id}, blueprint={DANCINGM_PEDESTRIAN_BLUEPRINT_ID}, "
+                            f"light_id={traffic_light.id}, spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
+                        )
+                    except Exception:
+                        print(f"[Scenario04] WARNUNG: Ampel konnte nicht auf Rot gesetzt werden: light_id={traffic_light.id}")
+
+        if actor is None:
+            actor = self._spawn_stationary_pedestrian(
+                DANCINGM_PEDESTRIAN_BLUEPRINT_ID,
+                ego_transform,
+                "DANCINGM",
+                max_distance=DANCINGM_MAX_DISTANCE,
+            )
         if actor is None:
             return False
 
-        self._duck_pedestrian_spawned = True
-        self._duck_pedestrian_actor_id = actor.id
-        self._duck_pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        self._dancingm_pedestrian_spawned = True
+        self._dancingm_pedestrian_actor_id = actor.id
+        self._dancingm_pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        self._dancingm_confirmation_pending = True
+        self._dancingm_confirmation_response = None
+        self._dancingm_confirmation_listener_started = False
+        self._start_dancingm_confirmation_listener()
         return True
+
+    def _start_dancingm_confirmation_listener(self):
+        if self._dancingm_confirmation_listener_started or not self._dancingm_confirmation_pending:
+            return
+        self._dancingm_confirmation_listener_started = True
+
+        def _wait_for_dancingm_response():
+            try:
+                response = input("DANCINGM gesehen? J/N? ").strip().lower()
+            except EOFError:
+                response = "j"
+                print("[Scenario04] WARNUNG: Kein stdin verfügbar; DANCINGM-Bestätigung default auf Ja.")
+
+            self._dancingm_confirmation_response = response
+            print(f"[Scenario04] DANCINGM-Bestätigung empfangen: {response}")
+
+        listener_thread = threading.Thread(target=_wait_for_dancingm_response, daemon=True)
+        listener_thread.start()
+
+    def _reset_dancingm_phase(self):
+        self._update_dancingm_traffic_light_experiment(0.0, force_restore=True)
+
+        if self._dancingm_pedestrian_actor_id is not None:
+            actor = self.world.get_actor(self._dancingm_pedestrian_actor_id)
+            if actor is not None:
+                try:
+                    actor.destroy()
+                except Exception:
+                    pass
+            if self._dancingm_pedestrian_actor_id in self._walker_actor_ids:
+                self._walker_actor_ids.remove(self._dancingm_pedestrian_actor_id)
+
+        self._dancingm_pedestrian_spawned = False
+        self._dancingm_pedestrian_actor_id = None
+        self._dancingm_pedestrian_spawn_time = None
+        self._dancingm_confirmation_pending = False
+        self._dancingm_confirmation_listener_started = False
+        self._dancingm_confirmation_response = None
+        self._dancingm_release_active = False
+        self._dancingm_release_start_time = None
+
+    def _start_dancingm_release(self, sim_time):
+        if self._dancingm_traffic_light_actor_id is None:
+            return
+
+        traffic_light = self.world.get_actor(self._dancingm_traffic_light_actor_id)
+        if traffic_light is not None:
+            try:
+                traffic_light.set_state(carla.TrafficLightState.Green)
+                if hasattr(traffic_light, "set_green_time"):
+                    traffic_light.set_green_time(DANCINGM_TRAFFIC_LIGHT_GREEN_RELEASE_SECONDS)
+                print(
+                    f"[Scenario04] DANCINGM-Ampel freigegeben für {DANCINGM_TRAFFIC_LIGHT_GREEN_RELEASE_SECONDS:.0f}s: "
+                    f"light_id={self._dancingm_traffic_light_actor_id}"
+                )
+            except Exception:
+                print(f"[Scenario04] WARNUNG: DANCINGM-Ampel konnte nicht auf Grün gesetzt werden: light_id={self._dancingm_traffic_light_actor_id}")
+
+        self._dancingm_release_active = True
+        self._dancingm_release_start_time = sim_time
+
+    def _restore_dancingm_traffic_light(self, traffic_light):
+        if traffic_light is None:
+            return
+
+        try:
+            if hasattr(traffic_light, "reset_group"):
+                traffic_light.reset_group()
+                print(f"[Scenario04] DANCINGM-Ampel an Stadtlogik zurückgegeben: light_id={self._dancingm_traffic_light_actor_id}")
+                return
+        except Exception:
+            pass
+
+        if self._dancingm_traffic_light_original_state is not None:
+            try:
+                traffic_light.set_state(self._dancingm_traffic_light_original_state)
+                print(f"[Scenario04] Ampel wiederhergestellt: light_id={self._dancingm_traffic_light_actor_id}")
+            except Exception:
+                print(f"[Scenario04] WARNUNG: Ampel konnte nicht wiederhergestellt werden: light_id={self._dancingm_traffic_light_actor_id}")
+
+    def _update_dancingm_confirmation(self, sim_time):
+        if not self._dancingm_confirmation_pending:
+            return
+
+        if self._dancingm_confirmation_response is None:
+            if not self._dancingm_confirmation_listener_started:
+                self._start_dancingm_confirmation_listener()
+            return
+
+        response = self._dancingm_confirmation_response
+        self._dancingm_confirmation_response = None
+        self._dancingm_confirmation_listener_started = False
+
+        if response in ("j", "ja", "y", "yes", ""):
+            self._start_dancingm_release(sim_time)
+            print("[Scenario04] DANCINGM bestätigt; fahre normal bis zum Ende weiter.")
+            self._dancingm_confirmation_pending = False
+            return
+
+        if response in ("n", "nein", "no"):
+            print("[Scenario04] DANCINGM nicht gesehen; setze Phase zurück.")
+            self._reset_dancingm_phase()
+            return
+
+        print("[Scenario04] WARNUNG: Ungültige DANCINGM-Eingabe; bitte J oder N eingeben.")
+        self._dancingm_confirmation_pending = True
+
+    def _update_dancingm_traffic_light_experiment(self, sim_time, force_restore=False):
+        if self._dancingm_traffic_light_actor_id is None:
+            return
+
+        if self._dancingm_traffic_light_forced_time is None:
+            return
+
+        if self._dancingm_confirmation_pending and not force_restore:
+            return
+
+        if self._dancingm_release_active:
+            if self._dancingm_release_start_time is None:
+                self._dancingm_release_start_time = sim_time
+
+            if not force_restore and (sim_time - self._dancingm_release_start_time) < DANCINGM_TRAFFIC_LIGHT_GREEN_RELEASE_SECONDS:
+                return
+
+        if not force_restore and self._dancingm_confirmation_pending:
+            return
+
+        traffic_light = self.world.get_actor(self._dancingm_traffic_light_actor_id)
+        self._restore_dancingm_traffic_light(traffic_light)
+
+        self._dancingm_traffic_light_actor_id = None
+        self._dancingm_traffic_light_original_state = None
+        self._dancingm_traffic_light_forced_time = None
+        self._dancingm_release_active = False
+        self._dancingm_release_start_time = None
 
     def _should_spawn_animated_pedestrian(self):
         if self._animated_pedestrian_spawned:
@@ -526,12 +647,12 @@ class Scenario04Runner:
             and (sim_time - self._animated_pedestrian_spawn_time) >= ANIMPED_TO_SONG_DELAY_SECONDS
         )
 
-    def _should_spawn_duck_pedestrian(self, sim_time):
+    def _should_spawn_dancingm_pedestrian(self, sim_time):
         return (
             self._song_finished
-            and not self._duck_pedestrian_spawned
+            and not self._dancingm_pedestrian_spawned
             and self._song_finish_time is not None
-            and (sim_time - self._song_finish_time) >= SONG_TO_DUCK_DELAY_SECONDS
+            and (sim_time - self._song_finish_time) >= SONG_TO_DANCINGM_DELAY_SECONDS
         )
 
     def _get_random_pedestrian_speed(self):
@@ -562,7 +683,19 @@ class Scenario04Runner:
     def _force_green_light(self, ego, sim_time):
         if ego and ego.is_at_traffic_light():
             tl = ego.get_traffic_light()
-            if tl:
+            if tl is None:
+                return
+
+            if self._dancingm_confirmation_pending:
+                try:
+                    tl.set_state(carla.TrafficLightState.Red)
+                    if hasattr(tl, "set_red_time"):
+                        tl.set_red_time(DANCINGM_TRAFFIC_LIGHT_RED_HOLD_SECONDS)
+                except Exception:
+                    pass
+                return
+
+            if tl.id != self._dancingm_traffic_light_actor_id:
                 tl.set_state(carla.TrafficLightState.Green)
                 tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
 
@@ -783,8 +916,11 @@ class Scenario04Runner:
         return all_done
 
     def _should_end_scenario(self, sim_time):
-        if self._duck_pedestrian_spawned and self._duck_pedestrian_spawn_time is not None:
-            return (sim_time - self._duck_pedestrian_spawn_time) >= DUCK_TO_END_DELAY_SECONDS
+        if self._dancingm_confirmation_pending or self._dancingm_release_active:
+            return False
+
+        if self._dancingm_pedestrian_spawned and self._dancingm_pedestrian_spawn_time is not None:
+            return (sim_time - self._dancingm_pedestrian_spawn_time) >= DANCINGM_TO_END_DELAY_SECONDS
 
         return False
 
@@ -838,8 +974,11 @@ class Scenario04Runner:
 
                     self._update_song(sim_time)
 
-                    if self._should_spawn_duck_pedestrian(sim_time):
-                        self._spawn_duck_pedestrian(ego_transform)
+                    self._update_dancingm_traffic_light_experiment(sim_time)
+                    self._update_dancingm_confirmation(sim_time)
+
+                    if self._should_spawn_dancingm_pedestrian(sim_time):
+                        self._spawn_dancingm_pedestrian(ego_transform)
 
                     if self._should_end_scenario(sim_time):
                         self._scenario_done = True
@@ -864,6 +1003,7 @@ class Scenario04Runner:
 
     def destroy(self):
         print("[Scenario04] Cleanup...")
+        self._update_dancingm_traffic_light_experiment(0.0, force_restore=True)
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids + self._walker_controller_ids
         self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])
 
