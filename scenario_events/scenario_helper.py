@@ -46,6 +46,9 @@ def is_transform_hidden_from_hero(transform, ego_transform, min_distance, max_di
     if transform is None or ego_transform is None:
         return False
 
+    if min_distance <= 0.0:
+        return True
+
     # Use 2D horizontal distance/angle so pitch/roll don't affect visibility
     delta_x = transform.location.x - ego_transform.location.x
     delta_y = transform.location.y - ego_transform.location.y
@@ -60,8 +63,8 @@ def is_transform_hidden_from_hero(transform, ego_transform, min_distance, max_di
     cos_angle = dot / max(distance_2d, 0.0001)
 
     # Staged front cone by distance (user preference): near -> wide, mid -> medium, far -> narrow
-    # sensible defaults: near <=2m: 75deg, mid <=30m: 45deg, far >30m: 10deg
-    if distance_2d <= 2.0:
+    # near is controlled by the caller-provided minimum distance
+    if distance_2d <= min_distance:
         front_angle_deg = 75.0
         tier = 'near'
     elif distance_2d <= 30.0:
