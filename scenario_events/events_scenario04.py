@@ -11,6 +11,10 @@ try:
     from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_navigation_location, get_random_pedestrian_blueprint
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_navigation_location, get_random_pedestrian_blueprint
+try:
+    from events_scenario04_static_props import STATIC_PROP_SPAWNS
+except ModuleNotFoundError:
+    from scenario_events.events_scenario04_static_props import STATIC_PROP_SPAWNS
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
@@ -88,18 +92,6 @@ PEDESTRIAN_START_LOCATIONS = [
     carla.Location(x=89.0, y=365.30, z=-0.80),
     carla.Location(x=418.20, y=90.80, z=-0.70),
     carla.Location(x=405.80, y=93.90, z=-1.50),
-]
-
-STATIC_PROP_SPAWNS = [
-    {
-        "name": "mailbox",
-        "blueprints": ["static.prop.mailbox"],
-        "transform": carla.Transform(
-            carla.Location(x=249.20, y=127.00, z=0.10),
-            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-        ),
-        "scale": None,
-    }
 ]
 
 def get_actor_blueprints(world, filter_pattern):
