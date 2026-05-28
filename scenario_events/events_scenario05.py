@@ -25,16 +25,15 @@ except ModuleNotFoundError:
     )
 
 try:
-    from events_scenario04_static_props import STATIC_PROP_SPAWNS
+    from events_scenario05_static_props import STATIC_PROP_SPAWNS
 except ModuleNotFoundError:
-    from scenario_events.events_scenario04_static_props import STATIC_PROP_SPAWNS
+    from scenario_events.events_scenario05_static_props import STATIC_PROP_SPAWNS
 
 from common.audio_paths import SADNESS_RP_MAD_WORLD_PATH
 from generate_audio import SongAudio
 
 START_TO_CARPED_DELAY_SECONDS = 3.0
 CAR_TO_PED_DELAY_SECONDS = 2.0
-SONG_TO_ACCIDENT_DELAY_SECONDS = 1.0
 ACCIDENT_TO_RADIO_DELAY_SECONDS = 1.0
 RADIO_TO_END_DELAY_SECONDS = 100.0
 
@@ -74,6 +73,14 @@ PEDESTRIAN_MAX_HIDDEN_DISTANCE = 50.0
 PEDESTRIAN_MIN_ROUTE_DISTANCE = 5.0
 PEDESTRIAN_NAV_SAMPLES = 96
 PEDESTRIAN_NEAR_SEARCH_RADIUS = 25.0
+
+ACCIDENT_TRIGGER_LOCATIONS = (
+    carla.Location(x=-7.53, y=288.22, z=0.50),
+    carla.Location(x=41.39, y=257.46, z=0.50),
+)
+ACCIDENT_TRIGGER_X_TOLERANCE = 2.0
+ACCIDENT_TRIGGER_Y_TOLERANCE = 5.0
+ACCIDENT_TRIGGER_FORWARD_MIN_ALIGNMENT = 0.85
 
 # loneleyPed-like sidewalk spawn tuning
 LONELEYPED_PREFERRED_AHEAD_DISTANCE = 10.0
@@ -875,6 +882,28 @@ class Scenario05Runner:
                 tl.set_state(carla.TrafficLightState.Green)
                 tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
 
+    def _is_accident_trigger_reached(self, ego_transform):
+        if ego_transform is None:
+            return False
+
+        location = ego_transform.location
+        trigger_reached = False
+        for trigger in ACCIDENT_TRIGGER_LOCATIONS:
+            if abs(location.x - trigger.x) <= ACCIDENT_TRIGGER_X_TOLERANCE and abs(location.y - trigger.y) <= ACCIDENT_TRIGGER_Y_TOLERANCE:
+                trigger_reached = True
+                break
+
+        if not trigger_reached:
+            return False
+
+        forward = ego_transform.get_forward_vector()
+        forward_length = (forward.x * forward.x + forward.y * forward.y) ** 0.5
+        if forward_length <= 0.0:
+            return False
+
+        y_alignment = abs(forward.y) / forward_length
+        return y_alignment >= ACCIDENT_TRIGGER_FORWARD_MIN_ALIGNMENT
+
     def _start_song(self, sim_time):
         if self._song_started:
             return
@@ -906,9 +935,11 @@ class Scenario05Runner:
     def _spawn_accident_placeholder(self, sim_time):
         if self._accident_spawned:
             return True
+
+        self._spawn_static_prop_once()
         self._accident_spawned = True
         self._accident_spawn_time = sim_time
-        print(f"[Scenario05] Unfall-Phase noch nicht implementiert; Marker erreicht bei sim_time={sim_time:.2f}s")
+        print(f"[Scenario05] Unfall-Trigger erreicht; Static Prop gespawnt bei sim_time={sim_time:.2f}s")
         return True
 
     def _start_radio_voice_placeholder(self, sim_time):
@@ -919,9 +950,9 @@ class Scenario05Runner:
         print(f"[Scenario05] Radio-Voice-Phase noch nicht implementiert; Marker erreicht bei sim_time={sim_time:.2f}s")
         return True
 
-    def _update_post_song_phases(self, sim_time):
-        if self._song_finished and not self._accident_spawned and self._song_finish_time is not None:
-            if (sim_time - self._song_finish_time) >= SONG_TO_ACCIDENT_DELAY_SECONDS:
+    def _update_post_song_phases(self, sim_time, ego_transform=None):
+        if self._song_finished and not self._accident_spawned:
+            if self._is_accident_trigger_reached(ego_transform):
                 self._spawn_accident_placeholder(sim_time)
 
         if self._accident_spawned and not self._radio_started and self._accident_spawn_time is not None:
@@ -947,7 +978,6 @@ class Scenario05Runner:
 
     def run(self):
         print("[Scenario05] Running...")
-        self._spawn_static_prop_once()
         try:
             while True:
                 self.world.wait_for_tick()
@@ -957,6 +987,7 @@ class Scenario05Runner:
                     self._start_sim_time = sim_time
 
                 ego = self.find_hero()
+                trigger_ego_transform = ego.get_transform() if ego else None
                 ego_transform = ego.get_transform() if ego else carla.Transform(
                     carla.Location(x=150.60, y=-173.30, z=0.70),
                     carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
@@ -990,7 +1021,7 @@ class Scenario05Runner:
                     self._start_song(sim_time)
 
                 self._update_song(sim_time)
-                self._update_post_song_phases(sim_time)
+                self._update_post_song_phases(sim_time, trigger_ego_transform)
 
                 if self._scenario_done:
                     return
