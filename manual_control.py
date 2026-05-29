@@ -1338,22 +1338,12 @@ class GamepadControl(object):
         if pygame.joystick.get_count() > joystick_threshold:
             for i in range(count):
                 dev = pygame.joystick.Joystick(i)
-                if profile in ('simulator4home', 'supervisor4home'):
-                    if dev.get_name() == input_devices["controller"]:
-                        self.joy = dev
-                        self.joy.init()
-                else:
-                    if dev.get_name() == input_devices["wheel"]:
-                        self.joy = dev
-                        self.joy.init()
-                    if dev.get_name() == input_devices["shifter"]:
-                        self.shifter = dev
-                        self.shifter.init()
+                if dev.get_name() == input_devices["controller"]:
+                    self.joy = dev
+                    self.joy.init()
         if profile in ('simulator4home', 'supervisor4home'):
             if self.joy is None:
                 raise RuntimeError("Need PS4 Controller")
-        elif self.shifter == None or self.joy == None:
-            raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
 
         world.player.set_autopilot(self._autopilot_enabled)
         world.player.set_light_state(self._lights)
