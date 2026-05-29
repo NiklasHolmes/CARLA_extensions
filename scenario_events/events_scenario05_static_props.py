@@ -162,6 +162,20 @@ BOTTOM_CONSTRUCTION_CONE_SPAWNS = [
     },
 ]
 
+BOTTOM_LOOP_WALKER_SPAWNS = [
+    {
+        "name": "woman_walking_blue_0057",
+        "walker_blueprint": "walker.pedestrian.0057",
+        "transform": carla.Transform(
+            carla.Location(x=109.800, y=296.000, z=1.900),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "target_location": carla.Location(x=102.200, y=299.400, z=1.900),
+        "target_rotation": carla.Rotation(pitch=0.0, yaw=70.0, roll=0.0),
+        "max_speed": 1.4,
+    },
+]
+
 WARNING_ACCIDENT_SPAWNS = [
     {
         "name": "warning_accident_01",
@@ -272,7 +286,7 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
             ),
             "scale": None,
         },
-    ] + CONSTRUCTION_CONE_SPAWNS + BOTTOM_CONSTRUCTION_CONE_SPAWNS + WARNING_ACCIDENT_SPAWNS,
+    ] + CONSTRUCTION_CONE_SPAWNS + BOTTOM_CONSTRUCTION_CONE_SPAWNS + BOTTOM_LOOP_WALKER_SPAWNS + WARNING_ACCIDENT_SPAWNS,
     "bottom_junction": [
         {
             "name": "street_barrier_03",
@@ -352,7 +366,7 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
             ),
             "scale": None,
         },
-    ] + CONSTRUCTION_CONE_SPAWNS + BOTTOM_CONSTRUCTION_CONE_SPAWNS + WARNING_ACCIDENT_SPAWNS,
+    ] + CONSTRUCTION_CONE_SPAWNS + BOTTOM_CONSTRUCTION_CONE_SPAWNS + BOTTOM_LOOP_WALKER_SPAWNS + WARNING_ACCIDENT_SPAWNS,
     "top_corner": CONSTRUCTION_CONE_SPAWNS + WARNING_ACCIDENT_SPAWNS,
 }
 

@@ -74,6 +74,8 @@ PEDESTRIAN_MIN_ROUTE_DISTANCE = 5.0
 PEDESTRIAN_NAV_SAMPLES = 96
 PEDESTRIAN_NEAR_SEARCH_RADIUS = 25.0
 IMMOBILIZE_VEHICLE_DELAY_SECONDS = 2.0
+# When True, delete all non-hero vehicles and pedestrians before spawning the accident props
+CLEAN_UP_BEFORE_ACCIDENT = True             # TODO: work with hidden radius so that car/ped doesn't disappear if hero is too close
 
 ACCIDENT_TRIGGER_LOCATIONS = (
     carla.Location(x=-7.53, y=288.22, z=0.50),
@@ -166,6 +168,10 @@ class Scenario05Runner:
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
         self._walker_controller_ids = []
+        self._bottom_loop_walker_spawned = False
+        self._bottom_loop_walker_actor_id = None
+        self._bottom_loop_walker_controller_id = None
+        self._bottom_loop_walker_route = None
         self._pending_vehicle_immobilizations = {}
 
     def _get_traffic_manager(self):
@@ -265,6 +271,119 @@ class Scenario05Runner:
             except Exception as e:
                 print(f"[Scenario05] ERROR beim Spawnen von '{name}': {e}")
 
+    def _spawn_bottom_loop_walker(self, trigger_key=None):
+        if self._bottom_loop_walker_spawned:
+            return True
+
+        spawns = get_static_prop_spawns(trigger_key)
+        bp_lib = self.world.get_blueprint_library()
+
+        for prop_config in spawns:
+            walker_bp_id = prop_config.get("walker_blueprint")
+            if not walker_bp_id:
+                continue
+
+            spawn_transform = prop_config.get("transform")
+            target_location = prop_config.get("target_location")
+            if spawn_transform is None or target_location is None:
+                print(f"[Scenario05] WARNUNG: Walker-Config '{prop_config.get('name')}' ist unvollständig.")
+                continue
+
+            try:
+                walker_bp = bp_lib.find(walker_bp_id)
+            except Exception as e:
+                print(f"[Scenario05] WARNUNG: Walker-Blueprint '{walker_bp_id}' nicht gefunden: {e}")
+                continue
+
+            if walker_bp.has_attribute("is_invincible"):
+                walker_bp.set_attribute("is_invincible", "false")
+            if walker_bp.has_attribute("role_name"):
+                walker_bp.set_attribute("role_name", "walker")
+
+            walker_actor = self.world.try_spawn_actor(walker_bp, spawn_transform)
+            if walker_actor is None:
+                print(f"[Scenario05] WARNUNG: AI-Walker '{prop_config.get('name')}' konnte nicht gespawnt werden.")
+                continue
+
+            controller_bp = bp_lib.find("controller.ai.walker")
+            controller_actor = self.world.try_spawn_actor(controller_bp, carla.Transform(), walker_actor)
+            if controller_actor is None:
+                try:
+                    walker_actor.destroy()
+                except Exception:
+                    pass
+                print(f"[Scenario05] WARNUNG: Walker-Controller für '{prop_config.get('name')}' konnte nicht gespawnt werden.")
+                continue
+
+            self._walker_actor_ids.append(walker_actor.id)
+            self._walker_controller_ids.append(controller_actor.id)
+            self._bottom_loop_walker_spawned = True
+            self._bottom_loop_walker_actor_id = walker_actor.id
+            self._bottom_loop_walker_controller_id = controller_actor.id
+            self._bottom_loop_walker_route = {
+                "spawn_location": spawn_transform.location,
+                "target_location": target_location,
+                "current_target_location": target_location,
+                "heading_to_target": True,
+                "walker_id": walker_actor.id,
+                "controller_id": controller_actor.id,
+                "max_speed": prop_config.get("max_speed", 1.4),
+                "arrive_threshold": PEDESTRIAN_ARRIVE_THRESH,
+                "name": prop_config.get("name", "bottom_loop_walker"),
+            }
+
+            try:
+                controller_actor.start()
+                controller_actor.go_to_location(target_location)
+                controller_actor.set_max_speed(self._bottom_loop_walker_route["max_speed"])
+                print(
+                    f"[Scenario05] AI-Walker gespawnt: id={walker_actor.id}, blueprint={walker_bp_id}, "
+                    f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f}), "
+                    f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f})"
+                )
+            except Exception as e:
+                print(f"[Scenario05] WARNUNG: AI-Walker '{prop_config.get('name')}' konnte nicht gestartet werden: {e}")
+            return True
+
+        return False
+
+    def _update_bottom_loop_walker(self, sim_time):
+        if not self._bottom_loop_walker_spawned or not self._bottom_loop_walker_route:
+            return
+
+        walker = self.world.get_actor(self._bottom_loop_walker_route.get("walker_id"))
+        controller = self.world.get_actor(self._bottom_loop_walker_route.get("controller_id"))
+        if walker is None or controller is None:
+            self._bottom_loop_walker_spawned = False
+            self._bottom_loop_walker_route = None
+            self._bottom_loop_walker_actor_id = None
+            self._bottom_loop_walker_controller_id = None
+            return
+
+        target_location = self._bottom_loop_walker_route.get("current_target_location")
+        if target_location is None:
+            return
+
+        try:
+            loc = walker.get_location()
+        except Exception:
+            return
+
+        distance = ((loc.x - target_location.x) ** 2 + (loc.y - target_location.y) ** 2 + (loc.z - target_location.z) ** 2) ** 0.5
+        if distance > self._bottom_loop_walker_route.get("arrive_threshold", PEDESTRIAN_ARRIVE_THRESH):
+            return
+
+        next_target = self._bottom_loop_walker_route["spawn_location"] if self._bottom_loop_walker_route.get("heading_to_target", True) else self._bottom_loop_walker_route["target_location"]
+        self._bottom_loop_walker_route["heading_to_target"] = not self._bottom_loop_walker_route.get("heading_to_target", True)
+        self._bottom_loop_walker_route["current_target_location"] = next_target
+
+        try:
+            controller.go_to_location(next_target)
+            controller.set_max_speed(self._bottom_loop_walker_route.get("max_speed", 1.4))
+            print(f"[Scenario05] AI-Walker wechselt Richtung bei sim_time={sim_time:.2f}s")
+        except Exception as e:
+            print(f"[Scenario05] WARNUNG: AI-Walker konnte Ziel nicht wechseln: {e}")
+
     def _update_pending_vehicle_immobilizations(self, sim_time):
         if not self._pending_vehicle_immobilizations:
             return
@@ -290,6 +409,55 @@ class Scenario05Runner:
                 print(f"[Scenario05] WARNUNG: Fahrzeug id={actor_id} konnte nicht immobilisiert werden: {e}")
             finally:
                 self._pending_vehicle_immobilizations.pop(actor_id, None)
+
+    def _cleanup_scene_before_accident(self):
+        """Destroy non-hero vehicles and pedestrians/controllers and clear internal lists."""
+        hero = self.find_hero()
+        hero_id = hero.id if hero is not None else None
+
+        actors = list(self.world.get_actors())
+        for actor in actors:
+            try:
+                tid = actor.type_id
+            except Exception:
+                continue
+
+            # Vehicles (skip hero/default player)
+            if tid.startswith("vehicle."):
+                if actor.id == hero_id:
+                    continue
+                try:
+                    actor.destroy()
+                except Exception:
+                    pass
+                if actor.id in self._vehicle_actor_ids:
+                    try:
+                        self._vehicle_actor_ids.remove(actor.id)
+                    except ValueError:
+                        pass
+
+            # Walkers and their controllers
+            if tid.startswith("walker.") or tid == "controller.ai.walker":
+                try:
+                    actor.destroy()
+                except Exception:
+                    pass
+                if actor.id in self._walker_actor_ids:
+                    try:
+                        self._walker_actor_ids.remove(actor.id)
+                    except ValueError:
+                        pass
+                if actor.id in self._walker_controller_ids:
+                    try:
+                        self._walker_controller_ids.remove(actor.id)
+                    except ValueError:
+                        pass
+
+        # Clear pedestrian routes and flags
+        self._pedestrian_routes = []
+        self._pedestrians_spawned = False
+        self._pedestrians_started = False
+        self._pedestrian_confirmation_pending = False
 
     def _pick_hidden_points(self, points, ego_transform, count):
         if not ego_transform:
@@ -1030,7 +1198,15 @@ class Scenario05Runner:
         if self._accident_spawned:
             return True
 
+        if CLEAN_UP_BEFORE_ACCIDENT:
+            try:
+                self._cleanup_scene_before_accident()
+                print(f"[Scenario05] Scene cleaned up before accident spawn")
+            except Exception as e:
+                print(f"[Scenario05] WARNUNG: Fehler beim Aufräumen vor Unfall: {e}")
+
         self._spawn_static_prop_once(trigger_key)
+        self._spawn_bottom_loop_walker(trigger_key)
         self._accident_spawned = True
         self._accident_spawn_time = sim_time
         print(f"[Scenario05] Unfall-Trigger erreicht; Static Prop gespawnt bei sim_time={sim_time:.2f}s")
@@ -1117,6 +1293,7 @@ class Scenario05Runner:
 
                 self._update_song(sim_time)
                 self._update_post_song_phases(sim_time, trigger_ego_transform)
+                self._update_bottom_loop_walker(sim_time)
                 self._update_pending_vehicle_immobilizations(sim_time)
 
                 if self._scenario_done:
