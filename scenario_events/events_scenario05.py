@@ -25,9 +25,9 @@ except ModuleNotFoundError:
     )
 
 try:
-    from events_scenario05_static_props import STATIC_PROP_SPAWNS
+    from events_scenario05_static_props import get_static_prop_spawns
 except ModuleNotFoundError:
-    from scenario_events.events_scenario05_static_props import STATIC_PROP_SPAWNS
+    from scenario_events.events_scenario05_static_props import get_static_prop_spawns
 
 from common.audio_paths import SADNESS_RP_MAD_WORLD_PATH
 from generate_audio import SongAudio
@@ -73,10 +73,17 @@ PEDESTRIAN_MAX_HIDDEN_DISTANCE = 50.0
 PEDESTRIAN_MIN_ROUTE_DISTANCE = 5.0
 PEDESTRIAN_NAV_SAMPLES = 96
 PEDESTRIAN_NEAR_SEARCH_RADIUS = 25.0
+IMMOBILIZE_VEHICLE_DELAY_SECONDS = 2.0
 
 ACCIDENT_TRIGGER_LOCATIONS = (
     carla.Location(x=-7.53, y=288.22, z=0.50),
     carla.Location(x=41.39, y=257.46, z=0.50),
+    carla.Location(x=189.93, y=266.43, z=0.50),
+)
+ACCIDENT_TRIGGER_KEYS = (
+    "bottom_corner",
+    "bottom_junction",
+    "top_corner",
 )
 ACCIDENT_TRIGGER_X_TOLERANCE = 2.0
 ACCIDENT_TRIGGER_Y_TOLERANCE = 5.0
@@ -159,6 +166,7 @@ class Scenario05Runner:
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
         self._walker_controller_ids = []
+        self._pending_vehicle_immobilizations = {}
 
     def _get_traffic_manager(self):
         try:
@@ -185,20 +193,103 @@ class Scenario05Runner:
                 return actor
         return None
 
-    def _spawn_static_prop_once(self):
+    def _spawn_static_prop_once(self, trigger_key=None):
         bp_lib = self.world.get_blueprint_library()
-        for prop_config in STATIC_PROP_SPAWNS:
+        spawns = get_static_prop_spawns(trigger_key)
+        try:
+            print(f"[Scenario05] Spawning static props for trigger='{trigger_key}' count={len(spawns)}")
+        except Exception:
+            pass
+
+        for prop_config in spawns:
+            name = prop_config.get("name")
+            blueprints = prop_config.get("blueprints", [])
+            try:
+                print(f"[Scenario05] Trying to spawn prop '{name}' blueprints={blueprints} transform={prop_config.get('transform')}")
+            except Exception:
+                pass
+
             prop_bp = None
-            for bp_id in prop_config.get("blueprints", []):
+            found_bp_id = None
+            for bp_id in blueprints:
                 try:
                     prop_bp = bp_lib.find(bp_id)
+                    found_bp_id = bp_id
+                    try:
+                        print(f"[Scenario05] Found blueprint '{bp_id}' -> id='{prop_bp.id}'")
+                    except Exception:
+                        pass
                     break
-                except Exception:
+                except Exception as e:
+                    print(f"[Scenario05] Blueprint lookup failed for '{bp_id}': {e}")
                     continue
-            if prop_bp:
+
+            if prop_bp is None:
+                print(f"[Scenario05] WARNUNG: Keine Blueprint für prop '{name}' gefunden. Versuchete IDs: {blueprints}")
+                continue
+
+            try:
                 actor = self.world.try_spawn_actor(prop_bp, prop_config["transform"])
                 if actor:
+                    if prop_config.get("immobilize_vehicle"):
+                        try:
+                            if hasattr(actor, "set_simulate_physics"):
+                                actor.set_simulate_physics(True)
+                            if hasattr(actor, "set_enable_gravity"):
+                                actor.set_enable_gravity(True)
+                            immobilize_after_seconds = prop_config.get("immobilize_after_seconds", IMMOBILIZE_VEHICLE_DELAY_SECONDS)
+                            if immobilize_after_seconds is not None and immobilize_after_seconds >= 0.0:
+                                current_time = self.world.get_snapshot().timestamp.elapsed_seconds
+                                self._pending_vehicle_immobilizations[actor.id] = current_time + immobilize_after_seconds
+                        except Exception as e:
+                            print(f"[Scenario05] WARNUNG: Fahrzeug '{name}' konnte nicht für verzögertes Fixieren vorbereitet werden: {e}")
+                    light_state = prop_config.get("light_state")
+                    if light_state is not None and hasattr(actor, "set_light_state"):
+                        try:
+                            actor.set_light_state(light_state)
+                            print(f"[Scenario05] Applied light state for '{name}': {light_state}")
+                        except Exception as e:
+                            print(f"[Scenario05] WARNUNG: Lichtzustand für '{name}' konnte nicht gesetzt werden: {e}")
+                    open_doors = prop_config.get("open_doors", [])
+                    if open_doors and hasattr(actor, "open_door"):
+                        for door in open_doors:
+                            try:
+                                actor.open_door(door)
+                                print(f"[Scenario05] Opened door for '{name}': {door}")
+                            except Exception as e:
+                                print(f"[Scenario05] WARNUNG: Tür für '{name}' konnte nicht geöffnet werden ({door}): {e}")
                     self._static_actor_ids.append(actor.id)
+                    print(f"[Scenario05] Spawned '{name}' actor id={actor.id} bp='{found_bp_id}'")
+                else:
+                    print(f"[Scenario05] WARNUNG: Spawn für '{name}' fehlgeschlagen (try_spawn_actor returned None).")
+            except Exception as e:
+                print(f"[Scenario05] ERROR beim Spawnen von '{name}': {e}")
+
+    def _update_pending_vehicle_immobilizations(self, sim_time):
+        if not self._pending_vehicle_immobilizations:
+            return
+
+        for actor_id, freeze_at_time in list(self._pending_vehicle_immobilizations.items()):
+            if sim_time < freeze_at_time:
+                continue
+
+            actor = self.world.get_actor(actor_id)
+            if actor is None:
+                self._pending_vehicle_immobilizations.pop(actor_id, None)
+                continue
+
+            try:
+                if hasattr(actor, "set_target_velocity"):
+                    actor.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+                if hasattr(actor, "set_target_angular_velocity"):
+                    actor.set_target_angular_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+                if hasattr(actor, "set_simulate_physics"):
+                    actor.set_simulate_physics(False)
+                print(f"[Scenario05] Vehicle immobilized: id={actor_id}, sim_time={sim_time:.2f}s")
+            except Exception as e:
+                print(f"[Scenario05] WARNUNG: Fahrzeug id={actor_id} konnte nicht immobilisiert werden: {e}")
+            finally:
+                self._pending_vehicle_immobilizations.pop(actor_id, None)
 
     def _pick_hidden_points(self, points, ego_transform, count):
         if not ego_transform:
@@ -884,25 +975,28 @@ class Scenario05Runner:
 
     def _is_accident_trigger_reached(self, ego_transform):
         if ego_transform is None:
-            return False
+            return None
 
         location = ego_transform.location
-        trigger_reached = False
-        for trigger in ACCIDENT_TRIGGER_LOCATIONS:
+        matched_trigger_key = None
+        for trigger_key, trigger in zip(ACCIDENT_TRIGGER_KEYS, ACCIDENT_TRIGGER_LOCATIONS):
             if abs(location.x - trigger.x) <= ACCIDENT_TRIGGER_X_TOLERANCE and abs(location.y - trigger.y) <= ACCIDENT_TRIGGER_Y_TOLERANCE:
-                trigger_reached = True
+                matched_trigger_key = trigger_key
                 break
 
-        if not trigger_reached:
-            return False
+        if matched_trigger_key is None:
+            return None
 
         forward = ego_transform.get_forward_vector()
         forward_length = (forward.x * forward.x + forward.y * forward.y) ** 0.5
         if forward_length <= 0.0:
-            return False
+            return None
 
         y_alignment = abs(forward.y) / forward_length
-        return y_alignment >= ACCIDENT_TRIGGER_FORWARD_MIN_ALIGNMENT
+        if y_alignment >= ACCIDENT_TRIGGER_FORWARD_MIN_ALIGNMENT:
+            return matched_trigger_key
+
+        return None
 
     def _start_song(self, sim_time):
         if self._song_started:
@@ -932,11 +1026,11 @@ class Scenario05Runner:
             self._song_finish_time = sim_time
             print(f"[Scenario05] Song finished at sim_time={sim_time:.2f}s")
 
-    def _spawn_accident_placeholder(self, sim_time):
+    def _spawn_accident_placeholder(self, sim_time, trigger_key=None):
         if self._accident_spawned:
             return True
 
-        self._spawn_static_prop_once()
+        self._spawn_static_prop_once(trigger_key)
         self._accident_spawned = True
         self._accident_spawn_time = sim_time
         print(f"[Scenario05] Unfall-Trigger erreicht; Static Prop gespawnt bei sim_time={sim_time:.2f}s")
@@ -952,8 +1046,9 @@ class Scenario05Runner:
 
     def _update_post_song_phases(self, sim_time, ego_transform=None):
         if self._song_finished and not self._accident_spawned:
-            if self._is_accident_trigger_reached(ego_transform):
-                self._spawn_accident_placeholder(sim_time)
+            trigger_key = self._is_accident_trigger_reached(ego_transform)
+            if trigger_key is not None:
+                self._spawn_accident_placeholder(sim_time, trigger_key)
 
         if self._accident_spawned and not self._radio_started and self._accident_spawn_time is not None:
             if (sim_time - self._accident_spawn_time) >= ACCIDENT_TO_RADIO_DELAY_SECONDS:
@@ -1022,6 +1117,7 @@ class Scenario05Runner:
 
                 self._update_song(sim_time)
                 self._update_post_song_phases(sim_time, trigger_ego_transform)
+                self._update_pending_vehicle_immobilizations(sim_time)
 
                 if self._scenario_done:
                     return
@@ -1038,6 +1134,7 @@ class Scenario05Runner:
     def destroy(self):
         print("[Scenario05] Cleanup...")
         self._song_audio.stop(0)
+        self._pending_vehicle_immobilizations = {}
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids + self._walker_controller_ids
         self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])
 
