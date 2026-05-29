@@ -1,0 +1,34 @@
+{
+  "current_session": {
+    "participant_id": "P_01_20260525_1907",
+    "scenario_order": [
+      "scenario00",
+      "scenario03",
+      "scenario06",
+      "scenario02",
+      "scenario05",
+      "scenario04",
+      "scenario01"
+    ],
+    "current_state": {
+      "next_scenario_index": 1,
+      "current_scenario_name": null,
+      "current_run_number": null,
+      "current_status": "COMPLETED",
+      "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+    },
+    "scenarios_log": [
+      {
+        "scenario_name": "events_scenario00.py",
+        "run_number": 1,
+        "started_at": "2026-05-25 19:07:52",
+        "duration_seconds": 43.70508670806885,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-05-25 19:08:35",
+        "scenario_index": 0
+      }
+    ]
+  },
+  "session_history": []
+}

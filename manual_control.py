@@ -1341,7 +1341,7 @@ class GamepadControl(object):
                 if dev.get_name() == input_devices["controller"]:
                     self.joy = dev
                     self.joy.init()
-        if profile in ('simulator4home', 'supervisor4home'):
+        if profile in ('simulator4home', 'supervisor4home'):            # why?
             if self.joy is None:
                 raise RuntimeError("Need PS4 Controller")
 
@@ -1398,6 +1398,20 @@ class GamepadControl(object):
         btn_L1 = self.joy.get_button(9)         # L1
         btn_R1 = self.joy.get_button(10)        # R1
         btn_touch = self.joy.get_button(15)
+        prev_cross = getattr(self, "_prev_cross", False)
+        if btn_cross and not prev_cross:
+            front_mask = (
+                carla.VehicleLightState.Position |
+                carla.VehicleLightState.LowBeam |
+                carla.VehicleLightState.Fog
+            )
+            if (current_lights & front_mask) == front_mask:
+                current_lights &= ~front_mask
+                world.hud.notification("Front lights off")
+            else:
+                current_lights |= front_mask
+                world.hud.notification("Front lights")
+        self._prev_cross = btn_cross
         prev_cross = getattr(self, "_prev_cross", False)
         if btn_cross and not prev_cross:
             front_mask = (
@@ -2545,19 +2559,11 @@ def game_loop(args):
     world = None
     original_settings = None
     event_sync = None
+    stop_signal_seen = False
 
     try:
         client = carla.Client(args.host, args.port)
         client.set_timeout(2000.0)
-
-        # PoC:
-        # Load a specific map immediately (user-requested): Town02_Opt
-        #try:
-        #    sim_world = client.load_world('Town02_Opt')
-        #    print("[Info] Loaded world 'Town02_Opt'")
-        #except Exception as e:
-        #    print(f"[Warning] Failed to load 'Town02_Opt': {e}. Falling back to current world.")
-        #    sim_world = client.get_world()
 
         sim_world = client.get_world()
         
@@ -2646,6 +2652,20 @@ def game_loop(args):
             if event_sync is not None:
                 event_sync.update()
             world.tick(clock)
+
+            if not stop_signal_seen and getattr(args, 'scenario_stop_file', None):
+                if os.path.exists(args.scenario_stop_file):
+                    stop_signal_seen = True
+                    if world.player is not None and isinstance(world.player, carla.Vehicle):
+                        brake_control = carla.VehicleControl()
+                        brake_control.brake = 1.0
+                        brake_control.hand_brake = True
+                        brake_control.throttle = 0.0
+                        brake_control.reverse = False
+                        world.player.apply_control(brake_control)
+                    print('[Scenario00] Stop signal received from session_runner. Braking hero and exiting manual_control.')
+                    return
+
             world.render(display)
 
             if world.capture_full_frame_once:
@@ -2727,6 +2747,10 @@ def main():
         '--profile',
         choices=list(PROFILE_CONFIG.keys()),
         help='apply preset settings (CLI flags override)')
+    argparser.add_argument(
+        '--scenario-stop-file',
+        default=None,
+        help='path to a stop signal file written by session_runner when the scenario ends')
     argparser.add_argument(
         '--host',
         metavar='H',
