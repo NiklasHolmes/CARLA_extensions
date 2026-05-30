@@ -4,9 +4,20 @@ import argparse
 import os
 import math
 import random
+import sys
 import time
 
 import carla
+try:
+    from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH
+    from generate_audio import RepeatingAudio, SongAudio
+except ModuleNotFoundError:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
+    if extensions_root not in sys.path:
+        sys.path.insert(0, extensions_root)
+    from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH
+    from generate_audio import RepeatingAudio, SongAudio
 
 try:
     from scenario_helper import is_transform_hidden_from_hero
@@ -25,12 +36,21 @@ MID_RAIN_LEAD_IN_S = 1.0
 HARD_RAIN_DURATION_S = 1.0
 MID_RAIN_FOLLOW_UP_S = 1.0
 SOFT_RAIN_DURATION_S = 1.0
+
 RAIN_TO_HIGHPED_DELAY = 1.0
 HIGHPED_TO_BUS_DELAY = 1.0
-BUS_TO_SANIMAL_DELAY = 1.0
+BUS_TO_SONG_DELAY = 1.0
+SONG_TO_SANIMAL_DELAY = 1.0
 SANIMAL_TO_COW_DELAY = 1.0
 COW_TO_FUEL_DELAY = 1.0
 FUEL_TO_END_DELAY = 1.0
+
+SONG_START_OFFSET_SECONDS = 0.0
+SONG_PLAY_DURATION_SECONDS = 10.0
+SONG_FADE_IN_MS = 3000
+SONG_FADE_OUT_MS = 3000
+FUEL_EMPTY_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
+
 
 HIGHPED_BLUEPRINT_ID = "walker.pedestrian.0038"
 HIGHPED_MAX_SPEED = 1.0
@@ -75,10 +95,13 @@ VEHICLE_SPAWN_MIN_SEPARATION = 8.0
 run_in_singleFile_mode = True
 
 TRIGGER_TRAFFIC = True
-TRIGGER_WEATHER = True
-TRIGGER_HIGHPED = True
+TRIGGER_WEATHER = False
+TRIGGER_HIGHPED = False
 TRIGGER_BUS = True
-TRIGGER_SANIMAL = True
+TRIGGER_SONG = False
+TRIGGER_SANIMAL = False
+TRIGGER_COW = False
+TRIGGER_FUELEMPTY = True
 TRIGGER_SANIMAL_IMMEDIATE = False
 
 
@@ -94,7 +117,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 
 
 class Scenario06Runner:
-    def __init__(self, host, port, tm_port, done_file=None, trigger_traffic=True, trigger_weather=True, trigger_highped=True, trigger_bus=True, trigger_sanimal=True):
+    def __init__(self, host, port, tm_port, done_file=None, trigger_traffic=True, trigger_weather=True, trigger_highped=True, trigger_bus=True, trigger_song=True, trigger_sanimal=True, trigger_cow=True, trigger_fuelempty=True):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
@@ -105,7 +128,10 @@ class Scenario06Runner:
         self._trigger_weather = trigger_weather
         self._trigger_highped = trigger_highped
         self._trigger_bus = trigger_bus
+        self._trigger_song = trigger_song
         self._trigger_sanimal = trigger_sanimal
+        self._trigger_cow = trigger_cow
+        self._trigger_fuelempty = trigger_fuelempty
         self._highped_skip_applied = False
         self._sanimal_trigger_forced = False
 
@@ -117,6 +143,21 @@ class Scenario06Runner:
         self._weather_start_value = None
         self._weather_phase = "idle"
         self._weather_phase_start_time = None
+        self._song_audio = SongAudio(
+            SURPRISE_RP_LITTLE_NUMBERS_PATH,
+            start_seconds=SONG_START_OFFSET_SECONDS,
+            play_seconds=SONG_PLAY_DURATION_SECONDS,
+            fade_in_ms=SONG_FADE_IN_MS,
+            fade_out_ms=SONG_FADE_OUT_MS,
+            volume=0.85,
+            channel_index=6,
+        )
+        self._fuel_empty_audio = RepeatingAudio(
+            FUEL_EMPTY_CHIME_PATH,
+            repeat_count=5,
+            volume=0.85,
+            channel_index=7,
+        )
 
         self._highped_route_done = False
         self._highped_route_active = False
@@ -128,6 +169,7 @@ class Scenario06Runner:
         self._highped_route_forward = True
         self.highped_finished = False
         self.bus_finished = False
+        self.song_finished = False
 
         self._sanimal_route_done = False
         self._sanimal_route_active = False
@@ -138,6 +180,9 @@ class Scenario06Runner:
         self._sanimal_arrival_time = None
         self._sanimal_route_forward = True
         self.sanimal_finished = False
+        self.cow_finished = False
+        self.fuelempty_started = False
+        self.fuelempty_finished = False
         self._delay_states = {
             "car_to_rain": {
                 "delay": CAR_TO_RAIN_DELAY,
@@ -154,13 +199,28 @@ class Scenario06Runner:
                 "started_at": None,
                 "finished": False,
             },
-            "bus_to_sanimal": {
-                "delay": BUS_TO_SANIMAL_DELAY,
+            "bus_to_song": {
+                "delay": BUS_TO_SONG_DELAY,
+                "started_at": None,
+                "finished": False,
+            },
+            "song_to_sanimal": {
+                "delay": SONG_TO_SANIMAL_DELAY,
                 "started_at": None,
                 "finished": False,
             },
             "sanimal_to_cow": {
                 "delay": SANIMAL_TO_COW_DELAY,
+                "started_at": None,
+                "finished": False,
+            },
+            "cow_to_fuel": {
+                "delay": COW_TO_FUEL_DELAY,
+                "started_at": None,
+                "finished": False,
+            },
+            "fuel_to_end": {
+                "delay": FUEL_TO_END_DELAY,
                 "started_at": None,
                 "finished": False,
             }
@@ -538,6 +598,39 @@ class Scenario06Runner:
         print("Bus is starting now")
         self.bus_finished = True
 
+    def _start_song_trigger(self):
+        if self._song_audio.play(self.world.get_snapshot().timestamp.elapsed_seconds):
+            print("spielt song")
+        else:
+            print("[Scenario06] WARNUNG: Song konnte nicht gestartet werden.")
+        self.song_finished = True
+
+    def _start_cow_trigger(self):
+        print("start cows now")
+        self.cow_finished = True
+
+    def _start_fuelempty_trigger(self):
+        if not self._fuel_empty_audio.play():
+            print("[Scenario06] WARNUNG: Fuel empty sound konnte nicht gestartet werden.")
+            self.fuelempty_started = True
+            self.fuelempty_finished = True
+            return
+
+        print("start fuel empty sound now")
+        self.fuelempty_started = True
+        self.fuelempty_finished = False
+
+    def _update_fuelempty_audio(self):
+        if not self.fuelempty_started or self.fuelempty_finished:
+            return
+
+        self._fuel_empty_audio.update()
+        if self._fuel_empty_audio.is_finished:
+            self.fuelempty_finished = True
+
+    def _update_song(self, sim_time):
+        self._song_audio.update(sim_time)
+
     def _skip_traffic_trigger(self, sim_time):
         if self._traffic_spawned:
             return
@@ -575,9 +668,17 @@ class Scenario06Runner:
         if self.bus_finished:
             return
 
-        self._finish_delay_timer("bus_to_sanimal", sim_time)
+        self._finish_delay_timer("bus_to_song", sim_time)
         self._start_bus_trigger()
         print("[Scenario06] Bus trigger skipped.")
+
+    def _skip_song_trigger(self, sim_time):
+        if self.song_finished:
+            return
+
+        print("[Scenario06] Song trigger skipped.")
+        self._finish_delay_timer("song_to_sanimal", sim_time)
+        self.song_finished = True
 
     def _skip_sanimal_trigger(self, sim_time):
         if self.sanimal_finished:
@@ -589,11 +690,28 @@ class Scenario06Runner:
         self._finish_delay_timer("sanimal_to_cow", sim_time)
         print("[Scenario06] SANIMAL trigger skipped.")
 
+    def _skip_cow_trigger(self, sim_time):
+        if self.cow_finished:
+            return
+
+        self.cow_finished = True
+        self._finish_delay_timer("cow_to_fuel", sim_time)
+        print("[Scenario06] Cow trigger skipped.")
+
+    def _skip_fuelempty_trigger(self, sim_time):
+        if self.fuelempty_started and self.fuelempty_finished:
+            return
+
+        self.fuelempty_started = True
+        self.fuelempty_finished = True
+        self._finish_delay_timer("fuel_to_end", sim_time)
+        print("[Scenario06] Fuel empty trigger skipped.")
+
     def _force_sanimal_trigger(self, sim_time):
         if self.sanimal_finished or self._sanimal_route_active or self._sanimal_trigger_forced:
             return
 
-        self._finish_delay_timer("bus_to_sanimal", sim_time)
+        self._finish_delay_timer("song_to_sanimal", sim_time)
         self._sanimal_trigger_forced = True
         print("[Scenario06] SANIMAL trigger forced to start immediately.")
 
@@ -880,6 +998,8 @@ class Scenario06Runner:
 
                 self._update_highped_route(sim_time)
                 self._update_sanimal_route(sim_time)
+                self._update_song(sim_time)
+                self._update_fuelempty_audio()
                 delay_state = self._delay_states["highped_to_bus"]
                 if self.highped_finished:
                     if delay_state["started_at"] is None:
@@ -893,19 +1013,31 @@ class Scenario06Runner:
                         self._start_bus_trigger()
                     self.highped_finished = False
 
-                bus_to_sanimal_state = self._delay_states["bus_to_sanimal"]
+                bus_to_song_state = self._delay_states["bus_to_song"]
                 if self.bus_finished:
-                    if bus_to_sanimal_state["started_at"] is None:
-                        self._start_delay_timer("bus_to_sanimal", sim_time)
+                    if bus_to_song_state["started_at"] is None:
+                        self._start_delay_timer("bus_to_song", sim_time)
+                    self._update_delay_timer("bus_to_song", sim_time)
+
+                if self.bus_finished and bus_to_song_state["finished"] and not self.song_finished:
+                    if not self._trigger_song:
+                        self._skip_song_trigger(sim_time)
+                    else:
+                        self._start_song_trigger()
+
+                song_to_sanimal_state = self._delay_states["song_to_sanimal"]
+                if self.song_finished:
+                    if song_to_sanimal_state["started_at"] is None:
+                        self._start_delay_timer("song_to_sanimal", sim_time)
                     if self._trigger_sanimal and TRIGGER_SANIMAL_IMMEDIATE:
                         self._force_sanimal_trigger(sim_time)
                     else:
-                        self._update_delay_timer("bus_to_sanimal", sim_time)
+                        self._update_delay_timer("song_to_sanimal", sim_time)
 
                 if not self._trigger_sanimal:
                     self._skip_sanimal_trigger(sim_time)
 
-                if self.bus_finished and bus_to_sanimal_state["finished"]:
+                if self.song_finished and song_to_sanimal_state["finished"]:
                     if self._trigger_sanimal and TRIGGER_SANIMAL_IMMEDIATE:
                         self._spawn_sanimal_forced(sim_time)
                     else:
@@ -919,6 +1051,34 @@ class Scenario06Runner:
                     if sanimal_to_cow_state["started_at"] is None:
                         self._start_delay_timer("sanimal_to_cow", sim_time)
                     self._update_delay_timer("sanimal_to_cow", sim_time)
+
+                sanimal_to_cow_state = self._delay_states["sanimal_to_cow"]
+                if self.sanimal_finished and sanimal_to_cow_state["finished"] and not self.cow_finished:
+                    if not self._trigger_cow:
+                        self._skip_cow_trigger(sim_time)
+                    else:
+                        self._start_cow_trigger()
+
+                cow_to_fuel_state = self._delay_states["cow_to_fuel"]
+                if self.cow_finished:
+                    if cow_to_fuel_state["started_at"] is None:
+                        self._start_delay_timer("cow_to_fuel", sim_time)
+                    self._update_delay_timer("cow_to_fuel", sim_time)
+
+                if self.cow_finished and cow_to_fuel_state["finished"] and not self.fuelempty_started:
+                    if not self._trigger_fuelempty:
+                        self._skip_fuelempty_trigger(sim_time)
+                    else:
+                        self._start_fuelempty_trigger()
+
+                fuel_to_end_state = self._delay_states["fuel_to_end"]
+                if self.fuelempty_finished:
+                    if fuel_to_end_state["started_at"] is None:
+                        self._start_delay_timer("fuel_to_end", sim_time)
+                    self._update_delay_timer("fuel_to_end", sim_time)
+
+                if self.fuelempty_finished and fuel_to_end_state["finished"]:
+                    self._scenario_done = True
 
                 if ego:
                     self._force_green_light(ego)
@@ -935,6 +1095,8 @@ class Scenario06Runner:
 
     def destroy(self):
         print("[Scenario06] Cleanup...")
+        self._song_audio.stop(0)
+        self._fuel_empty_audio.stop(0)
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids
         if all_ids:
             self.client.apply_batch([carla.command.DestroyActor(actor_id) for actor_id in all_ids])
@@ -968,5 +1130,8 @@ if __name__ == "__main__":
         trigger_weather=TRIGGER_WEATHER,
         trigger_highped=TRIGGER_HIGHPED,
         trigger_bus=TRIGGER_BUS,
+        trigger_song=TRIGGER_SONG,
         trigger_sanimal=TRIGGER_SANIMAL,
+        trigger_cow=TRIGGER_COW,
+        trigger_fuelempty=TRIGGER_FUELEMPTY,
     ).run()
