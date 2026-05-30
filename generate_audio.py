@@ -778,6 +778,104 @@ class SongAudio:
         self._fadeout_started = False
         self._finished = True
 
+
+class RepeatingAudio(BaseAudioGenerator):
+    """Play a short sound a fixed number of times on a dedicated channel."""
+
+    def __init__(
+        self,
+        sound_path: str,
+        repeat_count: int = 1,
+        volume: float = 0.8,
+        channel_index: int = 7,
+        fade_in_ms: int = 0,
+    ):
+        super().__init__(ChannelPool(pool_size=0))
+        self.sound_path = sound_path
+        self.repeat_count = max(1, int(repeat_count))
+        self.base_volume = max(0.0, min(1.0, float(volume)))
+        self.channel_index = int(channel_index)
+        self.fade_in_ms = max(0, int(fade_in_ms))
+
+        self._sound: Optional[pygame.mixer.Sound] = None
+        self._play_started = False
+        self._finished = False
+
+    @property
+    def is_finished(self) -> bool:
+        return self._finished
+
+    def _resolve_sound_path(self) -> str:
+        if os.path.isabs(self.sound_path):
+            return self.sound_path
+
+        base_dir = os.path.dirname(__file__)
+        return os.path.normpath(os.path.join(base_dir, self.sound_path))
+
+    def _ensure_mixer(self):
+        if pygame.mixer.get_init():
+            return True
+
+        try:
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+            return True
+        except Exception as exc:
+            print(f"[RepeatingAudio] ERROR initializing mixer: {exc}")
+            return False
+
+    def _ensure_channel(self):
+        if not pygame.mixer.get_init():
+            return False
+
+        try:
+            if pygame.mixer.get_num_channels() <= self.channel_index:
+                pygame.mixer.set_num_channels(self.channel_index + 1)
+            if self.current_channel is None:
+                self.current_channel = pygame.mixer.Channel(self.channel_index)
+            return True
+        except Exception as exc:
+            print(f"[RepeatingAudio] ERROR allocating channel {self.channel_index}: {exc}")
+            return False
+
+    def _load_sound(self):
+        if self._sound_loaded:
+            return
+
+        if not self._ensure_mixer():
+            return
+
+        resolved_sound_path = self._resolve_sound_path()
+        self._sound = super()._load_sound(resolved_sound_path, "RepeatingAudio")
+        if self._sound is not None:
+            self._sound.set_volume(self.base_volume)
+            self._sound_loaded = True
+
+    def play(self, repeat_count: Optional[int] = None):
+        if not self._sound_loaded:
+            self._load_sound()
+
+        if self._sound is None or not self._ensure_channel():
+            return False
+
+        loops = max(0, (self.repeat_count if repeat_count is None else int(repeat_count)) - 1)
+        self.current_channel.play(self._sound, loops=loops, fade_ms=self.fade_in_ms)
+        self.current_channel.set_volume(self.base_volume)
+        self._play_started = True
+        self._finished = False
+        return True
+
+    def update(self):
+        if not self._play_started or self._finished:
+            return
+
+        if self.current_channel is not None and not self.current_channel.get_busy():
+            self._finished = True
+
+    def stop(self, fadeout_ms: int = 0):
+        super().stop(fadeout_ms)
+        self._play_started = False
+        self._finished = True
+
 class DummyAudioGenerator:
     """No-op audio generator - does nothing when audio is disabled."""
     def update_engine(self, *args, **kwargs): pass
