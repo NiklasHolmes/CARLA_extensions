@@ -25,9 +25,9 @@ except ModuleNotFoundError:
     from scenario_events.scenario_helper import is_transform_hidden_from_hero
 
 try:
-    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS
+    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_start_fence_spawns
 except ModuleNotFoundError:
-    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS
+    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_start_fence_spawns
 
 
 START_TO_CAR_DELAY = 1.0
@@ -39,7 +39,7 @@ SOFT_RAIN_DURATION_S = 1.0
 
 RAIN_TO_HIGHPED_DELAY = 1.0
 HIGHPED_TO_BUS_DELAY = 1.0
-BUS_TO_SONG_DELAY = 1.0
+BUS_TO_SONG_DELAY = 20.0
 SONG_TO_SANIMAL_DELAY = 1.0
 SANIMAL_TO_COW_DELAY = 1.0
 COW_TO_FUEL_DELAY = 1.0
@@ -101,7 +101,7 @@ TRIGGER_BUS = True
 TRIGGER_SONG = False
 TRIGGER_SANIMAL = False
 TRIGGER_COW = False
-TRIGGER_FUELEMPTY = True
+TRIGGER_FUELEMPTY = False
 TRIGGER_SANIMAL_IMMEDIATE = False
 
 
@@ -134,6 +134,7 @@ class Scenario06Runner:
         self._trigger_fuelempty = trigger_fuelempty
         self._highped_skip_applied = False
         self._sanimal_trigger_forced = False
+        self._start_static_props_spawned = False
 
         self._start_sim_time = None
         self._traffic_spawned = False
@@ -227,6 +228,7 @@ class Scenario06Runner:
         }
 
         self._static_actor_ids = []
+        self._persistent_static_actor_ids = []
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
 
@@ -733,6 +735,68 @@ class Scenario06Runner:
 
         self._spawn_sanimal(route_config, sim_time)
 
+    def _spawn_start_static_props(self):
+        if self._start_static_props_spawned:
+            return True
+
+        bp_lib = self.world.get_blueprint_library()
+        spawn_configs = get_start_fence_spawns()
+        spawned_count = 0
+        failed_configs = []
+
+        for prop_config in spawn_configs:
+            name = prop_config.get("name", "unknown_prop")
+            blueprint_id = prop_config.get("blueprints", [None])[0]
+            if not blueprint_id:
+                print(f"[Scenario06] Start-Props WARNUNG: '{name}' hat keine Blueprint-ID.")
+                failed_configs.append(name)
+                continue
+
+            transform = prop_config.get("transform")
+            location = transform.location if transform is not None else None
+            rotation = transform.rotation if transform is not None else None
+            matches = [bp.id for bp in bp_lib.filter(blueprint_id)]
+            print(
+                f"[Scenario06] Start-Props versuche '{name}' blueprint='{blueprint_id}' "
+                f"matches={matches} "
+                f"loc=({location.x:.2f}, {location.y:.2f}, {location.z:.2f}) "
+                f"rot=({rotation.pitch:.1f}, {rotation.yaw:.1f}, {rotation.roll:.1f})"
+                if location is not None and rotation is not None
+                else f"[Scenario06] Start-Props versuche '{name}' blueprint='{blueprint_id}' matches={matches}"
+            )
+
+            try:
+                prop_bp = bp_lib.find(blueprint_id)
+                print(f"[Scenario06] Start-Props Blueprint gefunden für '{name}': {prop_bp.id}")
+            except Exception as exc:
+                print(f"[Scenario06] Start-Props WARNUNG: Blueprint '{blueprint_id}' für '{name}' nicht gefunden: {exc}")
+                failed_configs.append(name)
+                continue
+
+            actor = self.world.try_spawn_actor(prop_bp, transform)
+            if actor is None:
+                print(
+                    f"[Scenario06] Start-Props WARNUNG: Spawn für '{name}' fehlgeschlagen. "
+                    f"Wahrscheinliche Ursache: Collision / ungültiger Transform. "
+                    f"blueprint='{prop_bp.id}'"
+                )
+                failed_configs.append(name)
+                continue
+
+            self._persistent_static_actor_ids.append(actor.id)
+            spawned_count += 1
+            print(f"[Scenario06] Start-Props OK: '{name}' actor_id={actor.id} blueprint='{prop_bp.id}' persistent=True")
+
+        self._start_static_props_spawned = True
+        if spawned_count == len(spawn_configs):
+            print(f"[Scenario06] Start-Props: {spawned_count}/{len(spawn_configs)} gespawnt.")
+        else:
+            print(
+                f"[Scenario06] Start-Props: {spawned_count}/{len(spawn_configs)} gespawnt, "
+                f"nicht alle konnten gesetzt werden. Fehlschläge={failed_configs}"
+            )
+        return spawned_count == len(spawn_configs)
+
     def _update_bus_trigger(self):
         delay_state = self._delay_states.get("highped_to_bus")
         return delay_state is not None and delay_state["finished"]
@@ -958,6 +1022,7 @@ class Scenario06Runner:
                 sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
                 if self._start_sim_time is None:
                     self._start_sim_time = sim_time
+                    self._spawn_start_static_props()
 
                 ego = self.find_hero()
                 ego_transform = ego.get_transform() if ego else carla.Transform(

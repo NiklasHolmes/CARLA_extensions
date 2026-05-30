@@ -3,6 +3,82 @@
 import carla
 
 
+START_FENCE_SPAWNS = [
+    {
+        "name": "fence_01",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-62.60, y=93.50, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_02",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-62.60, y=89.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_03",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-62.60, y=85.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_04",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-62.60, y=82.10, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_05",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-112.50, y=93.50, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_06",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-112.50, y=89.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_07",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-112.50, y=85.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_08",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-112.50, y=82.10, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+]
+
+
 HIGHPED_ROUTE_CONFIGS = (
     {
         "name": "highPedTrigger1",
@@ -23,6 +99,10 @@ HIGHPED_ROUTE_CONFIGS = (
         "target_location": carla.Location(x=215.40, y=81.20, z=1.90),
     },
 )
+
+
+def get_start_fence_spawns():
+    return START_FENCE_SPAWNS
 
 
 SANIMAL_ROUTE_CONFIGS = (
