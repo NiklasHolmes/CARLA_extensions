@@ -94,14 +94,14 @@ CAR_RESPAWN_MAX_DISTANCE = 80.0
 VEHICLE_SPAWN_MIN_SEPARATION = 8.0
 run_in_singleFile_mode = True
 
-TRIGGER_TRAFFIC = True
-TRIGGER_WEATHER = False
+TRIGGER_TRAFFIC =False
+TRIGGER_WEATHER = True
 TRIGGER_HIGHPED = False
 TRIGGER_BUS = True
 TRIGGER_SONG = False
-TRIGGER_SANIMAL = False
+TRIGGER_SANIMAL = True
 TRIGGER_COW = False
-TRIGGER_FUELEMPTY = False
+TRIGGER_FUELEMPTY = True
 TRIGGER_SANIMAL_IMMEDIATE = False
 
 
@@ -1055,7 +1055,7 @@ class Scenario06Runner:
                         self._start_delay_timer("rain_to_highped", sim_time)
                     self._update_delay_timer("rain_to_highped", sim_time)
 
-                if not self._trigger_highped:
+                if not self._trigger_highped and rain_to_highped_state["finished"]:
                     self._skip_highped_trigger(sim_time)
 
                 if ego and rain_to_highped_state["finished"]:
@@ -1099,7 +1099,7 @@ class Scenario06Runner:
                     else:
                         self._update_delay_timer("song_to_sanimal", sim_time)
 
-                if not self._trigger_sanimal:
+                if not self._trigger_sanimal and self.song_finished and song_to_sanimal_state["finished"]:
                     self._skip_sanimal_trigger(sim_time)
 
                 if self.song_finished and song_to_sanimal_state["finished"]:
@@ -1111,13 +1111,12 @@ class Scenario06Runner:
                 if self._traffic_spawned:
                     self._maintain_spawn_pools(ego_transform, sim_time)
 
+                sanimal_to_cow_state = self._delay_states["sanimal_to_cow"]
                 if self.sanimal_finished:
-                    sanimal_to_cow_state = self._delay_states["sanimal_to_cow"]
                     if sanimal_to_cow_state["started_at"] is None:
                         self._start_delay_timer("sanimal_to_cow", sim_time)
                     self._update_delay_timer("sanimal_to_cow", sim_time)
 
-                sanimal_to_cow_state = self._delay_states["sanimal_to_cow"]
                 if self.sanimal_finished and sanimal_to_cow_state["finished"] and not self.cow_finished:
                     if not self._trigger_cow:
                         self._skip_cow_trigger(sim_time)
