@@ -25,9 +25,9 @@ except ModuleNotFoundError:
     from scenario_events.scenario_helper import is_transform_hidden_from_hero
 
 try:
-    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_start_fence_spawns
+    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_highped_barrier_spawns, get_start_fence_spawns
 except ModuleNotFoundError:
-    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_start_fence_spawns
+    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_highped_barrier_spawns, get_start_fence_spawns
 
 
 START_TO_CAR_DELAY = 1.0
@@ -96,7 +96,7 @@ run_in_singleFile_mode = True
 
 TRIGGER_TRAFFIC =False
 TRIGGER_WEATHER = True
-TRIGGER_HIGHPED = False
+TRIGGER_HIGHPED = True
 TRIGGER_BUS = True
 TRIGGER_SONG = False
 TRIGGER_SANIMAL = True
@@ -133,6 +133,8 @@ class Scenario06Runner:
         self._trigger_cow = trigger_cow
         self._trigger_fuelempty = trigger_fuelempty
         self._highped_skip_applied = False
+        self._highped_barrier_triggered_keys = set()
+        self._highped_barrier_actor_ids = []
         self._sanimal_trigger_forced = False
         self._start_static_props_spawned = False
 
@@ -438,6 +440,8 @@ class Scenario06Runner:
         if self._highped_route_done or self._highped_route_active:
             return False
 
+        self._cleanup_highped_barrier_props()
+
         walker_bp = self.world.get_blueprint_library().find(HIGHPED_BLUEPRINT_ID)
         if walker_bp.has_attribute("is_invincible"):
             walker_bp.set_attribute("is_invincible", "false")
@@ -485,6 +489,8 @@ class Scenario06Runner:
                 walker.destroy()
             except Exception:
                 pass
+
+        self._cleanup_highped_barrier_props()
 
         if self._highped_walker_id in self._walker_actor_ids:
             self._walker_actor_ids.remove(self._highped_walker_id)
@@ -659,6 +665,7 @@ class Scenario06Runner:
         if self.highped_finished or self._highped_skip_applied:
             return
 
+        self._cleanup_highped_barrier_props()
         self._highped_route_done = True
         self._highped_route_active = False
         self.highped_finished = True
@@ -796,6 +803,73 @@ class Scenario06Runner:
                 f"nicht alle konnten gesetzt werden. Fehlschläge={failed_configs}"
             )
         return spawned_count == len(spawn_configs)
+
+    def _get_highped_barrier_config(self, hero_location):
+        return self._get_route_config(get_highped_barrier_spawns(), hero_location)
+
+    def _spawn_highped_barrier_props(self, barrier_config):
+        barrier_name = barrier_config.get("name", "highped_barrier")
+        if barrier_name in self._highped_barrier_triggered_keys:
+            return False
+
+        bp_lib = self.world.get_blueprint_library()
+        spawn_configs = barrier_config.get("spawn_configs", [])
+        spawned_count = 0
+        failed_configs = []
+
+        for prop_config in spawn_configs:
+            name = prop_config.get("name", "unknown_prop")
+            blueprint_id = prop_config.get("blueprints", [None])[0]
+            if not blueprint_id:
+                failed_configs.append(name)
+                continue
+
+            try:
+                prop_bp = bp_lib.find(blueprint_id)
+            except Exception as exc:
+                print(f"[Scenario06] Barrier-Props WARNUNG: Blueprint '{blueprint_id}' für '{name}' nicht gefunden: {exc}")
+                failed_configs.append(name)
+                continue
+
+            actor = self.world.try_spawn_actor(prop_bp, prop_config.get("transform"))
+            if actor is None:
+                print(f"[Scenario06] Barrier-Props WARNUNG: Spawn für '{name}' fehlgeschlagen | blueprint='{prop_bp.id}'")
+                failed_configs.append(name)
+                continue
+
+            self._static_actor_ids.append(actor.id)
+            self._highped_barrier_actor_ids.append(actor.id)
+            spawned_count += 1
+            print(f"[Scenario06] Barrier-Props OK: '{name}' actor_id={actor.id} blueprint='{prop_bp.id}'")
+
+        self._highped_barrier_triggered_keys.add(barrier_name)
+        if spawned_count == len(spawn_configs):
+            print(f"[Scenario06] HighPed-Barrier: {spawned_count}/{len(spawn_configs)} gespawnt.")
+        else:
+            print(
+                f"[Scenario06] HighPed-Barrier: {spawned_count}/{len(spawn_configs)} gespawnt, "
+                f"Fehlschläge={failed_configs}"
+            )
+        return spawned_count > 0
+
+    def _cleanup_highped_barrier_props(self):
+        if not self._highped_barrier_actor_ids:
+            self._highped_barrier_triggered_keys.clear()
+            return
+
+        for actor_id in list(self._highped_barrier_actor_ids):
+            actor = self.world.get_actor(actor_id)
+            if actor is not None:
+                try:
+                    actor.destroy()
+                except Exception:
+                    pass
+            if actor_id in self._static_actor_ids:
+                self._static_actor_ids.remove(actor_id)
+
+        self._highped_barrier_actor_ids = []
+        self._highped_barrier_triggered_keys.clear()
+        print("[Scenario06] HighPed barrier props removed.")
 
     def _update_bus_trigger(self):
         delay_state = self._delay_states.get("highped_to_bus")
@@ -1057,6 +1131,11 @@ class Scenario06Runner:
 
                 if not self._trigger_highped and rain_to_highped_state["finished"]:
                     self._skip_highped_trigger(sim_time)
+
+                if ego and rain_to_highped_state["finished"] and not self._highped_route_done and not self._highped_route_active:
+                    barrier_config = self._get_highped_barrier_config(ego_transform.location)
+                    if barrier_config is not None:
+                        self._spawn_highped_barrier_props(barrier_config)
 
                 if ego and rain_to_highped_state["finished"]:
                     self._maybe_spawn_highped(ego_transform, sim_time)

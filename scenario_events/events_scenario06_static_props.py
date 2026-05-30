@@ -105,6 +105,66 @@ def get_start_fence_spawns():
     return START_FENCE_SPAWNS
 
 
+HIGHPED_BARRIER_CONFIGS = (
+    {
+        "name": "highpedBarrierTrigger1",
+        "trigger_location": carla.Location(x=-132.80, y=-190.10, z=10.00),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "spawn_configs": [
+            {
+                "name": "highped_barrier_2_firetruck_01",
+                "blueprints": ["vehicle.carlamotors.firetruck"],
+                "transform": carla.Transform(
+                    carla.Location(x=37.80, y=-179.40, z=2.00),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "highped_barrier_2_firetruck_02",
+                "blueprints": ["vehicle.carlamotors.firetruck"],
+                "transform": carla.Transform(
+                    carla.Location(x=29.30, y=-182.80, z=2.00),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+        ],
+    },
+    {
+        "name": "highpedBarrierTrigger2",
+        "trigger_location": carla.Location(x=-144.70, y=205.00, z=8.60),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "spawn_configs": [
+            {
+                "name": "highped_barrier_1_firetruck_01",
+                "blueprints": ["vehicle.carlamotors.firetruck"],
+                "transform": carla.Transform(
+                    carla.Location(x=25.10, y=182.20, z=2.00),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "highped_barrier_1_firetruck_02",
+                "blueprints": ["vehicle.carlamotors.firetruck"],
+                "transform": carla.Transform(
+                    carla.Location(x=33.60, y=185.60, z=2.00),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+        ],
+    },
+)
+
+
+def get_highped_barrier_spawns():
+    return HIGHPED_BARRIER_CONFIGS
+
+
 SANIMAL_ROUTE_CONFIGS = (
     {
         "name": "sanimalTrigger1",
