@@ -92,7 +92,7 @@ MIN_SPAWN_DISTANCE = 30.0
 MAX_SPAWN_DISTANCE = 100.0
 CAR_RESPAWN_MAX_DISTANCE = 80.0
 VEHICLE_SPAWN_MIN_SEPARATION = 8.0
-run_in_singleFile_mode = True
+run_in_singleFile_mode = True                       # attention! single file mode!
 
 TRIGGER_TRAFFIC =False
 TRIGGER_WEATHER = True
