@@ -257,15 +257,15 @@ PROFILE_CONFIG = {
     },
     'simulator4home': {
         'cli_defaults': {
-            'res': '3840x1080',
+            'res': '960x540',
             'sp': 0.8,
             'input': 'keyboard',
             'rolename': 'hero',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'overlapping',
-            'ENABLE_AUDIO': False,
+            'DASHBOARD_MODE': 'none',
+            'ENABLE_AUDIO': True,
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
             'WINDOW_BORDERLESS': True,
@@ -277,7 +277,7 @@ PROFILE_CONFIG = {
             'res': '960x540',
             'sp': 0.7,
             'input': 'keyboard',
-            'rolename': 'hero',
+            'rolename': 'supervisor',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': False,
