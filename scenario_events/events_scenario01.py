@@ -22,13 +22,20 @@ def get_actor_blueprints(world, filter_pattern):
 
 
 def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
-	return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
+	result = []
+	for bp in blueprints:
+		tid = bp.id.lower() if hasattr(bp, "id") else ""
+		if any(k in tid for k in blocked_keywords):
+			continue
+
+		result.append(bp)
+	return result
 
 
 START_TO_REDLIGHT_DELAY = 1.0
 REDLIGHT_TO_TRAFFICJAM_DELAY = 1.0
-TRAFFICJAM_TO_BADGUY_DELAY = 100.0
-BADGUY_TO_SONG_DELAY = 1.0
+TRAFFICJAM_TO_BADGUY_DELAY = 50.0
+BADGUY_TO_SONG_DELAY = 100.0
 SONG_TO_CROSSPED_DELAY = 1.0
 CROSSPED_TO_OCCUPY_DELAY = 1.0
 OCCUPY_TO_END_DELAY = 1.0
@@ -39,8 +46,10 @@ HERO_RED_LIGHT_HOLD_SECONDS = 8.0
 REDLIGHT_MIN_RED_SECONDS = 8.0
 REDLIGHT_MAX_RED_SECONDS = 12.0
 REDLIGHT_GREEN_RELEASE_SECONDS = 8.0
-REDLIGHT_MAX_TRAFFIC_LIGHTS = 2
-TRAFFICJAM_PRUNE_DISTANCE_METERS = 100.0
+REDLIGHT_MAX_TRAFFIC_LIGHTS = 4
+TRAFFICJAM_PRUNE_DISTANCE_METERS = 150.0
+TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 15.0
+TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 10.0
 
 BLOCKED_VEHICLE_KEYWORDS = (
 	"firetruck",
@@ -52,6 +61,16 @@ BLOCKED_VEHICLE_KEYWORDS = (
 	"european_hgv",
 	"t2",
 	"police",
+	# exclude two-wheelers
+	"motorcycle",
+	"bicycle",
+	"vehicle.harley-davidson.low_rider",
+	"vehicle.kawasaki.ninja",
+	"vehicle.vespa.zx125",
+	"vehicle.yamaha.yzf",
+	"vehicle.bh.crossbike",
+	"vehicle.diamondback.century",
+	"vehicle.gazelle.omafiets",
 )
 
 SIM_STEP_S = 0.05
@@ -63,7 +82,8 @@ TRIGGER_BADGUY = True
 TRIGGER_SONG = True
 TRIGGER_CROSSPED = True
 TRIGGER_OCCUPY = True
-
+PRUNE_TJ_CARS = True
+DEBUG_MODE = True
 
 class Scenario01Runner:
 	def __init__(self, host, port, tm_port, done_file=None, trigger_redlight=True, trigger_trafficjam=True, trigger_badguy=True, trigger_song=True, trigger_crossped=True, trigger_occupy=True):
@@ -73,6 +93,9 @@ class Scenario01Runner:
 		self._tm_port = tm_port
 		self._done_file = done_file
 		self._rng = random.Random()
+		self._debug_trafficjam_box_lifetime = SIM_STEP_S * 2.0
+		# control pruning of trafficjam vehicles via module-level boolean PRUNE_TJ_CARS
+		self._prune_tj_cars = PRUNE_TJ_CARS
 
 		self._trigger_redlight = trigger_redlight
 		self._trigger_trafficjam = trigger_trafficjam
@@ -92,6 +115,9 @@ class Scenario01Runner:
 		self._redlight_seen_traffic_light_count = 0
 		self._trafficjam_spawned = False
 		self._trafficjam_spawn_time = None
+		self._trafficjam_traffic_light = None
+		self._trafficjam_traffic_light_state = None
+		self._trafficjam_traffic_light_started_at = None
 		self.trafficjam_finished = False
 		self.badguy_finished = False
 		self.song_finished = False
@@ -189,6 +215,164 @@ class Scenario01Runner:
 			return trigger_config
 		return None
 
+	def _draw_trafficjam_trigger_box(self):
+		for trigger_config in get_static_prop_spawns("trafficjam"):
+			center = trigger_config["trigger_location"]
+			x_tol = float(trigger_config.get("trigger_x_tolerance", 0.0))
+			y_tol = float(trigger_config.get("trigger_y_tolerance", 0.0))
+			z_base = center.z
+			z_top = z_base + 2.0
+			color = carla.Color(r=255, g=0, b=0, a=255)
+			thickness = 0.1
+			life_time = self._debug_trafficjam_box_lifetime
+
+			p1 = carla.Location(x=center.x - x_tol, y=center.y - y_tol, z=z_base)
+			p2 = carla.Location(x=center.x + x_tol, y=center.y - y_tol, z=z_base)
+			p3 = carla.Location(x=center.x + x_tol, y=center.y + y_tol, z=z_base)
+			p4 = carla.Location(x=center.x - x_tol, y=center.y + y_tol, z=z_base)
+
+			p1_top = carla.Location(x=p1.x, y=p1.y, z=z_top)
+			p2_top = carla.Location(x=p2.x, y=p2.y, z=z_top)
+			p3_top = carla.Location(x=p3.x, y=p3.y, z=z_top)
+			p4_top = carla.Location(x=p4.x, y=p4.y, z=z_top)
+
+			self.world.debug.draw_line(p1, p2, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p2, p3, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p3, p4, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p4, p1, thickness=thickness, color=color, life_time=life_time)
+
+			self.world.debug.draw_line(p1_top, p2_top, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p2_top, p3_top, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p3_top, p4_top, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p4_top, p1_top, thickness=thickness, color=color, life_time=life_time)
+
+			self.world.debug.draw_line(p1, p1_top, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p2, p2_top, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p3, p3_top, thickness=thickness, color=color, life_time=life_time)
+			self.world.debug.draw_line(p4, p4_top, thickness=thickness, color=color, life_time=life_time)
+			return
+
+	def _find_trafficjam_traffic_light(self, first_vehicle=None):
+		if first_vehicle is None and self._vehicle_actor_ids:
+			first_vehicle = self.world.get_actor(self._vehicle_actor_ids[0])
+		if first_vehicle is None:
+			return None, None
+
+		vehicle_transform = first_vehicle.get_transform()
+		vehicle_location = vehicle_transform.location
+		vehicle_forward = vehicle_transform.get_forward_vector()
+		best_traffic_light = None
+		best_landmark = None
+		best_distance = None
+
+		for landmark in self.world.get_map().get_all_landmarks_of_type("1000001"):
+			if landmark.id == "":
+				continue
+
+			traffic_light = self.world.get_traffic_light(landmark)
+			if traffic_light is None:
+				continue
+
+			light_location = traffic_light.get_transform().location
+			dx = light_location.x - vehicle_location.x
+			dy = light_location.y - vehicle_location.y
+			dz = light_location.z - vehicle_location.z
+			if (vehicle_forward.x * dx) + (vehicle_forward.y * dy) + (vehicle_forward.z * dz) <= 0.0:
+				continue
+
+			distance = (dx * dx + dy * dy + dz * dz) ** 0.5
+			if best_distance is None or distance < best_distance:
+				best_traffic_light = traffic_light
+				best_landmark = landmark
+				best_distance = distance
+
+		return best_traffic_light, best_landmark
+
+	def _draw_trafficjam_traffic_light_box(self):
+		if not DEBUG_MODE:
+			return
+
+		traffic_light = self._trafficjam_traffic_light
+		if traffic_light is None:
+			return
+
+		try:
+			self.world.debug.draw_box(
+				traffic_light.bounding_box,
+				traffic_light.get_transform(),
+				thickness=0.1,
+				color=carla.Color(r=255, g=255, b=0, a=255),
+				life_time=self._debug_trafficjam_box_lifetime,
+			)
+		except Exception:
+			pass
+
+	def _start_trafficjam_traffic_light_control(self, sim_time):
+		traffic_light, landmark = self._find_trafficjam_traffic_light()
+		self._trafficjam_traffic_light = traffic_light
+		self._trafficjam_traffic_light_state = None
+		self._trafficjam_traffic_light_started_at = sim_time
+
+		if traffic_light is None:
+			print("[Scenario01] WARNUNG: TrafficJam-Ampel nicht gefunden.")
+			return
+
+		traffic_light_location = traffic_light.get_transform().location
+		landmark_id = landmark.id if landmark is not None else "unknown"
+		opendrive_id = traffic_light.get_opendrive_id() if hasattr(traffic_light, "get_opendrive_id") else "unknown"
+		print(
+			f"[Scenario01] TrafficJam traffic light selected | light_id={traffic_light.id} | "
+			f"opendrive_id={opendrive_id} | landmark_id={landmark_id} | "
+			f"pos=({traffic_light_location.x:.2f}, {traffic_light_location.y:.2f}, {traffic_light_location.z:.2f})"
+		)
+
+		try:
+			if hasattr(traffic_light, "freeze"):
+				traffic_light.freeze(True)
+			traffic_light.set_state(carla.TrafficLightState.Red)
+			if hasattr(traffic_light, "set_red_time"):
+				traffic_light.set_red_time(TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS)
+			self._trafficjam_traffic_light_state = "red"
+			print(
+				f"[Scenario01] Ampel auf rot geschaltet | light_id={traffic_light.id} | "
+				f"red_hold={TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS:.1f}s"
+			)
+		except Exception:
+			print(f"[Scenario01] WARNUNG: TrafficJam-Ampel konnte nicht auf Rot gesetzt werden | light_id={traffic_light.id}")
+
+	def _update_trafficjam_traffic_light_control(self, sim_time):
+		traffic_light = self._trafficjam_traffic_light
+		if traffic_light is None or self._trafficjam_traffic_light_started_at is None:
+			return
+
+		elapsed = sim_time - self._trafficjam_traffic_light_started_at
+		state = self._trafficjam_traffic_light_state
+
+		if state == "red" and elapsed >= TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS:
+			try:
+				traffic_light.set_state(carla.TrafficLightState.Green)
+				if hasattr(traffic_light, "set_green_time"):
+					traffic_light.set_green_time(TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS)
+				self._trafficjam_traffic_light_state = "green"
+				self._trafficjam_traffic_light_started_at = sim_time
+				print(
+					f"[Scenario01] Ampel auf gruen geschaltet | light_id={traffic_light.id} | "
+					f"elapsed={elapsed:.2f}s | green_hold={TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS:.1f}s"
+				)
+			except Exception:
+				print(f"[Scenario01] WARNUNG: TrafficJam-Ampel konnte nicht auf Gruen gesetzt werden | light_id={traffic_light.id}")
+			return
+
+		if state == "green" and elapsed >= TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS:
+			self._trafficjam_traffic_light_state = "released"
+			self._trafficjam_traffic_light_started_at = None
+			try:
+				if hasattr(traffic_light, "freeze"):
+					traffic_light.freeze(False)
+			except Exception:
+				pass
+		print(f"[Scenario01] Ampel losgelassen | light_id={traffic_light.id} | elapsed={elapsed:.2f}s")
+
 	def _project_transform_to_driving_lane(self, spawn_transform):
 		waypoint = self.world.get_map().get_waypoint(
 			spawn_transform.location,
@@ -258,7 +442,10 @@ class Scenario01Runner:
 		return spawned_count > 0
 
 	def _prune_far_trafficjam_vehicles(self, ego_location):
-		if ego_location is None or not self._vehicle_actor_ids:
+		delay_state = self._delay_states.get("trafficjam_to_badguy")
+		if not self._prune_tj_cars or ego_location is None or not self._vehicle_actor_ids:
+			return
+		if delay_state is None or not delay_state["finished"]:
 			return
 
 		active_vehicle_ids = []
@@ -299,6 +486,7 @@ class Scenario01Runner:
 		self._redlight_traffic_light_states.clear()
 		self._redlight_seen_traffic_light_ids.clear()
 		self._redlight_seen_traffic_light_count = 0
+		print("[Scenario01] Ampelsteuerung gestartet.")
 
 	def _finish_redlight_control(self, sim_time):
 		if not self.redlight_active:
@@ -360,6 +548,7 @@ class Scenario01Runner:
 		if state["mode"] == "forced_red":
 			if tl.get_state() != carla.TrafficLightState.Red:
 				tl.set_state(carla.TrafficLightState.Red)
+				print(f"[Scenario01] Ampel auf rot geschaltet | light_id={tl.id}")
 			if hasattr(tl, "set_red_time"):
 				tl.set_red_time(state["red_hold_seconds"])
 			if (sim_time - state["red_started_at"]) >= state["red_hold_seconds"]:
@@ -367,6 +556,7 @@ class Scenario01Runner:
 				state["green_started_at"] = sim_time
 				if tl.get_state() != carla.TrafficLightState.Green:
 					tl.set_state(carla.TrafficLightState.Green)
+					print(f"[Scenario01] Ampel auf gruen geschaltet | light_id={tl.id}")
 				if hasattr(tl, "set_green_time"):
 					tl.set_green_time(REDLIGHT_GREEN_RELEASE_SECONDS)
 			return
@@ -374,11 +564,13 @@ class Scenario01Runner:
 		if state["mode"] == "forced_green":
 			if tl.get_state() != carla.TrafficLightState.Green:
 				tl.set_state(carla.TrafficLightState.Green)
+				print(f"[Scenario01] Ampel auf gruen gehalten | light_id={tl.id}")
 			if hasattr(tl, "set_green_time"):
 				tl.set_green_time(REDLIGHT_GREEN_RELEASE_SECONDS)
 			if (sim_time - state["green_started_at"]) >= REDLIGHT_GREEN_RELEASE_SECONDS:
 				state["mode"] = "released"
 				state["released"] = True
+				print(f"[Scenario01] Ampel losgelassen | light_id={tl.id}")
 			return
 
 		if state["mode"] == "released":
@@ -411,6 +603,9 @@ class Scenario01Runner:
 		if delay_state is None:
 			return
 
+		if delay_state["started_at"] is None:
+			print(f"{delay_name} delay started!")
+
 		delay_state["started_at"] = sim_time
 		delay_state["finished"] = False
 
@@ -420,6 +615,7 @@ class Scenario01Runner:
 			return
 
 		if delay_state["started_at"] is None:
+			print(f"{delay_name} delay started!")
 			delay_state["started_at"] = sim_time
 		delay_state["finished"] = True
 
@@ -442,9 +638,14 @@ class Scenario01Runner:
 
 	def start_trafficjam(self, trigger_config=None, sim_time=None):
 		print("start trafficjam now")
+		if trigger_config is None:
+			trigger_configs = get_static_prop_spawns("trafficjam")
+			trigger_config = trigger_configs[0] if trigger_configs else None
 		spawned_any = True
 		if trigger_config is not None and sim_time is not None:
 			spawned_any = self._spawn_trafficjam_vehicles(trigger_config, sim_time)
+			if spawned_any:
+				self._start_trafficjam_traffic_light_control(sim_time)
 		self.trafficjam_finished = bool(spawned_any)
 
 	def start_badguy(self):
@@ -546,7 +747,10 @@ class Scenario01Runner:
 		try:
 			while True:
 				self.world.wait_for_tick()
+				if DEBUG_MODE:
+					self._draw_trafficjam_trigger_box()
 				sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
+				self._update_trafficjam_traffic_light_control(sim_time)
 				ego = self.find_hero()
 				ego_location = ego.get_location() if ego is not None else None
 				ego_velocity = ego.get_velocity() if ego is not None else None
