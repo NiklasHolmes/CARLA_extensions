@@ -17,6 +17,9 @@ Current focus on manual control and dashboard for CARLA simulator.
 - **`--input [keyboard|gamepad]`**      – Input device (default: keyboard)
 - **`--profile [simulator|supervisor]`** – Apply preset settings (explicit CLI flags override)
 - **`--dashboard-display N`**           – Monitor index for dashboard window (default: 0)
+- **`--vehicleID [BP_ID]`** 			– Vehicle blueprint ID to spawn (e.g., vehicle.dodge.charger_2020)
+- **`--vehicleColor [R,G,B]`** 			– Vehicle color override as RGB values (e.g., 255,255,0 for yellow)
+- **`--spawnPoint [X,Y,Z,YAW]`** 		– Exact spawn transform override (e.g., 158.08,27.18,0.30,-90.0)
 
 ### Examples
 
@@ -29,6 +32,10 @@ python manual_control.py --input gamepad --dashboard-display 1
 
 # gamepad (DualShock Controller tested) input with dashboard on second monitor
 python manual_control.py --profile simulator
+
+# CLI example for town07:
+python manual_control.py --profile simulator4home --vehicleID vehicle.dodge.charger_police_2020 --vehicleColor 255,255,0 --spawnPoint="-102.335,-86.343,0.3,-10"
+
 ```
 
 ## Window & Dashboard Modes

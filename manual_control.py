@@ -200,9 +200,13 @@ ENABLE_AUDIO = False
 # simulator/API combinations.
 ENABLE_OBSTACLE_SENSOR = False
 
-# Hero marker refresh interval in seconds. Set to 0 to draw every frame.
-# Default 2.0s per your request (low-frequency overview).
+# Hero marker - set to 0 to draw every frame, default 2.0s
 HERO_MARKER_INTERVAL = 2.0
+HERO_MARKER_TOP_OFFSET = carla.Location(z=40.0)
+HERO_MARKER_TOP_EXTENT = carla.Vector3D(1.5, 1.5, 0.01)
+HERO_MARKER_REAR_LOCAL_OFFSET = carla.Location(x=-2.4, y=0.0, z=0.6)
+HERO_MARKER_REAR_EXTENT = carla.Vector3D(0.05, 0.8, 0.1)
+HERO_MARKER_COLOR = carla.Color(255, 0, 0)
 
 # HUD config
 ENABLE_HUD = True
@@ -265,7 +269,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': True,
             'DASHBOARD_MODE': 'none',
-            'ENABLE_AUDIO': True,
+            'ENABLE_AUDIO': False,
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
             'WINDOW_BORDERLESS': True,
@@ -282,7 +286,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': False,
             'DASHBOARD_MODE': 'none',
-            'ENABLE_AUDIO': True,
+            'ENABLE_AUDIO': False,
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
@@ -495,6 +499,46 @@ def _export_performance_metrics(world):
     except Exception as e:
         print("[Performance] ERROR: Perf export failed: %s" % e)
 
+
+def _parse_vehicle_color(value):
+    """Parse a CLI vehicle color string like '255,255,0' into CARLA format."""
+    if value is None:
+        return None
+
+    parts = [part.strip() for part in str(value).split(',')]
+    if len(parts) != 3:
+        raise argparse.ArgumentTypeError("vehicleColor must be formatted as R,G,B")
+
+    try:
+        rgb = [int(part) for part in parts]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("vehicleColor values must be integers") from exc
+
+    if any(component < 0 or component > 255 for component in rgb):
+        raise argparse.ArgumentTypeError("vehicleColor values must be in the range 0..255")
+
+    return ','.join(str(component) for component in rgb)
+
+
+def _parse_spawn_point(value):
+    """Parse a CLI spawn point string like 'x,y,z,yaw' into a CARLA Transform."""
+    if value is None:
+        return None
+
+    parts = [part.strip() for part in str(value).split(',')]
+    if len(parts) != 4:
+        raise argparse.ArgumentTypeError("spawnPoint must be formatted as x,y,z,yaw")
+
+    try:
+        x, y, z, yaw = (float(part) for part in parts)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("spawnPoint values must be numeric") from exc
+
+    return carla.Transform(
+        carla.Location(x=x, y=y, z=z),
+        carla.Rotation(pitch=0.0, yaw=yaw, roll=0.0),
+    )
+
 # Blinker and Light logic: 
 
 def _get_blinker_duration_or_raise(world):
@@ -701,20 +745,29 @@ class World(object):
         if USE_SCENE_FINAL:
             cam_index = 0
             cam_pos_index = 0
+
+        # from CLI parameters:
+        vehicle_id = getattr(self.args, 'vehicle_id', None) or CHOSEN_VEHICLE
+        vehicle_color = getattr(self.args, 'vehicle_color', None)
+        spawn_point_override = getattr(self.args, 'spawn_point', None)
+
         # Get a random blueprint.
         blueprint_list = get_actor_blueprints(self.world, self._actor_filter, self._actor_generation)
         if not blueprint_list:
             raise ValueError("Couldn't find any blueprints with the specified filters")
         # blueprint = random.choice(blueprint_list)
         # SET CAR TYPE
-        blueprint = self.world.get_blueprint_library().find(CHOSEN_VEHICLE)
+        blueprint = self.world.get_blueprint_library().find(vehicle_id)
         
         blueprint.set_attribute('role_name', self.actor_role_name)
         if blueprint.has_attribute('terramechanics'):
             blueprint.set_attribute('terramechanics', 'true')
         if blueprint.has_attribute('color'):
-            color = random.choice(blueprint.get_attribute('color').recommended_values)
-            blueprint.set_attribute('color', color)
+            if vehicle_color is not None:
+                blueprint.set_attribute('color', vehicle_color)
+            else:
+                color = random.choice(blueprint.get_attribute('color').recommended_values)
+                blueprint.set_attribute('color', color)
         if blueprint.has_attribute('driver_id'):
             driver_id = random.choice(blueprint.get_attribute('driver_id').recommended_values)
             blueprint.set_attribute('driver_id', driver_id)
@@ -726,11 +779,13 @@ class World(object):
             self.player_max_speed_fast = float(blueprint.get_attribute('speed').recommended_values[2])
 
         # Spawn the player.
+        spawn_point = spawn_point_override
         if self.player is not None:
-            spawn_point = self.player.get_transform()
-            spawn_point.location.z += 2.0
-            spawn_point.rotation.roll = 0.0
-            spawn_point.rotation.pitch = 0.0
+            if spawn_point is None:
+                spawn_point = self.player.get_transform()
+                spawn_point.location.z += 2.0
+                spawn_point.rotation.roll = 0.0
+                spawn_point.rotation.pitch = 0.0
             self.destroy()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
@@ -740,7 +795,8 @@ class World(object):
                 print('There are no spawn points available in your map/town.')
                 print('Please add some Vehicle Spawn Point to your UE4 scene.')
                 sys.exit(1)
-            spawn_point = _get_spawn_point_for_town(self.map, rolename=self.actor_role_name)
+            if spawn_point is None:
+                spawn_point = _get_spawn_point_for_town(self.map, rolename=self.actor_role_name)
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
             self.modify_vehicle_physics(self.player)
@@ -2560,7 +2616,8 @@ def game_loop(args):
     original_settings = None
     event_sync = None
     stop_signal_seen = False
-
+    draw_hero_markers = str(getattr(args, 'rolename', '')) == 'hero'
+    
     try:
         client = carla.Client(args.host, args.port)
         client.set_timeout(2000.0)
@@ -2686,19 +2743,32 @@ def game_loop(args):
             try:
                 interval = float(HERO_MARKER_INTERVAL) if HERO_MARKER_INTERVAL is not None else 0.0
                 now = time.time()
-                if interval <= 0.0 or (now - hero_marker_last) >= interval:
+                if draw_hero_markers and (interval <= 0.0 or (now - hero_marker_last) >= interval):
                     hero = world.player
                     if hero is not None:
                         debug = world.world.debug
-                        hero_location = hero.get_location()
-                        marker_location = hero_location + carla.Location(z=20.0)
-                        box = carla.BoundingBox(marker_location, carla.Vector3D(1.5, 1.5, 0.01))
+                        hero_transform = hero.get_transform()
+                        hero_location = hero_transform.location
+                        hero_rotation = hero_transform.rotation
+                        life_time = interval if interval > 0.0 else 0.5
+
+                        top_box = carla.BoundingBox(hero_location + HERO_MARKER_TOP_OFFSET, HERO_MARKER_TOP_EXTENT)
                         debug.draw_box(
-                            box,
+                            top_box,
                             carla.Rotation(),
                             thickness=0.5,
-                            color=carla.Color(255, 0, 0),
-                            life_time=(interval if interval > 0.0 else 0.5),
+                            color=HERO_MARKER_COLOR,
+                            life_time=life_time,
+                        )
+
+                        rear_marker_location = hero_transform.transform(HERO_MARKER_REAR_LOCAL_OFFSET)
+                        rear_box = carla.BoundingBox(rear_marker_location, HERO_MARKER_REAR_EXTENT)
+                        debug.draw_box(
+                            rear_box,
+                            hero_rotation,
+                            thickness=0.12,
+                            color=HERO_MARKER_COLOR,
+                            life_time=life_time,
                         )
                     hero_marker_last = now
             except Exception:
@@ -2797,6 +2867,27 @@ def main():
         metavar='NAME',
         default='hero',
         help='actor role name (default: "hero")')
+    argparser.add_argument(
+        '--vehicleID',
+        dest='vehicle_id',
+        metavar='BP_ID',
+        default=None,
+        help='vehicle blueprint ID to spawn, e.g. vehicle.dodge.charger_2020')
+    argparser.add_argument(
+        '--vehicleColor',
+        dest='vehicle_color',
+        metavar='R,G,B',
+        type=_parse_vehicle_color,
+        default=None,
+        help='vehicle color override, e.g. 255,255,0')
+    argparser.add_argument(
+        '--spawnPoint',
+        '--spawn-point',
+        dest='spawn_point',
+        metavar='X,Y,Z,YAW',
+        type=_parse_spawn_point,
+        default=None,
+        help='exact spawn transform override, e.g. 158.08,27.18,0.30,-90.0')
     argparser.add_argument(
         '--gamma',
         default=2.2,
