@@ -4,6 +4,8 @@ import argparse
 import math
 import os
 import random
+import subprocess
+import sys
 import time
 
 import carla
@@ -33,7 +35,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 
 START_TO_REDLIGHT_DELAY = 1.0
 REDLIGHT_TO_TRAFFICJAM_DELAY = 1.0
-TRAFFICJAM_TO_BADGUY_DELAY = 50.0
+TRAFFICJAM_TO_BADGUY_DELAY = 5.0
 BADGUY_TO_SONG_DELAY = 100.0
 SONG_TO_CROSSPED_DELAY = 1.0
 CROSSPED_TO_OCCUPY_DELAY = 1.0
@@ -76,7 +78,7 @@ SIM_STEP_S = 0.05
 run_in_singleFile_mode = True
 
 TRIGGER_REDLIGHT = False
-TRIGGER_TRAFFICJAM = True
+TRIGGER_TRAFFICJAM = False
 TRIGGER_BADGUY = True
 TRIGGER_SONG = True
 TRIGGER_CROSSPED = True
@@ -94,10 +96,13 @@ class Scenario01Runner:
 		self.client = carla.Client(host, port)
 		self.client.set_timeout(10.0)
 		self.world = self.client.get_world()
+		self.host = host
+		self.port = port
 		self._tm_port = tm_port
 		self._done_file = done_file
 		self._rng = random.Random()
 		self._debug_trafficjam_box_lifetime = SIM_STEP_S * 2.0
+		self._badguy_process = None
 		# control pruning of trafficjam vehicles via module-level boolean PRUNE_TJ_CARS
 		self._prune_tj_cars = PRUNE_TJ_CARS
 
@@ -746,8 +751,46 @@ class Scenario01Runner:
 				self._start_trafficjam_traffic_light_control(sim_time)
 		self.trafficjam_finished = bool(spawned_any)
 
+	def _start_badguy_manual_control(self):
+		if self._badguy_process is not None and self._badguy_process.poll() is None:
+			return
+
+		script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'manual_control.py'))
+		script_dir = os.path.dirname(script_path)
+
+		cmd = [
+			sys.executable,
+			script_path,
+			'--host', self.host,
+			'--port', str(self.port),
+			'--profile', 'supervisor4home',
+		]
+		if self._done_file:
+			cmd.extend(['--scenario-stop-file', self._done_file])
+
+		try:
+			self._badguy_process = subprocess.Popen(
+				cmd,
+				cwd=script_dir,
+				creationflags=subprocess.CREATE_NEW_CONSOLE
+			)
+		except Exception as exc:
+			print(f"[Scenario01] WARNING: could not open second manual_control.py: {exc}")
+
 	def start_badguy(self):
-		print("start badguy now")
+		print("Join the simualtion!")
+		print("1. lane cutting")
+		print("2. sudden stops in front")
+		print("3. maliciously driving (slalom)")
+		print("4. run a red light")
+		self._start_badguy_manual_control()
+		
+		# Wait for user confirmation with 'J'
+		while True:
+			user_input = input("\nPress 'J' to continue: ").strip().upper()
+			if user_input == 'J':
+				break
+		
 		self.badguy_finished = True
 
 	def start_song(self):
@@ -990,6 +1033,13 @@ class Scenario01Runner:
 				self._trafficjam_traffic_light_started_at = None
 		except Exception:
 			pass
+		if self._badguy_process is not None:
+			try:
+				if self._badguy_process.poll() is None:
+					self._badguy_process.terminate()
+			except Exception:
+				pass
+			self._badguy_process = None
 		if self._vehicle_actor_ids:
 			self.client.apply_batch([carla.command.DestroyActor(actor_id) for actor_id in self._vehicle_actor_ids])
 
