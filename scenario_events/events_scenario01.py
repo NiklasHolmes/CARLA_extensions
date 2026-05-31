@@ -14,6 +14,16 @@ try:
 	from events_scenario01_static_props import get_static_prop_spawns
 except ModuleNotFoundError:
 	from scenario_events.events_scenario01_static_props import get_static_prop_spawns
+try:
+    from common.audio_paths import ANGER_RP_MASTER_OF_PUPPETS_PATH
+    from generate_audio import SongAudio
+except ModuleNotFoundError:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
+    if extensions_root not in sys.path:
+        sys.path.insert(0, extensions_root)
+    from common.audio_paths import ANGER_RP_MASTER_OF_PUPPETS_PATH
+    from generate_audio import SongAudio
 
 
 def get_actor_blueprints(world, filter_pattern):
@@ -32,13 +42,17 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 		result.append(bp)
 	return result
 
-
 START_TO_REDLIGHT_DELAY = 1.0
 REDLIGHT_TO_TRAFFICJAM_DELAY = 1.0
 TRAFFICJAM_TO_BADGUY_DELAY = 5.0
-BADGUY_TO_SONG_DELAY = 100.0
+BADGUY_TO_SONG_DELAY = 2.0
 SONG_TO_CROSSPED_DELAY = 1.0
 CROSSPED_TO_OCCUPY_DELAY = 1.0
+
+SONG_START_OFFSET_SECONDS = 0.0
+SONG_PLAY_DURATION_SECONDS = 5.0
+SONG_FADE_IN_MS = 3000
+SONG_FADE_OUT_MS = 3000
 OCCUPY_TO_END_DELAY = 1.0
 REDLIGHT_PHASE_MAX_SECONDS = 40.0
 REDLIGHT_YELLOW_SECONDS = 2.0
@@ -130,6 +144,9 @@ class Scenario01Runner:
 		self._trafficjam_traffic_light_started_wall = None
 		self._trafficjam_last_print_sec = -1
 		# When True, the selected trafficjam traffic light is forced to stay red
+		self._song_started = False
+		self._song_start_time = None
+		self._song_finished = False
 		self._trafficjam_force_hold_red = False
 		self.trafficjam_finished = False
 		self.badguy_finished = False
@@ -177,6 +194,14 @@ class Scenario01Runner:
 			},
 		}
 
+		self._song_audio = SongAudio(
+			ANGER_RP_MASTER_OF_PUPPETS_PATH,
+			start_seconds=SONG_START_OFFSET_SECONDS,
+			play_seconds=SONG_PLAY_DURATION_SECONDS,
+			fade_in_ms=SONG_FADE_IN_MS,
+			fade_out_ms=SONG_FADE_OUT_MS,
+			volume=0.85,
+			channel_index=6,)
 	def _get_traffic_manager(self):
 		try:
 			tm = self.client.get_trafficmanager(self._tm_port)
@@ -794,8 +819,24 @@ class Scenario01Runner:
 		self.badguy_finished = True
 
 	def start_song(self):
-		print("start song now")
-		self.song_finished = True
+		if self._song_started:
+			return
+		self._song_started = True
+		self._song_start_time = self.world.get_snapshot().timestamp.elapsed_seconds
+		print(f"[Scenario01] Song started at sim_time={self._song_start_time:.2f}s")
+		if self._song_audio.play(self._song_start_time):
+			print("spielt song")
+		else:
+			print("[Scenario01] WARNUNG: Song konnte nicht gestartet werden.")
+			self.song_finished = True
+
+	def _update_song(self, sim_time):
+		if not self._song_started or self.song_finished:
+			return
+
+		self._song_audio.update(sim_time)
+		if self._song_audio.is_finished:
+			self.song_finished = True
 
 	def start_crossped(self):
 		print("start crossped now")
@@ -835,7 +876,8 @@ class Scenario01Runner:
 		if self.song_finished:
 			return
 
-		self._finish_delay_timer("badguy_to_song", sim_time)
+		print("[Scenario01] Song trigger skipped.")
+		self._finish_delay_timer("song_to_crossped", sim_time)
 		self.start_song()
 		print("[Scenario01] Song trigger skipped.")
 
@@ -971,6 +1013,7 @@ class Scenario01Runner:
 					else:
 						self.start_song()
 
+				self._update_song(sim_time)
 				song_to_crossped_state = self._delay_states["song_to_crossped"]
 				if self.song_finished:
 					if song_to_crossped_state["started_at"] is None:
@@ -1019,6 +1062,7 @@ class Scenario01Runner:
 
 	def destroy(self):
 		# If we forced the trafficjam traffic light to stay red, release it now
+		self._song_audio.stop(0)
 		try:
 			if getattr(self, "_trafficjam_force_hold_red", False) and self._trafficjam_traffic_light is not None:
 				try:
