@@ -20,7 +20,6 @@ def get_actor_blueprints(world, filter_pattern):
 		print(f"[Scenario01] WARNUNG: Keine Blueprints für {filter_pattern} gefunden!")
 	return bps
 
-
 def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 	result = []
 	for bp in blueprints:
@@ -82,6 +81,11 @@ TRIGGER_BADGUY = True
 TRIGGER_SONG = True
 TRIGGER_CROSSPED = True
 TRIGGER_OCCUPY = True
+# For testing: when True, trafficjamTrigger1 is considered triggered instantly
+TEST_INSTANT_TRIGGER_TRAFFICJAM = False
+# When True, use real wall-clock time (time.time()) for TrafficJam red timer
+# instead of simulation time (`world.get_snapshot().timestamp.elapsed_seconds`).
+TRAFFICJAM_USE_REAL_TIME = True
 PRUNE_TJ_CARS = True
 DEBUG_MODE = True
 
@@ -118,6 +122,10 @@ class Scenario01Runner:
 		self._trafficjam_traffic_light = None
 		self._trafficjam_traffic_light_state = None
 		self._trafficjam_traffic_light_started_at = None
+		self._trafficjam_traffic_light_started_wall = None
+		self._trafficjam_last_print_sec = -1
+		# When True, the selected trafficjam traffic light is forced to stay red
+		self._trafficjam_force_hold_red = False
 		self.trafficjam_finished = False
 		self.badguy_finished = False
 		self.song_finished = False
@@ -215,6 +223,37 @@ class Scenario01Runner:
 			return trigger_config
 		return None
 
+	def _get_frontmost_trafficjam_vehicle(self):
+		best_vehicle = None
+		best_projection = None
+
+		for vehicle_id in list(self._vehicle_actor_ids):
+			actor = self.world.get_actor(vehicle_id)
+			if actor is None:
+				continue
+
+			transform = actor.get_transform()
+			forward = transform.get_forward_vector()
+			location = transform.location
+			projection = location.x * forward.x + location.y * forward.y + location.z * forward.z
+			if best_projection is None or projection > best_projection:
+				best_projection = projection
+				best_vehicle = actor
+
+		return best_vehicle
+
+	def _traffic_light_controls_vehicle_lane(self, traffic_light, vehicle_waypoint):
+		try:
+			for waypoint in traffic_light.get_affected_lane_waypoints():
+				if waypoint.lane_id == vehicle_waypoint.lane_id:
+					return True
+			for waypoint in traffic_light.get_stop_waypoints():
+				if waypoint.lane_id == vehicle_waypoint.lane_id:
+					return True
+		except Exception:
+			return False
+		return False
+	
 	def _draw_trafficjam_trigger_box(self):
 		for trigger_config in get_static_prop_spawns("trafficjam"):
 			center = trigger_config["trigger_location"]
@@ -251,22 +290,29 @@ class Scenario01Runner:
 			self.world.debug.draw_line(p3, p3_top, thickness=thickness, color=color, life_time=life_time)
 			self.world.debug.draw_line(p4, p4_top, thickness=thickness, color=color, life_time=life_time)
 			return
-
+		
 	def _find_trafficjam_traffic_light(self, first_vehicle=None):
-		if first_vehicle is None and self._vehicle_actor_ids:
-			first_vehicle = self.world.get_actor(self._vehicle_actor_ids[0])
+		if first_vehicle is None:
+			first_vehicle = self._get_frontmost_trafficjam_vehicle()
 		if first_vehicle is None:
 			return None, None
 
 		vehicle_transform = first_vehicle.get_transform()
 		vehicle_location = vehicle_transform.location
 		vehicle_forward = vehicle_transform.get_forward_vector()
+		vehicle_waypoint = self.world.get_map().get_waypoint(
+			vehicle_location,
+			project_to_road=True,
+			lane_type=carla.LaneType.Driving,
+		)
+
 		best_traffic_light = None
 		best_landmark = None
 		best_distance = None
+		best_lane_match = False
 
 		for landmark in self.world.get_map().get_all_landmarks_of_type("1000001"):
-			if landmark.id == "":
+			if not landmark.id:
 				continue
 
 			traffic_light = self.world.get_traffic_light(landmark)
@@ -281,10 +327,28 @@ class Scenario01Runner:
 				continue
 
 			distance = (dx * dx + dy * dy + dz * dz) ** 0.5
+			controls_same_lane = False
+			if vehicle_waypoint is not None:
+				controls_same_lane = self._traffic_light_controls_vehicle_lane(traffic_light, vehicle_waypoint)
+
+			if controls_same_lane:
+				if not best_lane_match or distance < best_distance:
+					best_traffic_light = traffic_light
+					best_landmark = landmark
+					best_distance = distance
+					best_lane_match = True
+				continue
+
+			if best_lane_match:
+				continue
+
 			if best_distance is None or distance < best_distance:
 				best_traffic_light = traffic_light
 				best_landmark = landmark
 				best_distance = distance
+
+		if best_traffic_light is not None and not best_lane_match:
+			print("[Scenario01] WARNUNG: Keine phasengleiche Ampel gefunden; benutze naeheste TrafficJam-Ampel als Fallback.")
 
 		return best_traffic_light, best_landmark
 
@@ -312,6 +376,8 @@ class Scenario01Runner:
 		self._trafficjam_traffic_light = traffic_light
 		self._trafficjam_traffic_light_state = None
 		self._trafficjam_traffic_light_started_at = sim_time
+		# record wall-clock start time as well for optional real-time timing
+		self._trafficjam_traffic_light_started_wall = time.time()
 
 		if traffic_light is None:
 			print("[Scenario01] WARNUNG: TrafficJam-Ampel nicht gefunden.")
@@ -327,12 +393,14 @@ class Scenario01Runner:
 		)
 
 		try:
-			if hasattr(traffic_light, "freeze"):
-				traffic_light.freeze(True)
+			# Force the selected traffic light to red and keep it that way
 			traffic_light.set_state(carla.TrafficLightState.Red)
 			if hasattr(traffic_light, "set_red_time"):
 				traffic_light.set_red_time(TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS)
+			if hasattr(traffic_light, "freeze"):
+				traffic_light.freeze(True)
 			self._trafficjam_traffic_light_state = "red"
+			self._trafficjam_force_hold_red = True
 			print(
 				f"[Scenario01] Ampel auf rot geschaltet | light_id={traffic_light.id} | "
 				f"red_hold={TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS:.1f}s"
@@ -345,9 +413,39 @@ class Scenario01Runner:
 		if traffic_light is None or self._trafficjam_traffic_light_started_at is None:
 			return
 
-		elapsed = sim_time - self._trafficjam_traffic_light_started_at
+		# If we're forcing this traffic light to remain red, allow the red timer to run
+		# and release the light once the configured red duration has elapsed.
 		state = self._trafficjam_traffic_light_state
+		elapsed_sim = None
+		elapsed_wall = None
+		if self._trafficjam_traffic_light_started_at is not None:
+			elapsed_sim = sim_time - self._trafficjam_traffic_light_started_at
+		if self._trafficjam_traffic_light_started_wall is not None:
+			elapsed_wall = time.time() - self._trafficjam_traffic_light_started_wall
+		if TRAFFICJAM_USE_REAL_TIME and elapsed_wall is not None:
+			elapsed = elapsed_wall
+		elif elapsed_sim is not None:
+			elapsed = elapsed_sim
+		else:
+			elapsed = 0.0
 
+		if getattr(self, "_trafficjam_force_hold_red", False) and state == "red":
+			if elapsed >= TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS:
+				# time's up: release the traffic light back to normal simulator control
+				try:
+					if hasattr(traffic_light, "freeze"):
+						traffic_light.freeze(False)
+				except Exception:
+					pass
+				self._trafficjam_force_hold_red = False
+				self._trafficjam_traffic_light_state = "released"
+				self._trafficjam_last_print_sec = -1
+				self._trafficjam_traffic_light_started_at = None
+				self._trafficjam_traffic_light_started_wall = None
+				print(f"[Scenario01] Ampel losgelassen | light_id={traffic_light.id}")
+			return
+
+		# If not force-held, continue with normal trafficjam state machine
 		if state == "red" and elapsed >= TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS:
 			try:
 				traffic_light.set_state(carla.TrafficLightState.Green)
@@ -371,7 +469,7 @@ class Scenario01Runner:
 					traffic_light.freeze(False)
 			except Exception:
 				pass
-		print(f"[Scenario01] Ampel losgelassen | light_id={traffic_light.id} | elapsed={elapsed:.2f}s")
+			print(f"[Scenario01] Ampel losgelassen | light_id={traffic_light.id} | elapsed={elapsed:.2f}s")
 
 	def _project_transform_to_driving_lane(self, spawn_transform):
 		waypoint = self.world.get_map().get_waypoint(
@@ -785,16 +883,32 @@ class Scenario01Runner:
 						self._skip_trafficjam_trigger(sim_time)
 					else:
 						trafficjam_trigger_config = None
-						if ego_location is not None:
+						# testing override: allow instant triggering of the first trafficjam trigger
+						if TEST_INSTANT_TRIGGER_TRAFFICJAM:
+							trigger_configs = get_static_prop_spawns("trafficjam")
+							trafficjam_trigger_config = trigger_configs[0] if trigger_configs else None
+						elif ego_location is not None:
 							trafficjam_trigger_config = self._get_trafficjam_trigger_config(ego_location, ego_velocity)
 						if trafficjam_trigger_config is not None:
 							self.start_trafficjam(trafficjam_trigger_config, sim_time)
 
 				trafficjam_to_badguy_state = self._delay_states["trafficjam_to_badguy"]
 				if self.trafficjam_finished:
-					if trafficjam_to_badguy_state["started_at"] is None:
-						self._start_delay_timer("trafficjam_to_badguy", sim_time)
-					self._update_delay_timer("trafficjam_to_badguy", sim_time)
+					# Only start the trafficjam_to_badguy delay after the trafficjam traffic light
+					# was released (i.e. not force-held red). This ensures the red hold
+					# runs its full duration before the next delay begins.
+					can_start_tj_to_badguy = True
+					# if we forced the traffic light to hold red, don't start the timer yet
+					if getattr(self, "_trafficjam_force_hold_red", False):
+						can_start_tj_to_badguy = False
+					# if there's a traffic light selected and it's not in released state, wait
+					if self._trafficjam_traffic_light is not None and self._trafficjam_traffic_light_state != "released":
+						can_start_tj_to_badguy = False
+
+					if can_start_tj_to_badguy:
+						if trafficjam_to_badguy_state["started_at"] is None:
+							self._start_delay_timer("trafficjam_to_badguy", sim_time)
+						self._update_delay_timer("trafficjam_to_badguy", sim_time)
 
 				if self.trafficjam_finished and trafficjam_to_badguy_state["finished"] and not self.badguy_finished:
 					if not self._trigger_badguy:
@@ -861,7 +975,21 @@ class Scenario01Runner:
 			self._signal_done()
 
 	def destroy(self):
-		print("[Scenario01] Cleanup...")
+		# If we forced the trafficjam traffic light to stay red, release it now
+		try:
+			if getattr(self, "_trafficjam_force_hold_red", False) and self._trafficjam_traffic_light is not None:
+				try:
+					if hasattr(self._trafficjam_traffic_light, "freeze"):
+						self._trafficjam_traffic_light.freeze(False)
+				except Exception:
+					pass
+				# reset internal flags/state
+				self._trafficjam_force_hold_red = False
+				self._trafficjam_last_print_sec = -1
+				self._trafficjam_traffic_light_state = "released"
+				self._trafficjam_traffic_light_started_at = None
+		except Exception:
+			pass
 		if self._vehicle_actor_ids:
 			self.client.apply_batch([carla.command.DestroyActor(actor_id) for actor_id in self._vehicle_actor_ids])
 
