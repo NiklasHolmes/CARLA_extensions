@@ -20,9 +20,9 @@ except ModuleNotFoundError:
     from generate_audio import SongAudio
 
 try:
-    from scenario_helper import is_transform_hidden_from_hero
+    from scenario_helper import is_transform_hidden_from_hero, start_manual_control_process
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, start_manual_control_process
 
 try:
     from events_scenario03_static_props import LTRUCK_SPAWN_CONFIGS, COPWAVING_TRIGGER_CONFIGS
@@ -46,15 +46,15 @@ run_in_singleFile_mode = True
 # copWaving lifetime (seconds) before removal
 COPWAVING_LIFETIME_S = 10.0
 TRIGGER_CARAWAY = True
-TRIGGER_LTRUCK = False
+TRIGGER_LTRUCK = True
 TRIGGER_SONG = False
 TRIGGER_POLICE = True
 TRIGGER_BREAK = True
 DEBUG_MODE = True
 
 # For testing: when True, ltruckTrigger 1 or 2 is considered triggered instantly
-TEST_INSTANT_TRIGGER_LTRUCK = False
-ltruck_spawn_idx = 0
+TEST_INSTANT_TRIGGER_LTRUCK = True
+ltruck_spawn_idx = 1
 TEST_INSTANT_TRIGGER_COP = True
 cop_spawn_idx = 0
 
@@ -98,6 +98,7 @@ class Scenario03Runner:
         self.break_finished = False
 
         self._ltruck_triggered_keys = set()
+        self._ltruck_process = None
         self._static_actor_ids = []
         self._vehicle_actor_ids = []
 
@@ -226,22 +227,49 @@ class Scenario03Runner:
             return config
         return None
 
-    def _spawn_ltruck_props(self, config):
+    def _start_ltruck_manual_control_from_config(self, config):
         name = config.get("name")
-        if name in self._ltruck_triggered_keys: return False
-        bp_lib = self.world.get_blueprint_library()
-        for prop in config.get("spawn_configs", []):
-            bp_id = prop["blueprints"][0]
-            bp = bp_lib.find(bp_id)
-            actor = self.world.try_spawn_actor(bp, prop["transform"])
-            if actor:
-                if bp_id.startswith("vehicle."):
-                    self._vehicle_actor_ids.append(actor.id)
-                    if hasattr(actor, "set_simulate_physics"):
-                        actor.set_simulate_physics(True)
-                else:
-                    self._static_actor_ids.append(actor.id)
-                print(f"[Scenario03] Spawned {name} prop: {bp_id}")
+        if name in self._ltruck_triggered_keys:
+            return False
+
+        spawn_configs = config.get("spawn_configs", [])
+        if not spawn_configs:
+            return False
+
+        prop = spawn_configs[0]
+        blueprints = prop.get("blueprints", [])
+        if not blueprints:
+            return False
+
+        vehicle_id = blueprints[0]
+        vehicle_color = prop.get("color")
+        spawn_transform = prop.get("transform")
+
+        self._ltruck_process = start_manual_control_process(
+            host=self.host,
+            port=self.port,
+            profile='supervisor4home',
+            done_file=None,
+            vehicle_id=vehicle_id,
+            vehicle_color=vehicle_color,
+            spawn_transform=spawn_transform,
+            existing_process=self._ltruck_process,
+            log_prefix='Scenario03',
+        )
+
+        if self._ltruck_process is None:
+            return False
+
+        print(
+            f"[Scenario03] Started ltruck manual_control: "
+            f"vehicleID={vehicle_id}, vehicleColor={vehicle_color}"
+        )
+
+        while True:
+            user_input = input("\n[Scenario03] Press 'J' + Enter to continue scenario: ").strip().upper()
+            if user_input == 'J':
+                break
+
         self._ltruck_triggered_keys.add(name)
         return True
 
@@ -460,7 +488,7 @@ class Scenario03Runner:
                             config = self._get_ltruck_config(ego_location, ego_velocity)
 
                         if config:
-                            if self._spawn_ltruck_props(config):
+                            if self._start_ltruck_manual_control_from_config(config):
                                 self.ltruck_finished = True
 
                 if self.ltruck_finished:
@@ -571,6 +599,8 @@ class Scenario03Runner:
     def destroy(self):
         try:
             self._song_audio.stop(0)
+            if self._ltruck_process is not None and self._ltruck_process.poll() is None:
+                self._ltruck_process.terminate()
             all_ids = self._static_actor_ids + self._vehicle_actor_ids
             if all_ids:
                 self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])

@@ -4,6 +4,7 @@ import glob
 import math
 # import logging
 import os
+import subprocess
 import sys
 import re
 
@@ -28,6 +29,63 @@ if __package__ in (None, ""):
         sys.path.append(_carla_egg_candidates[0])
 
 import carla
+
+
+def start_manual_control_process(
+    host,
+    port,
+    profile,
+    done_file=None,
+    vehicle_id=None,
+    vehicle_color=None,
+    spawn_transform=None,
+    existing_process=None,
+    log_prefix="Scenario",
+    keep_console_open=True,
+):
+    """Start manual_control.py with optional CLI overrides and return the process handle."""
+    if existing_process is not None and existing_process.poll() is None:
+        return existing_process
+
+    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'manual_control.py'))
+    script_dir = os.path.dirname(script_path)
+
+    cmd = [
+        sys.executable,
+        script_path,
+        '--host', str(host),
+        '--port', str(port),
+        '--profile', str(profile),
+    ]
+
+    if vehicle_id:
+        cmd.extend(['--vehicleID', str(vehicle_id)])
+    if vehicle_color:
+        cmd.extend(['--vehicleColor', str(vehicle_color)])
+    if spawn_transform is not None:
+        location = spawn_transform.location
+        yaw = spawn_transform.rotation.yaw
+        spawn_point_arg = f"{location.x:.2f},{location.y:.2f},{location.z:.2f},{yaw:.1f}"
+        cmd.append(f'--spawnPoint={spawn_point_arg}')
+    if done_file:
+        cmd.extend(['--scenario-stop-file', done_file])
+
+    try:
+        launch_cmd = cmd
+        if os.name == 'nt' and keep_console_open:
+            # Keep the spawned console open after process exit, so immediate failures remain visible.
+            launch_cmd = ['cmd.exe', '/k', subprocess.list2cmdline(cmd)]
+
+        print(f"[{log_prefix}] Launching manual_control: {subprocess.list2cmdline(cmd)}")
+        creationflags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0)
+        return subprocess.Popen(
+            launch_cmd,
+            cwd=script_dir,
+            creationflags=creationflags,
+        )
+    except Exception as exc:
+        print(f"[{log_prefix}] WARNING: could not open manual_control.py: {exc}")
+        return None
 
 
 def _to_transform(candidate):
