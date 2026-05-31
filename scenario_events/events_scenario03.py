@@ -244,6 +244,7 @@ class Scenario03Runner:
         vehicle_id = blueprints[0]
         vehicle_color = prop.get("color")
         spawn_transform = prop.get("transform")
+        audio_mode = prop.get("audio_mode")
 
         self._ltruck_process = start_manual_control_process(
             host=self.host,
@@ -253,6 +254,7 @@ class Scenario03Runner:
             vehicle_id=vehicle_id,
             vehicle_color=vehicle_color,
             spawn_transform=spawn_transform,
+            audio_mode=audio_mode,
             existing_process=self._ltruck_process,
             log_prefix='Scenario03',
         )
@@ -262,7 +264,7 @@ class Scenario03Runner:
 
         print(
             f"[Scenario03] Started ltruck manual_control: "
-            f"vehicleID={vehicle_id}, vehicleColor={vehicle_color}"
+            f"vehicleID={vehicle_id}, vehicleColor={vehicle_color}, audio_mode={audio_mode}"
         )
 
         while True:

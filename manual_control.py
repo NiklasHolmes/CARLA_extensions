@@ -160,7 +160,7 @@ except ImportError:
     raise RuntimeError('cannot import numpy, make sure numpy package is installed')
 
 from typing import Optional
-from generate_audio import AudioGenerator, DummyAudioGenerator
+from generate_audio import AudioGenerator, DummyAudioGenerator, HornOnlyAudioManager
 from dashboard_renderer import DashboardRenderer
 from common.event_sync import EventSync
 from common.window_positioning import (
@@ -184,7 +184,8 @@ _BRAKE_PATH = r".\audio\car_break.wav"
 _PROXIMITY_ALERT_PATH = r".\audio\car_proximityAlert.wav"
 
 # Central audio manager
-audio_manager: Optional[AudioGenerator] = None
+# Central audio manager
+audio_manager: Optional[object] = None
 dashboard_process: Optional[subprocess.Popen] = None
 
 # Camera selection
@@ -193,8 +194,8 @@ USE_SCENE_FINAL = False
 # Performance export filename
 PERF_EXPORT_FILENAME = 'perf_export_row.tsv'
 
-# Audio enable/disable flag
-ENABLE_AUDIO = False
+# Audio mode: full = all sounds, horn_only = keeps horn only, none = disables audio
+AUDIO_MODE = 'full'
 
 # Optional obstacle sensors can be disabled to avoid startup crashes on some
 # simulator/API combinations.
@@ -235,7 +236,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': True,
             'DASHBOARD_MODE': 'none',
-            'ENABLE_AUDIO': True,
+            'AUDIO_MODE': 'full',
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
@@ -252,7 +253,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': True,
             'DASHBOARD_MODE': 'inside',
-            'ENABLE_AUDIO': False,
+            'AUDIO_MODE': 'none',
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
@@ -269,7 +270,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': True,
             'DASHBOARD_MODE': 'none',
-            'ENABLE_AUDIO': False,
+            'AUDIO_MODE': 'full',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
             'WINDOW_BORDERLESS': True,
@@ -286,7 +287,7 @@ PROFILE_CONFIG = {
         'code_overrides': {
             'USE_SCENE_FINAL': False,
             'DASHBOARD_MODE': 'none',
-            'ENABLE_AUDIO': False,
+            'AUDIO_MODE': 'horn_only',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': False,
             'WINDOW_BORDERLESS': False,
@@ -312,14 +313,17 @@ def _apply_profile(profile, args, argv):
 
     code_overrides = config.get('code_overrides', {})
     if code_overrides:
-        global USE_SCENE_FINAL, DASHBOARD_MODE, ENABLE_AUDIO, ENABLE_HUD
+        global USE_SCENE_FINAL, DASHBOARD_MODE, AUDIO_MODE, ENABLE_HUD
         global WINDOW_START_LEFT, WINDOW_BORDERLESS, CHOSEN_VEHICLE
         if 'USE_SCENE_FINAL' in code_overrides:
             USE_SCENE_FINAL = code_overrides['USE_SCENE_FINAL']
         if 'DASHBOARD_MODE' in code_overrides:
             DASHBOARD_MODE = code_overrides['DASHBOARD_MODE']
-        if 'ENABLE_AUDIO' in code_overrides:
-            ENABLE_AUDIO = code_overrides['ENABLE_AUDIO']
+        if '--audio-mode' not in argv:
+            if 'AUDIO_MODE' in code_overrides:
+                AUDIO_MODE = code_overrides['AUDIO_MODE']
+            elif 'audio_mode' in code_overrides:
+                AUDIO_MODE = code_overrides['audio_mode']
         if 'ENABLE_HUD' in code_overrides:
             ENABLE_HUD = code_overrides['ENABLE_HUD']
         if 'WINDOW_START_LEFT' in code_overrides:
@@ -332,20 +336,25 @@ def _apply_profile(profile, args, argv):
 def _audio_init():
     """Initialize audio generator."""
     global audio_manager
-    if not ENABLE_AUDIO:
+    mode = str(AUDIO_MODE).strip().lower()
+    print(f"[Audio] Mode: {mode}")
+    if mode == 'none':
         audio_manager = DummyAudioGenerator()
         return
-    
+
     try:
-        audio_manager = AudioGenerator(
-            engine_idle_path=_ENGINE_IDLE,
-            engine_mid_path=_ENGINE_MID,
-            engine_high_path=_ENGINE_HIGH,
-            horn_path=_HORN_PATH,
-            blinker_path=_BLINKER_PATH,
-            brake_path=_BRAKE_PATH,
-            proximity_alert_path=_PROXIMITY_ALERT_PATH,
-        )
+        if mode == 'horn_only':
+            audio_manager = HornOnlyAudioManager(_HORN_PATH)
+        else:
+            audio_manager = AudioGenerator(
+                engine_idle_path=_ENGINE_IDLE,
+                engine_mid_path=_ENGINE_MID,
+                engine_high_path=_ENGINE_HIGH,
+                horn_path=_HORN_PATH,
+                blinker_path=_BLINKER_PATH,
+                brake_path=_BRAKE_PATH,
+                proximity_alert_path=_PROXIMITY_ALERT_PATH,
+            )
         audio_manager.init(frequency=44100, channels=2, buffer_size=512)
         print("[Audio] Initialized successfully")
     except Exception as e:
@@ -2897,6 +2906,11 @@ def main():
         '--sync',
         action='store_true',
         help='Activate synchronous mode execution')
+    argparser.add_argument(
+        '--audio-mode',
+        choices=['full', 'horn_only', 'none'],
+        default='full',
+        help='Audio mode: full enables all sounds, horn_only keeps only horn, none disables audio')
     argparser.add_argument(                             # keyboard vs. gamepad input
         '--input',
         choices=['keyboard', 'gamepad', 'wheel'],
@@ -2904,6 +2918,8 @@ def main():
         help='Select input device for this window (default: keyboard)'
     )
     args = argparser.parse_args()
+    global AUDIO_MODE
+    AUDIO_MODE = args.audio_mode
     _apply_profile(args.profile, args, sys.argv[1:])
 
     global target_x, target_y, target_width, target_height, monitor_index, found

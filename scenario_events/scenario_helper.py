@@ -39,6 +39,7 @@ def start_manual_control_process(
     vehicle_id=None,
     vehicle_color=None,
     spawn_transform=None,
+    audio_mode=None,
     existing_process=None,
     log_prefix="Scenario",
     keep_console_open=True,
@@ -67,6 +68,8 @@ def start_manual_control_process(
         yaw = spawn_transform.rotation.yaw
         spawn_point_arg = f"{location.x:.2f},{location.y:.2f},{location.z:.2f},{yaw:.1f}"
         cmd.append(f'--spawnPoint={spawn_point_arg}')
+    if audio_mode:
+        cmd.append(f'--audio-mode={audio_mode}')
     if done_file:
         cmd.extend(['--scenario-stop-file', done_file])
 
