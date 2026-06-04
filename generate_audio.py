@@ -888,6 +888,65 @@ class DummyAudioGenerator:
     def quit(self): pass
     def init(self, *args, **kwargs): pass
 
+
+class HornOnlyAudioManager:
+    """Minimal audio manager that only handles horn playback."""
+
+    def __init__(self, horn_path: str):
+        self.horn_path = horn_path
+        self.horn_sound = None
+        self.current_channel = None
+        self.engine_audio = None
+
+    def init(self, frequency: int = 44100, channels: int = 2, buffer_size: int = 512):
+        try:
+            pygame.mixer.init(frequency=frequency, size=-16, channels=channels, buffer=buffer_size)
+            self.horn_sound = pygame.mixer.Sound(self.horn_path)
+            self.horn_sound.set_volume(1.0)
+            print(f"[HornOnlyAudio] Loaded horn sound: {self.horn_path}")
+        except Exception as exc:
+            print(f"[HornOnlyAudio] ERROR initializing horn-only audio: {exc}")
+            self.horn_sound = None
+
+    def play_horn(self):
+        if self.horn_sound is None:
+            print("[HornOnlyAudio] WARNING: horn sound is not loaded")
+            return
+        self.current_channel = self.horn_sound.play()
+        if self.current_channel is None:
+            print("[HornOnlyAudio] WARNING: no channel available for horn playback")
+
+    def stop_horn(self, fadeout_ms: int = 120):
+        if self.current_channel is None:
+            return
+        if fadeout_ms > 0:
+            self.current_channel.fadeout(fadeout_ms)
+        else:
+            self.current_channel.stop()
+        self.current_channel = None
+
+    def update_engine(self, *args, **kwargs):
+        pass
+
+    def play_blinker(self, *args, **kwargs):
+        pass
+
+    def play_brake(self, *args, **kwargs):
+        pass
+
+    def update_proximity_alert(self, *args, **kwargs):
+        pass
+
+    def stop_proximity_alert(self, *args, **kwargs):
+        pass
+
+    def quit(self):
+        try:
+            pygame.mixer.stop()
+            pygame.mixer.quit()
+        except Exception:
+            pass
+
 class AudioGenerator:
     """Main audio manager - initializes and controls all sounds."""
     
