@@ -11,19 +11,28 @@ import time
 import carla
 
 try:
-	from events_scenario01_static_props import get_static_prop_spawns
+	from events_scenario01_static_props import get_static_prop_spawns, get_start_fence_spawns
 except ModuleNotFoundError:
-	from scenario_events.events_scenario01_static_props import get_static_prop_spawns
+	from scenario_events.events_scenario01_static_props import get_static_prop_spawns, get_start_fence_spawns
 try:
-    from common.audio_paths import ANGER_RP_MASTER_OF_PUPPETS_PATH
-    from generate_audio import SongAudio
+	from common.audio_paths import ANGER_RP_MASTER_OF_PUPPETS_PATH
+	from generate_audio import SongAudio
 except ModuleNotFoundError:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
-    if extensions_root not in sys.path:
-        sys.path.insert(0, extensions_root)
-    from common.audio_paths import ANGER_RP_MASTER_OF_PUPPETS_PATH
-    from generate_audio import SongAudio
+	current_dir = os.path.dirname(os.path.abspath(__file__))
+	extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
+	if extensions_root not in sys.path:
+		sys.path.insert(0, extensions_root)
+	from common.audio_paths import ANGER_RP_MASTER_OF_PUPPETS_PATH
+	from generate_audio import SongAudio
+
+try:
+	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+except ModuleNotFoundError:
+	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+try:
+	from traffic_junction_rules import apply_rules_to_vehicle, RULES as JUNCTION_RULES, describe_vehicle_route_state
+except ModuleNotFoundError:
+	from scenario_events.traffic_junction_rules import apply_rules_to_vehicle, RULES as JUNCTION_RULES, describe_vehicle_route_state
 
 
 def get_actor_blueprints(world, filter_pattern):
@@ -44,7 +53,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 
 START_TO_REDLIGHT_DELAY = 1.0
 REDLIGHT_TO_TRAFFICJAM_DELAY = 1.0
-TRAFFICJAM_TO_BADGUY_DELAY = 5.0
+TRAFFICJAM_TO_BADGUY_DELAY = 200.0
 BADGUY_TO_SONG_DELAY = 2.0
 SONG_TO_CROSSPED_DELAY = 1.0
 CROSSPED_TO_OCCUPY_DELAY = 1.0
@@ -54,7 +63,7 @@ SONG_PLAY_DURATION_SECONDS = 5.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 OCCUPY_TO_END_DELAY = 1.0
-REDLIGHT_PHASE_MAX_SECONDS = 40.0
+REDLIGHT_PHASE_MAX_SECONDS = 2.0
 REDLIGHT_YELLOW_SECONDS = 2.0
 HERO_GREEN_LIGHT_HOLD_SECONDS = 3.0
 HERO_RED_LIGHT_HOLD_SECONDS = 8.0
@@ -92,18 +101,22 @@ SIM_STEP_S = 0.05
 run_in_singleFile_mode = True
 
 TRIGGER_REDLIGHT = False
-TRIGGER_TRAFFICJAM = False
-TRIGGER_BADGUY = True
+TRIGGER_TRAFFICJAM = True
+TRIGGER_BADGUY = False
 TRIGGER_SONG = True
-TRIGGER_CROSSPED = True
-TRIGGER_OCCUPY = True
-# For testing: when True, trafficjamTrigger1 is considered triggered instantly
-TEST_INSTANT_TRIGGER_TRAFFICJAM = False
+TRIGGER_CROSSPED = False
+TRIGGER_OCCUPY = False
+# For testing: when set to an integer index, the corresponding trafficjam trigger
+# will be considered triggered instantly. Use `None` to disable this override.
+# Example: 0 -> first trigger, 1 -> second trigger, etc.
+TEST_INSTANT_TRIGGER_TRAFFICJAM = 3
 # When True, use real wall-clock time (time.time()) for TrafficJam red timer
 # instead of simulation time (`world.get_snapshot().timestamp.elapsed_seconds`).
 TRAFFICJAM_USE_REAL_TIME = True
 PRUNE_TJ_CARS = True
 DEBUG_MODE = True
+# Debug: force all traffic lights to green
+TL_FORCE_GREEN = True
 
 class Scenario01Runner:
 	def __init__(self, host, port, tm_port, done_file=None, trigger_redlight=True, trigger_trafficjam=True, trigger_badguy=True, trigger_song=True, trigger_crossped=True, trigger_occupy=True):
@@ -130,6 +143,13 @@ class Scenario01Runner:
 		self._start_sim_time = None
 		self._scenario_done = False
 
+		# timestamp for periodic junction-rule checks (simulation time)
+		self._last_junction_rule_check = None
+		self._junction_rule_applied_vehicle_ids = set()
+		self._junction_rule_last_trace_by_vehicle = {}
+		self._tl_forced_applied = False
+
+		self._start_static_props_spawned = False
 		self.redlight_finished = False
 		self.redlight_active = False
 		self._redlight_started_at = None
@@ -155,6 +175,7 @@ class Scenario01Runner:
 		self.occupy_started = False
 		self.occupy_finished = False
 		self._vehicle_actor_ids = []
+		self._persistent_static_actor_ids = []
 
 		self._delay_states = {
 			"start_to_redlight": {
@@ -202,6 +223,7 @@ class Scenario01Runner:
 			fade_out_ms=SONG_FADE_OUT_MS,
 			volume=0.85,
 			channel_index=6,)
+		
 	def _get_traffic_manager(self):
 		try:
 			tm = self.client.get_trafficmanager(self._tm_port)
@@ -215,7 +237,72 @@ class Scenario01Runner:
 			if actor.attributes.get("role_name") in ["hero", "default_player"]:
 				return actor
 		return None
+	
+	def _spawn_start_static_props(self):
+		return True
+		if self._start_static_props_spawned:
+			return True
 
+		bp_lib = self.world.get_blueprint_library()
+		spawn_configs = get_start_fence_spawns()
+		spawned_count = 0
+		failed_configs = []
+
+		for prop_config in spawn_configs:
+			name = prop_config.get("name", "unknown_prop")
+			blueprint_id = prop_config.get("blueprints", [None])[0]
+			if not blueprint_id:
+				print(f"[Scenario06] Start-Props WARNUNG: '{name}' hat keine Blueprint-ID.")
+				failed_configs.append(name)
+				continue
+
+			transform = prop_config.get("transform")
+			location = transform.location if transform is not None else None
+			rotation = transform.rotation if transform is not None else None
+			matches = [bp.id for bp in bp_lib.filter(blueprint_id)]
+			
+			if DEBUG_MODE:
+				print(
+					f"[Scenario06] Start-Props versuche '{name}' blueprint='{blueprint_id}' "
+					f"matches={matches} "
+					f"loc=({location.x:.2f}, {location.y:.2f}, {location.z:.2f}) "
+					f"rot=({rotation.pitch:.1f}, {rotation.yaw:.1f}, {rotation.roll:.1f})"
+					if location is not None and rotation is not None
+					else f"[Scenario06] Start-Props versuche '{name}' blueprint='{blueprint_id}' matches={matches}"
+				)
+
+			try:
+				prop_bp = bp_lib.find(blueprint_id)
+				print(f"[Scenario06] Start-Props Blueprint gefunden für '{name}': {prop_bp.id}")
+			except Exception as exc:
+				print(f"[Scenario06] Start-Props WARNUNG: Blueprint '{blueprint_id}' für '{name}' nicht gefunden: {exc}")
+				failed_configs.append(name)
+				continue
+
+			actor = self.world.try_spawn_actor(prop_bp, transform)
+			if actor is None:
+				print(
+					f"[Scenario06] Start-Props WARNUNG: Spawn für '{name}' fehlgeschlagen. "
+					f"Wahrscheinliche Ursache: Collision / ungültiger Transform. "
+					f"blueprint='{prop_bp.id}'"
+				)
+				failed_configs.append(name)
+				continue
+
+			self._persistent_static_actor_ids.append(actor.id)
+			spawned_count += 1
+			print(f"[Scenario06] Start-Props OK: '{name}' actor_id={actor.id} blueprint='{prop_bp.id}' persistent=True")
+
+		self._start_static_props_spawned = True
+		if spawned_count == len(spawn_configs):
+			print(f"[Scenario06] Start-Props: {spawned_count}/{len(spawn_configs)} gespawnt.")
+		else:
+			print(
+				f"[Scenario06] Start-Props: {spawned_count}/{len(spawn_configs)} gespawnt, "
+				f"nicht alle konnten gesetzt werden. Fehlschläge={failed_configs}"
+			)
+		return spawned_count == len(spawn_configs)
+	
 	def _get_trafficjam_trigger_config(self, hero_location, hero_velocity=None):
 		for trigger_config in get_static_prop_spawns("trafficjam"):
 			trigger_location = trigger_config["trigger_location"]
@@ -546,11 +633,21 @@ class Scenario01Runner:
 		except Exception:
 			pass
 
+		# Apply junction routing rules (best-effort) after spawning
+		try:
+			# apply_rules_to_vehicle will return True if it routed the vehicle via TM
+			_applied = apply_rules_to_vehicle(self.world, tm, actor, rules=JUNCTION_RULES)
+			if _applied:
+				self._junction_rule_applied_vehicle_ids.add(actor.id)
+		except Exception:
+			pass
+
 		self._vehicle_actor_ids.append(actor.id)
-		print(
-			f"[Scenario01] TrafficJam vehicle spawned: id={actor.id}, sim_time={sim_time:.2f}s, "
-			f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
-		)
+		if DEBUG_MODE:
+			print(
+				f"[Scenario01] TrafficJam vehicle spawned: id={actor.id}, sim_time={sim_time:.2f}s, "
+				f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
+			)
 		return True
 
 	def _spawn_trafficjam_vehicles(self, trigger_config, sim_time):
@@ -580,6 +677,7 @@ class Scenario01Runner:
 		for vehicle_id in list(self._vehicle_actor_ids):
 			actor = self.world.get_actor(vehicle_id)
 			if actor is None:
+				self._junction_rule_applied_vehicle_ids.discard(vehicle_id)
 				continue
 
 			try:
@@ -594,6 +692,7 @@ class Scenario01Runner:
 					actor.destroy()
 				except Exception:
 					pass
+				self._junction_rule_applied_vehicle_ids.discard(vehicle_id)
 				continue
 
 			active_vehicle_ids.append(vehicle_id)
@@ -628,6 +727,8 @@ class Scenario01Runner:
 		self._redlight_seen_traffic_light_count = 0
 		self._finish_delay_timer("redlight_to_trafficjam", sim_time)
 		print("[Scenario01] Redlight phase finished.")
+		if self._trigger_trafficjam:
+			print("[Scenario01] Waiting for traffic jam trigger activation")
 
 	def _update_redlight_phase(self, sim_time):
 		if not self.redlight_active or self._redlight_started_at is None:
@@ -867,10 +968,10 @@ class Scenario01Runner:
 	def _skip_badguy_trigger(self, sim_time):
 		if self.badguy_finished:
 			return
-
+		
 		self._finish_delay_timer("trafficjam_to_badguy", sim_time)
-		self.start_badguy()
-		print("[Scenario01] Badguy trigger skipped.")
+		self.badguy_finished = True
+		print("[Scenario01] Badguy trigger skipped (no badguy started).")
 
 	def _skip_song_trigger(self, sim_time):
 		if self.song_finished:
@@ -933,13 +1034,65 @@ class Scenario01Runner:
 				if DEBUG_MODE:
 					self._draw_trafficjam_trigger_box()
 				sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
+
+				# Periodic junction-rule enforcement for all AI vehicles (every 0.1s simulation time)
+				try:
+					if self._last_junction_rule_check is None:
+						self._last_junction_rule_check = sim_time
+					if (sim_time - self._last_junction_rule_check) >= 0.1:
+						self._last_junction_rule_check = sim_time
+						try:
+							tm = self._get_traffic_manager()
+							vehicles = self.world.get_actors().filter('vehicle.*')
+							for vehicle in vehicles:
+								# skip hero / player-controlled vehicles
+								role = vehicle.attributes.get('role_name') if hasattr(vehicle, 'attributes') else None
+								if role in ('hero', 'default_player'):
+									continue
+								last_trace = self._junction_rule_last_trace_by_vehicle.get(vehicle.id, -999.0)
+								if (sim_time - last_trace) >= 1.0:
+									try:
+										print(f"[Scenario01] JunctionTrace | {describe_vehicle_route_state(self.world, vehicle, back_distance=8.0)}")
+										self._junction_rule_last_trace_by_vehicle[vehicle.id] = sim_time
+									except Exception:
+										pass
+								if vehicle.id in self._junction_rule_applied_vehicle_ids:
+									continue
+								try:
+									if apply_rules_to_vehicle(self.world, tm, vehicle, rules=JUNCTION_RULES, back_distance=8.0):
+										self._junction_rule_applied_vehicle_ids.add(vehicle.id)
+								except Exception:
+									# ignore per-vehicle errors
+									pass
+						except Exception:
+							# ignore traffic-manager retrieval errors
+							pass
+				except Exception:
+					# protect the main loop from unexpected errors
+					pass
 				self._update_trafficjam_traffic_light_control(sim_time)
+
+				# Debug: force all traffic lights to green if requested
+				if TL_FORCE_GREEN and not getattr(self, '_tl_forced_applied', False):
+					try:
+						for tl in self.world.get_actors().filter('traffic.traffic_light*'):
+							try:
+								tl.set_state(carla.TrafficLightState.Green)
+								if hasattr(tl, 'freeze'):
+									tl.freeze(True)
+							except Exception:
+								pass
+						print('[Scenario01] TL_FORCE_GREEN applied: all traffic lights set to GREEN')
+						self._tl_forced_applied = True
+					except Exception:
+						pass
 				ego = self.find_hero()
 				ego_location = ego.get_location() if ego is not None else None
 				ego_velocity = ego.get_velocity() if ego is not None else None
 
 				if self._start_sim_time is None:
 					self._start_sim_time = sim_time
+					self._spawn_start_static_props()
 
 				if self._start_sim_time is not None:
 					start_to_redlight_state = self._delay_states["start_to_redlight"]
@@ -967,11 +1120,28 @@ class Scenario01Runner:
 					if not self._trigger_trafficjam:
 						self._skip_trafficjam_trigger(sim_time)
 					else:
+						# draw boxes for all trafficjam triggers while waiting for activation
+						try:
+							trigger_configs_all = get_static_prop_spawns("trafficjam")
+							box_cfgs = build_trigger_box_configs(trigger_configs_all, z_extra=2.0, color=(255,0,0,255), thickness=0.1)
+							draw_trigger_boxes(self.world, box_cfgs, life_time=self._debug_trafficjam_box_lifetime)
+						except Exception:
+							pass
 						trafficjam_trigger_config = None
-						# testing override: allow instant triggering of the first trafficjam trigger
-						if TEST_INSTANT_TRIGGER_TRAFFICJAM:
+						# testing override: when TEST_INSTANT_TRIGGER_TRAFFICJAM is an
+						# integer index, select that specific configured trigger.
+						# When it's None, fall back to normal location-based detection.
+						if TEST_INSTANT_TRIGGER_TRAFFICJAM is not None:
 							trigger_configs = get_static_prop_spawns("trafficjam")
-							trafficjam_trigger_config = trigger_configs[0] if trigger_configs else None
+							try:
+								idx = int(TEST_INSTANT_TRIGGER_TRAFFICJAM)
+							except Exception:
+								idx = None
+							if idx is not None and trigger_configs and 0 <= idx < len(trigger_configs):
+								trafficjam_trigger_config = trigger_configs[idx]
+							else:
+								# invalid index -> no instant trigger
+								trafficjam_trigger_config = None
 						elif ego_location is not None:
 							trafficjam_trigger_config = self._get_trafficjam_trigger_config(ego_location, ego_velocity)
 						if trafficjam_trigger_config is not None:
