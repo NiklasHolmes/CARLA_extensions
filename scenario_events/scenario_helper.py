@@ -257,3 +257,70 @@ def get_random_pedestrian_blueprint(world, rng, excluded_ids=None, max_numeric_i
     if walker_bp.has_attribute("can_use_wheelchair") and rng.randint(0, 100) < 11:
         walker_bp.set_attribute("use_wheelchair", "true")
     return walker_bp
+
+
+def _make_box_points(center, x_tol, y_tol, z_base, z_top):
+    p1 = carla.Location(x=center.x - x_tol, y=center.y - y_tol, z=z_base)
+    p2 = carla.Location(x=center.x + x_tol, y=center.y - y_tol, z=z_base)
+    p3 = carla.Location(x=center.x + x_tol, y=center.y + y_tol, z=z_base)
+    p4 = carla.Location(x=center.x - x_tol, y=center.y + y_tol, z=z_base)
+
+    p1_top = carla.Location(x=p1.x, y=p1.y, z=z_top)
+    p2_top = carla.Location(x=p2.x, y=p2.y, z=z_top)
+    p3_top = carla.Location(x=p3.x, y=p3.y, z=z_top)
+    p4_top = carla.Location(x=p4.x, y=p4.y, z=z_top)
+
+    return (p1, p2, p3, p4, p1_top, p2_top, p3_top, p4_top)
+
+
+def build_trigger_box_configs(trigger_configs, z_extra=2.0, color=(255,0,0,255), thickness=0.1):
+    """Convert trigger configurations into drawable box configs.
+    Each returned item is a dict: {"center": Location, "x_tol": float, "y_tol": float, "z_base": float, "z_top": float, "color": carla.Color, "thickness": float}
+    """
+    boxes = []
+    for cfg in trigger_configs:
+        center = cfg.get("trigger_location")
+        if center is None:
+            continue
+        x_tol = float(cfg.get("trigger_x_tolerance", 0.0))
+        y_tol = float(cfg.get("trigger_y_tolerance", 0.0))
+        z_base = float(center.z)
+        z_top = z_base + float(z_extra)
+        col = carla.Color(r=int(color[0]), g=int(color[1]), b=int(color[2]), a=int(color[3]))
+        boxes.append({
+            "center": center,
+            "x_tol": x_tol,
+            "y_tol": y_tol,
+            "z_base": z_base,
+            "z_top": z_top,
+            "color": col,
+            "thickness": thickness,
+        })
+    return boxes
+
+
+def draw_trigger_boxes(world, box_configs, life_time=0.1):
+    """Draw all given box configs once. To keep them visible, call this function each simulation tick."""
+    if not box_configs:
+        return
+    for b in box_configs:
+        try:
+            p1, p2, p3, p4, p1_top, p2_top, p3_top, p4_top = _make_box_points(b["center"], b["x_tol"], b["y_tol"], b["z_base"], b["z_top"])
+            color = b.get("color")
+            thickness = b.get("thickness", 0.1)
+            world.debug.draw_line(p1, p2, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p2, p3, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p3, p4, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p4, p1, thickness=thickness, color=color, life_time=life_time)
+
+            world.debug.draw_line(p1_top, p2_top, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p2_top, p3_top, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p3_top, p4_top, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p4_top, p1_top, thickness=thickness, color=color, life_time=life_time)
+
+            world.debug.draw_line(p1, p1_top, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p2, p2_top, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p3, p3_top, thickness=thickness, color=color, life_time=life_time)
+            world.debug.draw_line(p4, p4_top, thickness=thickness, color=color, life_time=life_time)
+        except Exception:
+            pass
