@@ -592,18 +592,27 @@ START_FENCE_SPAWNS = [
 
 TRAFFICJAM_TRIGGER_CONFIGS = (
 	{
-		"name": "trafficjamTrigger1",
-		"trigger_location": carla.Location(x=-115.92690430, y=-145.73909180, z=0.60545044),
-		"trigger_x_tolerance": 2.0,
-		"trigger_y_tolerance": 5.0,
-		"trigger_direction_axis": "x",
-		"trigger_direction_sign": -1,
+		"name": "trafficjamTrigger1",   # CORRECT
+		"trigger_1": {
+            "trigger_location": carla.Location(x=-115.92690430, y=-145.73909180, z=0.60545044),
+            "trigger_x_tolerance": 2.0,
+            "trigger_y_tolerance": 5.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": -1,
+        },
+        "trigger_2_destroyBarriers": {
+            "trigger_location": carla.Location(x=-195.09, y=-78.55, z=0.60000000),
+            "trigger_x_tolerance": 2.0,
+            "trigger_y_tolerance": 5.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": 1  # Richtung +x
+        },
 		"spawn_configs": [
 			{
 				"name": "trafficjam_car_01",
 				"blueprints": ["vehicle.*"],
 				"transform": carla.Transform(
-					carla.Location(x=-195.20000000, y=-43.40000000, z=0.10000000),
+					carla.Location(x=-195.20000000, y=-43.40000000, z=0.30000000),
 					carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
 				),
 				"scale": None,
@@ -640,7 +649,7 @@ TRAFFICJAM_TRIGGER_CONFIGS = (
 				"name": "trafficjam_car_05",
 				"blueprints": ["vehicle.*"],
 				"transform": carla.Transform(
-					carla.Location(x=-190.20000000, y=-43.40000000, z=0.10000000),
+					carla.Location(x=-190.20000000, y=-43.40000000, z=0.30000000),
 					carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
 				),
 				"scale": None,
@@ -677,11 +686,20 @@ TRAFFICJAM_TRIGGER_CONFIGS = (
 	},
 	{
 		"name": "trafficjamTrigger2",
-		"trigger_location": carla.Location(x=-36.26219482, y=93.32519531, z=0.30000000),
-		"trigger_x_tolerance": 2.0,
-		"trigger_y_tolerance": 4.0,
-		"trigger_direction_axis": "x",
-		"trigger_direction_sign": 1,
+        "trigger_1": {
+            "trigger_location": carla.Location(x=-36.26219482, y=93.32519531, z=0.30000000),        # CORRECT
+            "trigger_x_tolerance": 2.0,
+            "trigger_y_tolerance": 4.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": 1,
+        },
+        "trigger_2_destroyBarriers": {
+            "trigger_location": carla.Location(x=33.38, y=72.71, z=0.60000000),
+            "trigger_x_tolerance": 3.0,
+            "trigger_y_tolerance": 3.0,
+            "trigger_direction_axis": "y",
+            "trigger_direction_sign": -1  # Richtung +x
+        },
 		"spawn_configs": [
 {
                 "name": "trafficjam_car_01",
@@ -834,12 +852,154 @@ TRAFFICJAM_TRIGGER_CONFIGS = (
 	},
 	{
         "name": "trafficjamTrigger3",
-        "trigger_location": carla.Location(x=-186.40000000, y=-103.90000000, z=0.10000000),
-        "trigger_x_tolerance": 2.0,
-        "trigger_y_tolerance": 5.0,
-        "trigger_direction_axis": "y",
-        "trigger_direction_sign": -1,  # Richtung -y
-        "spawn_configs": [
+        "trigger_1": {
+            "trigger_location": carla.Location(x=-186.40000000, y=-103.90000000, z=0.10000000),
+            "trigger_x_tolerance": 4.0,
+            "trigger_y_tolerance": 2.0,
+            "trigger_direction_axis": "y",
+            "trigger_direction_sign": -1,  # Richtung -y
+        },
+        "trigger_2_destroyBarriers": {
+            "trigger_location": carla.Location(x=-116.00, y=-135.23, z=0.60000000),
+            "trigger_x_tolerance": 2.0,
+            "trigger_y_tolerance": 5.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": 1  # Richtung +x
+        },
+		"spawn_configs": [
+            {
+                "name": "trafficjam_car_01",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-60.70000000, y=-119.80000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=60.0, roll=0.0),
+                ),
+                "scale": None,
+				"first": True,
+				# "route_start_idx": 2,
+				# "route": "green_right",
+            },
+            {
+                "name": "trafficjam_car_02",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-56.90000000, y=-119.80000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=60.0, roll=0.0),
+                ),
+                "scale": None,
+				"first": True,
+            },
+            {
+                "name": "trafficjam_car_03",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-67.30000000, y=-126.60000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=40.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_04",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-67.30000000, y=-131.10000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=40.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            # --- Reihe 1 (Start bei X=-106.00, Y=-135.00) + 3 Autos (+7m auf X) ---
+            {
+                "name": "trafficjam_car_05",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-106.00000000, y=-135.00000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_06",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-99.00000000, y=-135.00000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_07",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-92.00000000, y=-135.00000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_08",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-85.00000000, y=-135.00000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            # --- Reihe 2 (Start bei X=-106.00, Y=-138.70) + 3 Autos (+7m auf X) ---
+            {
+                "name": "trafficjam_car_09",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-106.00000000, y=-138.70000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_10",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-99.00000000, y=-138.70000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_11",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-92.00000000, y=-138.70000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trafficjam_car_12",
+                "blueprints": ["vehicle.*"],
+                "transform": carla.Transform(
+                    carla.Location(x=-85.00000000, y=-138.70000000, z=0.10000000),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+        ],
+    },
+    {
+        "name": "trafficjamTrigger4",
+        "trigger_1": {
+            "trigger_location": carla.Location(x=-145.60232422, y=-2.26561096, z=0.30000000),
+            "trigger_x_tolerance": 2.0,
+            "trigger_y_tolerance": 5.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": -1
+        },
+        "trigger_2_destroyBarriers": {
+            "trigger_location": carla.Location(x=-186.67, y=-13.59, z=0.60000000),
+            "trigger_x_tolerance": 3.0,
+            "trigger_y_tolerance": 4.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": 1  # Richtung +x
+        },
+		"spawn_configs": [
             # --- Reihe 1 (Start bei X=-184.80) ---
             {
                 "name": "trafficjam_car_01",
@@ -955,132 +1115,21 @@ TRAFFICJAM_TRIGGER_CONFIGS = (
         ],
     },
 	{
-        "name": "trafficjamTrigger4",
-        "trigger_location": carla.Location(x=-145.60232422, y=-2.26561096, z=0.30000000),
-        "trigger_x_tolerance": 2.0,
-        "trigger_y_tolerance": 5.0,
-        "trigger_direction_axis": "x",
-        "trigger_direction_sign": -1,  # Richtung -x
-        "spawn_configs": [
-            {
-                "name": "trafficjam_car_01",
-                "blueprints": ["vehicle.*"],
-                "transform": carla.Transform(
-                    carla.Location(x=-60.70000000, y=-119.80000000, z=0.10000000),
-                    carla.Rotation(pitch=0.0, yaw=60.0, roll=0.0),
-                ),
-                "scale": None,
-            },
-            # {
-            #     "name": "trafficjam_car_02",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-56.90000000, y=-119.80000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=60.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_03",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-67.30000000, y=-126.60000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=40.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_04",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-67.30000000, y=-131.10000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=40.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # # --- Reihe 1 (Start bei X=-106.00, Y=-135.00) + 3 Autos (+7m auf X) ---
-            # {
-            #     "name": "trafficjam_car_05",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-106.00000000, y=-135.00000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_06",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-99.00000000, y=-135.00000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_07",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-92.00000000, y=-135.00000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_08",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-85.00000000, y=-135.00000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # # --- Reihe 2 (Start bei X=-106.00, Y=-138.70) + 3 Autos (+7m auf X) ---
-            # {
-            #     "name": "trafficjam_car_09",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-106.00000000, y=-138.70000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_10",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-99.00000000, y=-138.70000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_11",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-92.00000000, y=-138.70000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-            # {
-            #     "name": "trafficjam_car_12",
-            #     "blueprints": ["vehicle.*"],
-            #     "transform": carla.Transform(
-            #         carla.Location(x=-85.00000000, y=-138.70000000, z=0.10000000),
-            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
-            #     ),
-            #     "scale": None,
-            # },
-        ],
-    },
-	{
         "name": "trafficjamTrigger5",
-        "trigger_location": carla.Location(x=143.92219727, y=-3.16232452, z=0.50000000),
-        "trigger_x_tolerance": 2.0,
-        "trigger_y_tolerance": 3.0,
-        "trigger_direction_axis": "x",
-        "trigger_direction_sign": -1,
+		"trigger_1": {
+            "trigger_location": carla.Location(x=143.92219727, y=-3.16232452, z=0.50000000),        # CORRECT
+            "trigger_x_tolerance": 2.0,
+            "trigger_y_tolerance": 3.0,
+            "trigger_direction_axis": "x",
+            "trigger_direction_sign": -1,
+            },
+        "trigger_2_destroyBarriers": {
+                "trigger_location": carla.Location(x=105.10, y=-12.60, z=0.60000000),      # CORRECT
+                "trigger_x_tolerance": 3.0,
+                "trigger_y_tolerance": 5.0,
+                "trigger_direction_axis": "x",
+                "trigger_direction_sign": 1  # Richtung +x
+            },
         "spawn_configs": [
             {
                 "name": "trafficjam_car_01",
@@ -1252,6 +1301,25 @@ TRAFFICJAM_TRIGGER_CONFIGS = (
     },
 )
 
+ROUTES_CONFIG = (
+	{
+		"name": "green_right",
+		"route": ["Straight", "Straight", "Straight", "Right", "Straight", "Right"]
+	},
+	{
+		"name": "green_left",
+		"route": ["Straight", "Straight", "Left", "Straight", "Straight", "Straight", "Straight", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left"]
+	},
+	{
+		"name": "blue_right", # TODO
+		"route": ["Straight", "Straight", "Straight", "Straight", "Straight", "Straight", "Straight", "Straight"]
+	},
+	{
+		"name": "blue_extended", # TODO
+		"route": ["Straight", "Right", "Straight", "Straight", "Straight", "Straight", "Straight", "Straight", "Straight", "Straight"]
+	}
+)
+
 def get_start_fence_spawns():
 	return list(START_FENCE_SPAWNS)
 
@@ -1263,3 +1331,6 @@ def get_static_prop_spawns(trigger_key=None):
 		return list(TRAFFICJAM_TRIGGER_CONFIGS)
 
 	return []
+
+def get_routes():
+	return list(ROUTES_CONFIG)
