@@ -53,9 +53,13 @@ route_green = ["Straight", "Straight", "Straight", "Straight", "Straight", "Stra
 
 # copWaving lifetime (seconds) before removal
 COPWAVING_LIFETIME_S = 10.0
-TRIGGER_CARAWAY = True
-TRIGGER_LTRUCK = True
-TRIGGER_SONG = False
+COPWAVING_WALK_SPEED = 1.4
+COPWAVING_ARRIVE_THRESH = 1.2
+COPWAVING_STATUS_LOG_INTERVAL_S = 1.0
+COPWAVING_TRANSITION_BACKSTEP_M = 0.0
+TRIGGER_CARAWAY = False
+TRIGGER_LTRUCK = False
+TRIGGER_SONG = True
 TRIGGER_POLICE = True
 TRIGGER_BREAK = True
 DEBUG_MODE = True
@@ -65,6 +69,7 @@ TEST_INSTANT_TRIGGER_LTRUCK = False
 ltruck_spawn_idx = 0
 TEST_INSTANT_TRIGGER_COP = False
 cop_spawn_idx = 0
+cop_wave_duration = 5.0
 
 DELAY_LABELS = {
     "start_to_caraway": "caraway",
@@ -126,6 +131,17 @@ class Scenario03Runner:
         self._copwaving_triggered_keys = set()
         self._copwaving_actor_ids = {}
         self._copwaving_spawn_time = {}
+        self._copwaving_active_trigger_name = None
+        self._copwaving_active_trigger_config = None
+        self._copwaving_wave_actor_id = None
+        self._copwaving_walk_actor_id = None
+        self._copwaving_walk_controller_id = None
+        self._copwaving_walk_started = False
+        self._copwaving_target_location = None
+        self._copwaving_last_update_time = None
+        self._copwaving_last_status_log_time = None
+        self._copwaving_transition_pending = False
+        self._copwaving_transition_spawn_transform = None
 
         self._delay_states = {
             "start_to_caraway": {
@@ -231,6 +247,22 @@ class Scenario03Runner:
             pass
 
         return tm
+
+    def _snap_location_to_navigation(self, location):
+        try:
+            waypoint = self.world.get_map().get_waypoint(
+                location,
+                project_to_road=True,
+                lane_type=carla.LaneType.Any,
+            )
+        except Exception:
+            waypoint = None
+
+        if waypoint is None:
+            return location
+
+        snapped = waypoint.transform.location
+        return carla.Location(x=snapped.x, y=snapped.y, z=location.z)
 
     def _get_caraway_trigger_config(self, hero_location, hero_velocity=None):
         if hero_location is None:
@@ -743,6 +775,9 @@ class Scenario03Runner:
         if not DEBUG_MODE or not self.police_active or self.police_finished:
             return
 
+        if self._copwaving_active_trigger_name is not None:
+            return
+
         box_configs = build_trigger_box_configs(
             COPWAVING_TRIGGER_CONFIGS,
             z_extra=2.0,
@@ -750,6 +785,350 @@ class Scenario03Runner:
             thickness=0.1,
         )
         draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
+    def _destroy_actor_safely(self, actor_id):
+        if actor_id is None:
+            return
+
+        try:
+            actor = self.world.get_actor(actor_id)
+            if actor is not None:
+                actor.destroy()
+            else:
+                self.client.apply_batch([carla.command.DestroyActor(actor_id)])
+        except Exception:
+            pass
+
+        if actor_id in self._static_actor_ids:
+            try:
+                self._static_actor_ids.remove(actor_id)
+            except ValueError:
+                pass
+        if actor_id in self._vehicle_actor_ids:
+            try:
+                self._vehicle_actor_ids.remove(actor_id)
+            except ValueError:
+                pass
+
+    def _spawn_copwaving_walker_controller(self, trigger_config, spawn_transform=None):
+        spawn_location = trigger_config.get("spawn_location")
+        target_location = trigger_config.get("target_location")
+        blueprint_id_walk = trigger_config.get("blueprint_id_walk", "walker.pedestrian.0030")
+        spawn_yaw = trigger_config.get("spawn_yaw", 0.0)
+
+        if spawn_location is None or target_location is None:
+            print("[Scenario03] WARNUNG: copWaving walker needs spawn_location and target_location.")
+            return False
+
+        bp_lib = self.world.get_blueprint_library()
+        try:
+            walker_bp = bp_lib.find(blueprint_id_walk)
+        except Exception as exc:
+            print(f"[Scenario03] WARNUNG: Blueprint {blueprint_id_walk} nicht gefunden: {exc}")
+            return False
+
+        if walker_bp.has_attribute("is_invincible"):
+            try:
+                walker_bp.set_attribute("is_invincible", "false")
+            except Exception:
+                pass
+
+        target_location = self._snap_location_to_navigation(target_location)
+        print(
+            f"[Scenario03] copWaving switching to walking model | blueprint={blueprint_id_walk} | "
+            f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f}) | "
+            f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f})"
+        )
+
+        if spawn_transform is None:
+            walker_transform = carla.Transform(
+                carla.Location(x=spawn_location.x, y=spawn_location.y, z=spawn_location.z),
+                carla.Rotation(pitch=0.0, yaw=spawn_yaw if spawn_yaw is not None else 0.0, roll=0.0),
+            )
+        else:
+            walker_transform = carla.Transform(
+                carla.Location(
+                    x=spawn_transform.location.x,
+                    y=spawn_transform.location.y,
+                    z=spawn_transform.location.z,
+                ),
+                carla.Rotation(
+                    pitch=spawn_transform.rotation.pitch,
+                    yaw=spawn_transform.rotation.yaw,
+                    roll=spawn_transform.rotation.roll,
+                ),
+            )
+        walker_actor = self.world.try_spawn_actor(walker_bp, walker_transform)
+        if walker_actor is None:
+            print(
+                f"[Scenario03] WARNUNG: Walker-Spawn fehlgeschlagen | blueprint={blueprint_id_walk}, "
+                f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
+            )
+            return False
+
+        self._copwaving_walk_actor_id = walker_actor.id
+        self._copwaving_walk_controller_id = None
+        self._copwaving_walk_started = True
+        self._copwaving_target_location = target_location
+        self._copwaving_last_update_time = None
+        self._copwaving_last_status_log_time = None
+        self._static_actor_ids.append(walker_actor.id)
+        print(
+            f"[Scenario03] copWaving walker spawned: walker_id={walker_actor.id}, "
+            f"speed={COPWAVING_WALK_SPEED:.2f} m/s"
+        )
+        return True
+
+    def _transition_copwaving_to_walk(self, trigger_config, wave_actor, wave_transform):
+        if trigger_config is None or wave_actor is None or wave_transform is None:
+            return False
+
+        spawn_location = carla.Location(
+            x=wave_transform.location.x,
+            y=wave_transform.location.y,
+            z=wave_transform.location.z,
+        )
+        spawn_rotation = carla.Rotation(
+            pitch=wave_transform.rotation.pitch,
+            yaw=wave_transform.rotation.yaw,
+            roll=wave_transform.rotation.roll,
+        )
+        spawn_transform = carla.Transform(spawn_location, spawn_rotation)
+        blueprint_id_walk = trigger_config.get("blueprint_id_walk", "walker.pedestrian.0030")
+
+        bp_lib = self.world.get_blueprint_library()
+        try:
+            walker_bp = bp_lib.find(blueprint_id_walk)
+        except Exception as exc:
+            print(f"[Scenario03] WARNUNG: Blueprint {blueprint_id_walk} nicht gefunden für Transition: {exc}")
+            return False
+
+        if walker_bp.has_attribute("is_invincible"):
+            try:
+                walker_bp.set_attribute("is_invincible", "false")
+            except Exception:
+                pass
+
+        print(
+            f"[Scenario03] copWaving transactional swap prepared | old_id={wave_actor.id} | "
+            f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f}) | "
+            f"blueprint={blueprint_id_walk}"
+        )
+
+        batch = [
+            carla.command.DestroyActor(wave_actor.id),
+            carla.command.SpawnActor(walker_bp, spawn_transform),
+        ]
+
+        new_actor = None
+        try:
+            responses = self.client.apply_batch_sync(batch, False)
+        except Exception as exc:
+            print(f"[Scenario03] WARNUNG: copWaving batch swap failed: {exc}")
+            responses = []
+
+        if len(responses) >= 2 and not responses[1].error:
+            try:
+                new_actor = self.world.get_actor(responses[1].actor_id)
+            except Exception:
+                new_actor = None
+        else:
+            if len(responses) >= 2 and responses[1].error:
+                print(f"[Scenario03] WARNUNG: copWaving batch spawn error: {responses[1].error}")
+
+            print("[Scenario03] copWaving batch swap fallback -> direct spawn after destroy")
+            new_actor = self.world.try_spawn_actor(walker_bp, spawn_transform)
+
+        if new_actor is None:
+            print(
+                f"[Scenario03] WARNUNG: copWaving transition failed completely | "
+                f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
+            )
+            return False
+
+        self._copwaving_walk_actor_id = new_actor.id
+        self._copwaving_walk_controller_id = None
+        self._copwaving_walk_started = True
+        self._copwaving_target_location = self._snap_location_to_navigation(trigger_config.get("target_location"))
+        self._copwaving_last_update_time = None
+        self._copwaving_last_status_log_time = None
+        self._static_actor_ids.append(new_actor.id)
+
+        if self._copwaving_active_trigger_name in self._copwaving_spawn_time:
+            self._copwaving_spawn_time.pop(self._copwaving_active_trigger_name, None)
+        self._copwaving_wave_actor_id = None
+
+        print(
+            f"[Scenario03] copWaving walker spawned after swap: walker_id={new_actor.id}, "
+            f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f}), "
+            f"target=({self._copwaving_target_location.x:.2f}, {self._copwaving_target_location.y:.2f}, {self._copwaving_target_location.z:.2f})"
+        )
+        return True
+
+    def _start_copwaving_trigger(self, trigger_config, sim_time):
+        if trigger_config is None:
+            return False
+
+        trigger_name = trigger_config.get("name")
+        if trigger_name in self._copwaving_triggered_keys:
+            return False
+
+        if not self._spawn_copwaving_pedestrian(trigger_config):
+            return False
+
+        self._copwaving_triggered_keys.add(trigger_name)
+        self._copwaving_active_trigger_name = trigger_name
+        self._copwaving_active_trigger_config = trigger_config
+        self._copwaving_wave_actor_id = self._copwaving_actor_ids.get(trigger_name)
+        self._copwaving_spawn_time[trigger_name] = sim_time
+        print(f"[Scenario03] {trigger_name} aktiviert -> policeman waving actor_id={self._copwaving_wave_actor_id}")
+        return True
+
+    def _destroy_copwaving_wave_actor(self):
+        if self._copwaving_wave_actor_id is None:
+            return
+
+        actor_id = self._copwaving_wave_actor_id
+        self._copwaving_wave_actor_id = None
+        self._destroy_actor_safely(actor_id)
+        if self._copwaving_active_trigger_name in self._copwaving_spawn_time:
+            self._copwaving_spawn_time.pop(self._copwaving_active_trigger_name, None)
+        print(f"[Scenario03] copWaving waving actor destroyed: id={actor_id}")
+
+    def _finish_copwaving_phase(self):
+        self._destroy_copwaving_wave_actor()
+        self._destroy_actor_safely(self._copwaving_walk_controller_id)
+        self._destroy_actor_safely(self._copwaving_walk_actor_id)
+        self._copwaving_walk_controller_id = None
+        self._copwaving_walk_actor_id = None
+        self._copwaving_walk_started = False
+        self._copwaving_target_location = None
+        self._copwaving_last_update_time = None
+        self._copwaving_last_status_log_time = None
+        self._copwaving_transition_pending = False
+        self._copwaving_transition_spawn_transform = None
+        self._copwaving_active_trigger_name = None
+        self._copwaving_active_trigger_config = None
+        self.police_finished = True
+        self.police_active = False
+        print("[Scenario03] copWaving finished -> police phase completed.")
+
+    def _update_copwaving_walk(self, sim_time):
+        if not self._copwaving_walk_started or self._copwaving_walk_actor_id is None:
+            return
+
+        walker = self.world.get_actor(self._copwaving_walk_actor_id)
+        target_location = self._copwaving_target_location
+        if walker is None or target_location is None:
+            print(
+                f"[Scenario03] WARNUNG: copWaving walk aborted - walker or target missing | "
+                f"walker_id={self._copwaving_walk_actor_id}, target={target_location}"
+            )
+            self._finish_copwaving_phase()
+            return
+
+        if self._copwaving_last_update_time is None:
+            delta_time = SIM_STEP_S
+        else:
+            delta_time = max(0.0, sim_time - self._copwaving_last_update_time)
+            if delta_time == 0.0:
+                delta_time = SIM_STEP_S
+        self._copwaving_last_update_time = sim_time
+
+        try:
+            current_location = walker.get_location()
+        except Exception as exc:
+            print(f"[Scenario03] WARNUNG: copWaving walker location konnte nicht gelesen werden: {exc}")
+            self._finish_copwaving_phase()
+            return
+
+        distance = current_location.distance(target_location)
+        if self._copwaving_last_status_log_time is None or (sim_time - self._copwaving_last_status_log_time) >= COPWAVING_STATUS_LOG_INTERVAL_S:
+            self._copwaving_last_status_log_time = sim_time
+            print(
+                f"[Scenario03] copWaving move tick | sim_time={sim_time:.2f}s | dt={delta_time:.3f}s | "
+                f"dist={distance:.2f}m | current=({current_location.x:.2f}, {current_location.y:.2f}, {current_location.z:.2f}) | "
+                f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f})"
+            )
+
+        if distance <= COPWAVING_ARRIVE_THRESH:
+            print(
+                f"[Scenario03] copWaving walker reached target | walker_id={walker.id} | sim_time={sim_time:.2f}s | "
+                f"distance={distance:.2f}m"
+            )
+            self._finish_copwaving_phase()
+            return
+
+        direction_x = target_location.x - current_location.x
+        direction_y = target_location.y - current_location.y
+        direction_length = math.hypot(direction_x, direction_y)
+        if direction_length == 0.0:
+            print(f"[Scenario03] WARNUNG: copWaving direction length is zero for walker_id={walker.id}")
+            self._finish_copwaving_phase()
+            return
+
+        try:
+            walker.apply_control(
+                carla.WalkerControl(
+                    direction=carla.Vector3D(x=direction_x / direction_length, y=direction_y / direction_length, z=0.0),
+                    speed=COPWAVING_WALK_SPEED,
+                    jump=False,
+                )
+            )
+        except Exception:
+            print(
+                f"[Scenario03] WARNUNG: copWaving walker control failed | walker_id={walker.id} | "
+                f"sim_time={sim_time:.2f}s | speed={COPWAVING_WALK_SPEED:.2f}"
+            )
+            self._finish_copwaving_phase()
+
+    def _update_copwaving_phase(self, sim_time, hero_location, hero_velocity):
+        if not self.police_active or self.police_finished:
+            return
+
+        self._draw_copwaving_trigger_boxes()
+
+        if self._copwaving_active_trigger_name is None:
+            copwaving_config = None
+            if TEST_INSTANT_TRIGGER_COP:
+                copwaving_config = COPWAVING_TRIGGER_CONFIGS[cop_spawn_idx] if COPWAVING_TRIGGER_CONFIGS else None
+            elif hero_location is not None:
+                copwaving_config = self._get_copwaving_trigger_config(hero_location, hero_velocity)
+
+            if copwaving_config is not None:
+                self._start_copwaving_trigger(copwaving_config, sim_time)
+            return
+
+        if self._copwaving_wave_actor_id is not None:
+            trigger_name = self._copwaving_active_trigger_name
+            spawn_time = self._copwaving_spawn_time.get(trigger_name)
+            if spawn_time is not None and (sim_time - spawn_time) >= cop_wave_duration:
+                wave_actor = self.world.get_actor(self._copwaving_wave_actor_id)
+                wave_transform = None
+                if wave_actor is not None:
+                    try:
+                        wave_transform = wave_actor.get_transform()
+                    except Exception:
+                        wave_transform = None
+
+                print(
+                    f"[Scenario03] copWaving waving phase elapsed | trigger={trigger_name} | "
+                    f"sim_time={sim_time:.2f}s | swapping immediately in one batch"
+                )
+                trigger_config = self._copwaving_active_trigger_config
+                if trigger_config is not None and wave_transform is not None:
+                    if self._transition_copwaving_to_walk(trigger_config, wave_actor, wave_transform):
+                        return
+                    print("[Scenario03] WARNUNG: copWaving transactional swap failed, keeping phase active for retry.")
+                return
+
+        if self._copwaving_wave_actor_id is None and not self._copwaving_walk_started:
+            trigger_config = self._copwaving_active_trigger_config
+            if trigger_config is not None:
+                self._spawn_copwaving_walker_controller(trigger_config)
+            return
+
+        self._update_copwaving_walk(sim_time)
 
     def _get_copwaving_trigger_config(self, hero_location, hero_velocity=None):
         if hero_location is None:
@@ -888,8 +1267,14 @@ class Scenario03Runner:
 
     def run(self):
         print("[Scenario03] Running...")
+        world_settings = self.world.get_settings()
+        print(
+            f"[Scenario03] World settings | synchronous_mode={world_settings.synchronous_mode} | "
+            f"fixed_delta_seconds={world_settings.fixed_delta_seconds}"
+        )
         if run_in_singleFile_mode:
-            self.world.set_weather(carla.WeatherParameters.CloudyNoon)        # CloudyNight
+            self.world.set_weather(carla.WeatherParameters.CloudyNight)
+            #self.world.set_weather(carla.WeatherParameters.CloudyNoon)        # CloudyNight
             print("[Scenario03] Weather set to CloudyNight for single-file mode")
 
         try:
@@ -988,55 +1373,7 @@ class Scenario03Runner:
                         else:
                             self.start_police()
 
-                # Police phase: spawn copWaving when police active; wait for lifetime then finish
-                if self.police_active and not self.police_finished:
-                    self._draw_copwaving_trigger_boxes()
-
-                    copwaving_config = None
-                    if TEST_INSTANT_TRIGGER_COP:
-                        copwaving_config = COPWAVING_TRIGGER_CONFIGS[cop_spawn_idx] if COPWAVING_TRIGGER_CONFIGS else None
-                    elif hero:
-                        hero_velocity = hero.get_velocity()
-                        copwaving_config = self._get_copwaving_trigger_config(ego_location, hero_velocity)
-
-                    if copwaving_config is not None:
-                        name = copwaving_config.get("name")
-                        if name not in self._copwaving_triggered_keys:
-                            spawned = self._spawn_copwaving_pedestrian(copwaving_config)
-                            if spawned:
-                                self._copwaving_spawn_time[name] = sim_time
-
-                    # Check for spawned cop lifetimes
-                    if self._copwaving_spawn_time:
-                        for name, spawn_t in list(self._copwaving_spawn_time.items()):
-                            if (sim_time - spawn_t) >= COPWAVING_LIFETIME_S:
-                                actor_id = self._copwaving_actor_ids.get(name)
-                                if actor_id is not None:
-                                    try:
-                                        self.client.apply_batch([carla.command.DestroyActor(actor_id)])
-                                    except Exception:
-                                        pass
-                                    if actor_id in self._vehicle_actor_ids:
-                                        try:
-                                            self._vehicle_actor_ids.remove(actor_id)
-                                        except ValueError:
-                                            pass
-                                    if actor_id in self._static_actor_ids:
-                                        try:
-                                            self._static_actor_ids.remove(actor_id)
-                                        except ValueError:
-                                            pass
-                                # cleanup
-                                try:
-                                    del self._copwaving_spawn_time[name]
-                                except KeyError:
-                                    pass
-                                if name in self._copwaving_actor_ids:
-                                    del self._copwaving_actor_ids[name]
-                                # mark police phase finished so police_to_break can start
-                                self.police_finished = True
-                                self.police_active = False
-                                break
+                self._update_copwaving_phase(sim_time, ego_location, ego_velocity)
 
                 if self.police_finished:
                     police_to_break = self._delay_states["police_to_break"]
@@ -1080,6 +1417,15 @@ class Scenario03Runner:
             self._caraway_vehicle_spawn_locations.clear()
             self._caraway_vehicle_last_locations.clear()
             self._caraway_vehicle_distances_m.clear()
+            self._copwaving_spawn_time.clear()
+            self._copwaving_actor_ids.clear()
+            self._copwaving_active_trigger_name = None
+            self._copwaving_active_trigger_config = None
+            self._copwaving_wave_actor_id = None
+            self._copwaving_walk_actor_id = None
+            self._copwaving_walk_controller_id = None
+            self._copwaving_walk_started = False
+            self._copwaving_target_location = None
             self._destroy_temp_firetruck_barriers()
         except Exception:
             pass
