@@ -76,6 +76,314 @@ START_FENCE_SPAWNS = [
         ),
         "scale": None,
     },
+    {
+        "name": "fence_09",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-39.0000, y=4.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_10",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-39.0000, y=0.9000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_11",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-39.0000, y=-2.9000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_12",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-39.0000, y=-6.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_13",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=18.8000, y=4.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_14",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=18.8000, y=0.9000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_15",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=18.8000, y=-2.9000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_16",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=18.8000, y=-6.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_17",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=39.5000, y=3.8000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_18",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=39.5000, y=0.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_19",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=39.5000, y=-3.8000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_20",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=39.5000, y=-7.6000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_21",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=91.9000, y=3.8000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_22",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=91.9000, y=0.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_23",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=91.9000, y=-3.8000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_24",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=91.9000, y=-7.6000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_25",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=110.2000, y=3.4000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_26",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=110.2000, y=-0.4000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_27",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=110.2000, y=-4.2000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_28",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=110.2000, y=-8.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_29",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=146.6000, y=3.4000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_30",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=146.6000, y=-0.4000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_31",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=146.6000, y=-4.2000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_32",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=146.6000, y=-8.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+
+    # KEINE Rotation (yaw=0.0):
+    {
+        "name": "fence_33",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-120.5000, y=-79.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_34",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-124.3000, y=-79.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_35",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-128.1000, y=-79.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_36",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-131.9000, y=-79.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_37",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-135.7000, y=-79.7000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_38",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-120.0000, y=79.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_39",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-123.8000, y=79.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_40",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-127.6000, y=79.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_41",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-131.4000, y=79.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "fence_42",
+        "blueprints": ["static.prop.sm_fencev7"],
+        "transform": carla.Transform(
+            carla.Location(x=-135.2000, y=79.0000, z=0.0000),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
 ]
 
 CAR_START_LOCATIONS = [
@@ -201,13 +509,13 @@ SANIMAL_ROUTE_CONFIGS = (
 BUS_DISP_CONFIG = (
     {
         "name": "bus_trigger1",
-        "trigger_location": carla.Location(x=-193.0668, y=15.8513, z=0.6000),
+        "trigger_location": carla.Location(x=-166.5, y=84.30, z=0.6000),
         "trigger_x_tolerance": 2.0,
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-216.1000, y=91.2000, z=0.0000),
-        "spawn_yaw": None,
+        "spawn_location": carla.Location(x=-216.1000, y=91.2000, z=0.3000),
+        "spawn_yaw": 180,
     },
     {
         "name": "bus_trigger2",
@@ -216,7 +524,7 @@ BUS_DISP_CONFIG = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "x",
         "trigger_direction_sign": -1,
-        "spawn_location": carla.Location(x=-184.3000, y=-65.9000, z=0.1000),
+        "spawn_location": carla.Location(x=-184.3000, y=-65.9000, z=0.3000),
         "spawn_yaw": -90.0,
     },
     {
@@ -226,7 +534,7 @@ BUS_DISP_CONFIG = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "x",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-55.1000, y=-65.3000, z=0.1000),
+        "spawn_location": carla.Location(x=-55.9000, y=-105.8000, z=0.3000),
         "spawn_yaw": -90.0,
     },
     {
@@ -236,17 +544,17 @@ BUS_DISP_CONFIG = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "x",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-54.4000, y=66.3000, z=0.1000),
+        "spawn_location": carla.Location(x=-54.4000, y=66.3000, z=0.3000),
         "spawn_yaw": 90.0,
     },
     {
         "name": "bus_trigger5",
-        "trigger_location": carla.Location(x=-52.2807, y=14.4338, z=0.6000),
+        "trigger_location": carla.Location(x=-83.7, y=91.50, z=0.6000),
         "trigger_x_tolerance": 2.0,
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-78.2000, y=84.3000, z=0.0000),
+        "spawn_location": carla.Location(x=-78.2000, y=84.3000, z=0.3000),
         "spawn_yaw": None,
     },
     {
@@ -256,7 +564,7 @@ BUS_DISP_CONFIG = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": -1,
-        "spawn_location": carla.Location(x=-24.0000, y=-84.4000, z=0.0000),
+        "spawn_location": carla.Location(x=-24.0000, y=-94.9000, z=0.3000),
         "spawn_yaw": 180.0,
     },
     {
