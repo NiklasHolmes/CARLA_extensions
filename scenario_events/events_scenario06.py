@@ -24,7 +24,13 @@ try:
 except ModuleNotFoundError:
     from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns
 
+try:
+    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+except ModuleNotFoundError:
+    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
 
+
+DEBUG_MODE = True
 START_TO_RAIN_DELAY = 1.0
 MID_RAIN_LEAD_IN_S = 1.0
 HARD_RAIN_DURATION_S = 1.0
@@ -68,6 +74,7 @@ SANIMAL_LIFETIME_S = 20.0
 # 7 - SoftRainNoon
 
 SPAWN_CARS = len(CAR_START_LOCATIONS)
+BUS_DISP_DESTROY_DISTANCE = 80.0
 SIM_STEP_S = 0.05
 
 BLOCKED_VEHICLE_KEYWORDS = (
@@ -84,8 +91,8 @@ BLOCKED_VEHICLE_KEYWORDS = (
 run_in_singleFile_mode = True                       # attention! single file mode!
 
 TRIGGER_TRAFFIC =False
-TRIGGER_WEATHER = True
-TRIGGER_HIGHPED = True
+TRIGGER_WEATHER = False
+TRIGGER_HIGHPED = False
 TRIGGER_BUS = True
 TRIGGER_SONG = False
 TRIGGER_SANIMAL = True
@@ -93,17 +100,14 @@ TRIGGER_COW = False
 TRIGGER_FUELEMPTY = True
 TRIGGER_SANIMAL_IMMEDIATE = False
 
-
 def get_actor_blueprints(world, filter_pattern):
     bps = list(world.get_blueprint_library().filter(filter_pattern))
     if not bps:
         print(f"[Scenario06] WARNUNG: Keine Blueprints für {filter_pattern} gefunden!")
     return bps
 
-
 def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
     return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
-
 
 class Scenario06Runner:
     def __init__(self, host, port, tm_port, done_file=None, trigger_traffic=True, trigger_weather=True, trigger_highped=True, trigger_bus=True, trigger_song=True, trigger_sanimal=True, trigger_cow=True, trigger_fuelempty=True):
@@ -126,6 +130,8 @@ class Scenario06Runner:
         self._highped_barrier_actor_ids = []
         self._sanimal_trigger_forced = False
         self._start_static_props_spawned = False
+        self._bus_trigger_listening_announced = False
+        self._debug_trigger_box_lifetime = 0.15
 
         self._start_sim_time = None
         self._traffic_spawned = False
@@ -175,6 +181,11 @@ class Scenario06Runner:
         self.cow_finished = False
         self.fuelempty_started = False
         self.fuelempty_finished = False
+        self._bus_active = False
+        self._bus_actor_id = None
+        self._bus_spawn_time = None
+        self._bus_spawn_location = None
+        self._bus_trigger_config = None
         self._delay_states = {
             "car_to_rain": {
                 "delay": START_TO_RAIN_DELAY,
@@ -295,6 +306,24 @@ class Scenario06Runner:
         dy = location_a.y - location_b.y
         return (dx * dx + dy * dy) ** 0.5
 
+    def _point_to_segment_distance_2d(self, point, seg_start, seg_end):
+        seg_dx = seg_end.x - seg_start.x
+        seg_dy = seg_end.y - seg_start.y
+        seg_len_sq = seg_dx * seg_dx + seg_dy * seg_dy
+        if seg_len_sq <= 1e-6:
+            return self._distance_2d(point, seg_start)
+
+        rel_x = point.x - seg_start.x
+        rel_y = point.y - seg_start.y
+        t = (rel_x * seg_dx + rel_y * seg_dy) / seg_len_sq
+        t = max(0.0, min(1.0, t))
+
+        closest_x = seg_start.x + t * seg_dx
+        closest_y = seg_start.y + t * seg_dy
+        dx = point.x - closest_x
+        dy = point.y - closest_y
+        return math.hypot(dx, dy)
+
     def _get_actor_locations(self, excluded_ids=None):
         excluded_ids = set(excluded_ids or [])
         actor_locations = []
@@ -313,6 +342,278 @@ class Scenario06Runner:
             if tl:
                 tl.set_state(carla.TrafficLightState.Green)
                 tl.set_green_time(10.0)
+
+    def _get_bus_trigger_config(self, hero_location, hero_velocity=None):
+        if hero_location is None:
+            return None
+
+        for trigger_config in BUS_DISP_CONFIG:
+            trigger_location = trigger_config.get("trigger_location")
+            if trigger_location is None:
+                continue
+
+            if abs(hero_location.x - trigger_location.x) > float(trigger_config.get("trigger_x_tolerance", 0.0)):
+                continue
+            if abs(hero_location.y - trigger_location.y) > float(trigger_config.get("trigger_y_tolerance", 0.0)):
+                continue
+
+            required_axis = trigger_config.get("trigger_direction_axis")
+            required_sign = trigger_config.get("trigger_direction_sign")
+            if required_axis is not None and required_sign is not None:
+                if hero_velocity is None:
+                    continue
+
+                if required_axis == "x":
+                    axis_velocity = hero_velocity.x
+                elif required_axis == "y":
+                    axis_velocity = hero_velocity.y
+                else:
+                    continue
+
+                if axis_velocity * required_sign <= 0.0:
+                    continue
+
+            return trigger_config
+
+        return None
+
+    def _draw_bus_trigger_boxes(self):
+        if not DEBUG_MODE or self.bus_finished or self._bus_active:
+            return
+
+        box_configs = build_trigger_box_configs(
+            BUS_DISP_CONFIG,
+            z_extra=2.0,
+            color=(255, 0, 0, 100),
+            thickness=0.02,
+        )
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
+    def clear_road(self, spawn_location, spawn_yaw, clear_distance=BUS_DISP_DESTROY_DISTANCE, corridor_half_width=5.0, excluded_actor_ids=None):
+        excluded_ids = set(excluded_actor_ids or [])
+        route_locations = self._trace_bus_route_locations(
+            spawn_location,
+            float(spawn_yaw),
+            travel_distance=max(float(clear_distance), 1.0) + 5.0,
+            step_distance=2.0,
+        )
+
+        if len(route_locations) < 2:
+            return {
+                "route_locations": route_locations,
+                "destroyed_vehicle_ids": [],
+            }
+
+        destroyed_vehicle_ids = []
+        vehicle_actors = self.world.get_actors().filter("vehicle.*")
+        for vehicle in vehicle_actors:
+            if vehicle.id in excluded_ids:
+                continue
+            if vehicle.attributes.get("role_name") in ("hero", "default_player"):
+                continue
+
+            try:
+                vehicle_location = vehicle.get_location()
+            except Exception:
+                continue
+
+            min_distance = float("inf")
+            for idx in range(len(route_locations) - 1):
+                distance_to_segment = self._point_to_segment_distance_2d(
+                    vehicle_location,
+                    route_locations[idx],
+                    route_locations[idx + 1],
+                )
+                if distance_to_segment < min_distance:
+                    min_distance = distance_to_segment
+
+            if min_distance > float(corridor_half_width):
+                continue
+
+            try:
+                vehicle.destroy()
+            except Exception:
+                continue
+
+            destroyed_vehicle_ids.append(vehicle.id)
+            if vehicle.id in self._vehicle_actor_ids:
+                self._vehicle_actor_ids.remove(vehicle.id)
+
+        if destroyed_vehicle_ids:
+            print(
+                f"[Scenario06] clear_road: {len(destroyed_vehicle_ids)} Fahrzeuge entfernt "
+                f"im Korridor von {float(clear_distance):.1f}m ab Bus-Spawn."
+            )
+
+        return {
+            "route_locations": route_locations,
+            "destroyed_vehicle_ids": destroyed_vehicle_ids,
+        }
+
+    def _spawn_disappearing_bus(self, trigger_config, sim_time):
+        if trigger_config is None or self._bus_active or self.bus_finished:
+            return False
+
+        spawn_location = trigger_config.get("spawn_location")
+        if spawn_location is None:
+            print(f"[Scenario06] WARNUNG: Bus trigger {trigger_config.get('name', 'unknown')} hat keine spawn_location.")
+            return False
+
+        blueprint_id = "vehicle.mitsubishi.fusorosa"
+        try:
+            bus_bp = self.world.get_blueprint_library().find(blueprint_id)
+        except Exception as exc:
+            print(f"[Scenario06] WARNUNG: Bus-Blueprint '{blueprint_id}' nicht gefunden: {exc}")
+            return False
+
+        spawn_yaw = trigger_config.get("spawn_yaw")
+        if spawn_yaw is None:
+            try:
+                spawn_waypoint = self.world.get_map().get_waypoint(
+                    spawn_location,
+                    project_to_road=True,
+                    lane_type=carla.LaneType.Driving,
+                )
+                spawn_yaw = spawn_waypoint.transform.rotation.yaw if spawn_waypoint is not None else 0.0
+            except Exception:
+                spawn_yaw = 0.0
+
+        spawn_transform = carla.Transform(
+            spawn_location,
+            carla.Rotation(pitch=0.0, yaw=float(spawn_yaw), roll=0.0),
+        )
+
+        self.clear_road(
+            spawn_location,
+            float(spawn_yaw),
+            clear_distance=BUS_DISP_DESTROY_DISTANCE,
+            corridor_half_width=5.0,
+        )
+
+        actor = self.world.try_spawn_actor(bus_bp, spawn_transform)
+        if actor is None:
+            print(
+                f"[Scenario06] WARNUNG: Disappearing bus konnte nicht gespawnt werden | "
+                f"trigger={trigger_config.get('name', 'unknown')} | "
+                f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
+            )
+            return False
+
+        tm = self._get_traffic_manager()
+        try:
+            actor.set_autopilot(True, tm.get_port())
+        except Exception:
+            pass
+
+        for method_name, method_value in (
+            ("auto_lane_change", False),
+            ("ignore_lights_percentage", 100.0),
+            ("ignore_signs_percentage", 100.0),
+            ("ignore_walkers_percentage", 100.0),
+            ("vehicle_percentage_speed_difference", -100.0),
+        ):
+            try:
+                getattr(tm, method_name)(actor, method_value)
+            except Exception:
+                pass
+
+        self._bus_active = True
+        self._bus_actor_id = actor.id
+        self._bus_spawn_time = sim_time
+        self._bus_spawn_location = spawn_location
+        self._bus_trigger_config = trigger_config
+        self._vehicle_actor_ids.append(actor.id)
+
+        try:
+            tm.set_route(actor, ["Straight"] * 200)
+        except Exception as exc:
+            print(f"[Scenario06] WARNUNG: Bus-Route (nur Straight) konnte nicht gesetzt werden: {exc}")
+
+        print(
+            f"[Scenario06] Disappearing bus spawned: id={actor.id}, trigger={trigger_config.get('name', 'unknown')}, "
+            f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f}), "
+            f"destroy_after={BUS_DISP_DESTROY_DISTANCE:.1f}m"
+        )
+        return True
+
+    def _trace_bus_route_locations(self, spawn_location, spawn_yaw, travel_distance=90.0, step_distance=2.0):
+        world_map = self.world.get_map()
+        start_waypoint = world_map.get_waypoint(spawn_location, project_to_road=True, lane_type=carla.LaneType.Driving)
+        if start_waypoint is None:
+            return []
+
+        route_locations = [start_waypoint.transform.location]
+        current_waypoint = start_waypoint
+        current_direction_x = math.cos(math.radians(spawn_yaw))
+        current_direction_y = math.sin(math.radians(spawn_yaw))
+        travelled_distance = 0.0
+
+        while travelled_distance < travel_distance:
+            next_waypoints = current_waypoint.next(step_distance)
+            if not next_waypoints:
+                break
+
+            current_location = current_waypoint.transform.location
+
+            def waypoint_score(waypoint):
+                next_location = waypoint.transform.location
+                direction_x = next_location.x - current_location.x
+                direction_y = next_location.y - current_location.y
+                direction_length = math.hypot(direction_x, direction_y)
+                if direction_length == 0.0:
+                    return float("inf")
+
+                direction_x /= direction_length
+                direction_y /= direction_length
+                angle_penalty = 1.0 - max(-1.0, min(1.0, direction_x * current_direction_x + direction_y * current_direction_y))
+                return angle_penalty
+
+            chosen_waypoint = min(next_waypoints, key=waypoint_score)
+            current_waypoint = chosen_waypoint
+            route_locations.append(current_waypoint.transform.location)
+            travelled_distance += step_distance
+
+        return route_locations
+
+    def _update_disappearing_bus(self):
+        if not self._bus_active or self._bus_actor_id is None or self._bus_spawn_location is None:
+            return
+
+        actor = self.world.get_actor(self._bus_actor_id)
+        if actor is None:
+            self._bus_active = False
+            self._bus_actor_id = None
+            self._bus_spawn_location = None
+            self._bus_trigger_config = None
+            self.bus_finished = True
+            self._finish_delay_timer("bus_to_song", self.world.get_snapshot().timestamp.elapsed_seconds)
+            print("[Scenario06] Disappearing bus vanished before reaching the 80m threshold.")
+            return
+
+        try:
+            distance = self._distance_2d(actor.get_location(), self._bus_spawn_location)
+        except Exception:
+            return
+
+        if distance < BUS_DISP_DESTROY_DISTANCE:
+            return
+
+        sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        try:
+            actor.destroy()
+        except Exception:
+            pass
+
+        if actor.id in self._vehicle_actor_ids:
+            self._vehicle_actor_ids.remove(actor.id)
+
+        self._bus_active = False
+        self._bus_actor_id = None
+        self._bus_spawn_location = None
+        self._bus_trigger_config = None
+        self.bus_finished = True
+        self._finish_delay_timer("bus_to_song", sim_time)
+        print(f"[Scenario06] Disappearing bus destroyed after {distance:.1f}m.")
 
     def _get_route_config(self, route_configs, hero_location, hero_velocity=None):
         for route_config in route_configs:
@@ -524,8 +825,7 @@ class Scenario06Runner:
             print(f"{delay_name} delay finished!")
 
     def _start_bus_trigger(self):
-        print("Bus is starting now")
-        self.bus_finished = True
+        print("[Scenario06] Bus trigger listening.")
 
     def _start_song_trigger(self):
         if self._song_audio.play(self.world.get_snapshot().timestamp.elapsed_seconds):
@@ -599,7 +899,7 @@ class Scenario06Runner:
             return
 
         self._finish_delay_timer("bus_to_song", sim_time)
-        self._start_bus_trigger()
+        self.bus_finished = True
         print("[Scenario06] Bus trigger skipped.")
 
     def _skip_song_trigger(self, sim_time):
@@ -792,9 +1092,15 @@ class Scenario06Runner:
         self._highped_barrier_triggered_keys.clear()
         print("[Scenario06] HighPed barrier props removed.")
 
-    def _update_bus_trigger(self):
+    def _update_bus_trigger(self, hero_location, hero_velocity=None):
+        if self._bus_active or self.bus_finished:
+            return None
+
         delay_state = self._delay_states.get("highped_to_bus")
-        return delay_state is not None and delay_state["finished"]
+        if delay_state is None or not delay_state["finished"]:
+            return None
+
+        return self._get_bus_trigger_config(hero_location, hero_velocity)
 
     def _update_highped_route(self, sim_time):
         if not self._highped_route_active or self._highped_route_config is None or self._highped_walker_id is None:
@@ -1067,12 +1373,24 @@ class Scenario06Runner:
                         self._start_delay_timer("highped_to_bus", sim_time)
                     self._update_delay_timer("highped_to_bus", sim_time)
 
-                if self.highped_finished and self._update_bus_trigger():
-                    if not self._trigger_bus:
-                        self._skip_bus_trigger(sim_time)
-                    else:
-                        self._start_bus_trigger()
-                    self.highped_finished = False
+                if self.highped_finished and delay_state["finished"] and not self.bus_finished and not self._bus_active:
+                    if not self._bus_trigger_listening_announced:
+                        print("Waiting for trigger to spawn disappearing bus...")
+                        self._bus_trigger_listening_announced = True
+
+                    self._draw_bus_trigger_boxes()
+                    hero_velocity = ego.get_velocity() if ego else None
+                    bus_trigger_config = self._update_bus_trigger(ego_transform.location if ego_transform else None, hero_velocity)
+                    if bus_trigger_config is not None:
+                        if not self._trigger_bus:
+                            self._skip_bus_trigger(sim_time)
+                        else:
+                            self._spawn_disappearing_bus(bus_trigger_config, sim_time)
+                            self._bus_trigger_listening_announced = False
+                            self.highped_finished = False
+
+                if self._bus_active:
+                    self._update_disappearing_bus()
 
                 bus_to_song_state = self._delay_states["bus_to_song"]
                 if self.bus_finished:
