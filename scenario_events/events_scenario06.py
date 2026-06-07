@@ -51,7 +51,6 @@ SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 FUEL_EMPTY_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
 
-
 HIGHPED_BLUEPRINT_ID = "walker.pedestrian.0038"
 HIGHPED_MAX_SPEED = 1.0
 HIGHPED_ARRIVE_THRESH = 1.0
@@ -62,7 +61,7 @@ SANIMAL_BLUEPRINT_ID = "walker.pedestrian.0055"
 SANIMAL_MAX_SPEED = 1.0 # 0.5
 SANIMAL_ARRIVE_THRESH = 1.0
 SANIMAL_STOP_AT_TARGET_DURATION = 1.0
-SANIMAL_LIFETIME_S = 20.0
+SANIMAL_LIFETIME_S = 30.0
 
 #weather: 
 # 1 - ClearNoon
@@ -75,6 +74,7 @@ SANIMAL_LIFETIME_S = 20.0
 
 SPAWN_CARS = len(CAR_START_LOCATIONS)
 BUS_DISP_DESTROY_DISTANCE = 80.0
+SANIMAL_CLEAR_RADIUS_M = 50.0
 SIM_STEP_S = 0.05
 
 BLOCKED_VEHICLE_KEYWORDS = (
@@ -93,7 +93,7 @@ run_in_singleFile_mode = True                       # attention! single file mod
 TRIGGER_TRAFFIC =False
 TRIGGER_WEATHER = False
 TRIGGER_HIGHPED = False
-TRIGGER_BUS = True
+TRIGGER_BUS = False
 TRIGGER_SONG = False
 TRIGGER_SANIMAL = True
 TRIGGER_COW = False
@@ -389,6 +389,23 @@ class Scenario06Runner:
         )
         draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
 
+    def _draw_sanimal_trigger_boxes(self):
+        delay_state = self._delay_states.get("song_to_sanimal")
+        if not DEBUG_MODE or self.sanimal_finished or self._sanimal_route_active:
+            return
+        if not self._trigger_sanimal or TRIGGER_SANIMAL_IMMEDIATE:
+            return
+        if delay_state is None or not delay_state["finished"]:
+            return
+
+        box_configs = build_trigger_box_configs(
+            SANIMAL_ROUTE_CONFIGS,
+            z_extra=2.0,
+            color=(0, 255, 0, 100),
+            thickness=0.02,
+        )
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
     def clear_road(self, spawn_location, spawn_yaw, clear_distance=BUS_DISP_DESTROY_DISTANCE, corridor_half_width=5.0, excluded_actor_ids=None):
         excluded_ids = set(excluded_actor_ids or [])
         route_locations = self._trace_bus_route_locations(
@@ -449,6 +466,41 @@ class Scenario06Runner:
             "route_locations": route_locations,
             "destroyed_vehicle_ids": destroyed_vehicle_ids,
         }
+
+    def clear_road_around_sanimal(self, spawn_location, radius_m=SANIMAL_CLEAR_RADIUS_M, excluded_actor_ids=None):
+        excluded_ids = set(excluded_actor_ids or [])
+        destroyed_vehicle_ids = []
+        print(f"[Scenario06] start clear_road_around_sanimal")
+        for vehicle in self.world.get_actors().filter("vehicle.*"):
+            if vehicle.id in excluded_ids:
+                continue
+            if vehicle.attributes.get("role_name") in ("hero", "default_player"):
+                continue
+
+            try:
+                vehicle_location = vehicle.get_location()
+            except Exception:
+                continue
+
+            if self._distance_2d(vehicle_location, spawn_location) > float(radius_m):
+                continue
+
+            try:
+                vehicle.destroy()
+            except Exception:
+                continue
+
+            destroyed_vehicle_ids.append(vehicle.id)
+            if vehicle.id in self._vehicle_actor_ids:
+                self._vehicle_actor_ids.remove(vehicle.id)
+
+        if destroyed_vehicle_ids:
+            print(
+                f"[Scenario06] clear_road_around_sanimal: {len(destroyed_vehicle_ids)} Fahrzeuge entfernt "
+                f"im Umkreis von {float(radius_m):.1f}m."
+            )
+
+        return destroyed_vehicle_ids
 
     def _spawn_disappearing_bus(self, trigger_config, sim_time):
         if trigger_config is None or self._bus_active or self.bus_finished:
@@ -732,6 +784,8 @@ class Scenario06Runner:
         if self._sanimal_route_done or self._sanimal_route_active:
             return False
 
+        route_config = dict(route_config)
+
         walker_bp = self.world.get_blueprint_library().find(SANIMAL_BLUEPRINT_ID)
         if walker_bp.has_attribute("is_invincible"):
             walker_bp.set_attribute("is_invincible", "false")
@@ -739,8 +793,29 @@ class Scenario06Runner:
         spawn_location = route_config["spawn_location"]
         spawn_yaw = route_config.get("spawn_yaw")
         if spawn_yaw is None:
-            target_location = route_config["target_location"]
-            spawn_yaw = math.degrees(math.atan2(target_location.y - spawn_location.y, target_location.x - spawn_location.x))
+            target_location = route_config.get("target_location")
+            if target_location is not None:
+                spawn_yaw = math.degrees(math.atan2(target_location.y - spawn_location.y, target_location.x - spawn_location.x))
+            else:
+                try:
+                    spawn_waypoint = self.world.get_map().get_waypoint(
+                        spawn_location,
+                        project_to_road=True,
+                        lane_type=carla.LaneType.Driving,
+                    )
+                    spawn_yaw = spawn_waypoint.transform.rotation.yaw if spawn_waypoint is not None else 0.0
+                except Exception:
+                    spawn_yaw = 0.0
+
+        target_location = route_config.get("target_location")
+        if target_location is None:
+            direction_radians = math.radians(float(spawn_yaw))
+            target_location = carla.Location(
+                x=spawn_location.x + math.cos(direction_radians) * 15.0,
+                y=spawn_location.y + math.sin(direction_radians) * 15.0,
+                z=spawn_location.z,
+            )
+            route_config["target_location"] = target_location
 
         spawn_transform = carla.Transform(
             spawn_location,
@@ -766,6 +841,11 @@ class Scenario06Runner:
         self._delay_states["sanimal_to_cow"]["started_at"] = None
         self._delay_states["sanimal_to_cow"]["finished"] = False
         self._walker_actor_ids.append(walker.id)
+
+        self.clear_road_around_sanimal(
+            spawn_location,
+            radius_m=SANIMAL_CLEAR_RADIUS_M,
+        )
 
         print(
             f"[Scenario06] SANIMAL spawned: id={walker.id}, route={route_config['name']}, sim_time={sim_time:.2f}s, "
@@ -1374,17 +1454,17 @@ class Scenario06Runner:
                     self._update_delay_timer("highped_to_bus", sim_time)
 
                 if self.highped_finished and delay_state["finished"] and not self.bus_finished and not self._bus_active:
-                    if not self._bus_trigger_listening_announced:
-                        print("Waiting for trigger to spawn disappearing bus...")
-                        self._bus_trigger_listening_announced = True
+                    if not self._trigger_bus:
+                        self._skip_bus_trigger(sim_time)
+                    else:
+                        if not self._bus_trigger_listening_announced:
+                            print("Waiting for trigger to spawn disappearing bus...")
+                            self._bus_trigger_listening_announced = True
 
-                    self._draw_bus_trigger_boxes()
-                    hero_velocity = ego.get_velocity() if ego else None
-                    bus_trigger_config = self._update_bus_trigger(ego_transform.location if ego_transform else None, hero_velocity)
-                    if bus_trigger_config is not None:
-                        if not self._trigger_bus:
-                            self._skip_bus_trigger(sim_time)
-                        else:
+                        self._draw_bus_trigger_boxes()
+                        hero_velocity = ego.get_velocity() if ego else None
+                        bus_trigger_config = self._update_bus_trigger(ego_transform.location if ego_transform else None, hero_velocity)
+                        if bus_trigger_config is not None:
                             self._spawn_disappearing_bus(bus_trigger_config, sim_time)
                             self._bus_trigger_listening_announced = False
                             self.highped_finished = False
@@ -1420,6 +1500,7 @@ class Scenario06Runner:
                     if self._trigger_sanimal and TRIGGER_SANIMAL_IMMEDIATE:
                         self._spawn_sanimal_forced(sim_time)
                     else:
+                        self._draw_sanimal_trigger_boxes()
                         self._maybe_spawn_sanimal(ego_transform, sim_time)
 
                 sanimal_to_cow_state = self._delay_states["sanimal_to_cow"]
