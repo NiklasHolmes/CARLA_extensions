@@ -229,8 +229,8 @@ COPWAVING_TRIGGER_CONFIGS = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-104.9000, y=-44.0000, z=0.2000),
-        "target_location": carla.Location(x=-75.2000, y=-39.4000, z=0.2000),
+        "spawn_location": carla.Location(x=-105.5000, y=-30.4000, z=0.3000),
+        "target_location": carla.Location(x=-129.20, y=-38.8000, z=0.2000),
         "spawn_yaw": -90.0,
         "blueprint_id": "walker.pedestrian.0053",
         "blueprint_id_walk": "walker.pedestrian.0030"
@@ -256,7 +256,7 @@ COPWAVING_TRIGGER_CONFIGS = (
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
         "spawn_location": carla.Location(x=-155.4001, y=40.9059, z=0.4000),
-        "target_location": carla.Location(x=-157.0000, y=75.1000, z=0.2000),
+        "target_location": carla.Location(x=-157.0000, y=100.1000, z=0.2000),
         "spawn_yaw": -90.0,
         "blueprint_id": "walker.pedestrian.0053",
         "blueprint_id_walk": "walker.pedestrian.0030"
