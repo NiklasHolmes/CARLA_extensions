@@ -34,6 +34,7 @@ DASHBOARD_DEFAULT_OVERLAP_MARGIN = (0, 0)
 
 DASHBOARD_SUPPORTED_MODES = ('basic', 'second_screen', 'overlapping')
 DEFAULT_DASHBOARD_MODE = 'basic'
+DEBUGMODE = False
 
 class CarDashboard(threading.Thread):
 
@@ -122,10 +123,12 @@ class CarDashboard(threading.Thread):
         # Turn signal blinking
         self._left_indicator_on = False
         self._right_indicator_on = False
+        self._break_warning_on = False
         self._sync_socket = None
         self._blink_interval = 0.3
         self._blink_timer = 0.0
         self._blink_phase_on = True
+        self._warning_font = None
 
     def _resolve_display_index(self, requested_index, num_displays):
         """Resolve requested monitor index with support for 0-based and common 1-based input."""
@@ -184,6 +187,10 @@ class CarDashboard(threading.Thread):
                 self._blink_phase_on = True
             elif cmd == "RIGHT_OFF":
                 self._right_indicator_on = False
+            elif cmd == "BREAK_WARNING":
+                self._break_warning_on = True
+            elif cmd == "BREAK_WARNING_OFF":
+                self._break_warning_on = False
 
     def _apply_window_policy_windows(self, hwnd, resolved_display_index, log_output=False):
         """Apply placement/topmost policy once; can be called periodically at low rate."""
@@ -273,6 +280,9 @@ class CarDashboard(threading.Thread):
             if self.width is None or self.height is None:
                 self.width, self.height = DEFAULT_DASHBOARD_SIZE
                 print(f"[Dashboard] Using fallback size: {self.width}x{self.height}")
+
+            warning_font_size = max(12, int(self.height * 0.07))
+            self._warning_font = pygame.font.SysFont(None, warning_font_size, bold=True)
 
             use_display_kwarg = (
                 self.mode == 'second_screen' and
@@ -380,7 +390,7 @@ class CarDashboard(threading.Thread):
                             hwnd = get_pygame_window_hwnd(pygame)
                         self._apply_window_policy_windows(hwnd, resolved_display_index, log_output=False)
 
-                if self._left_indicator_on or self._right_indicator_on:
+                if DEBUGMODE or self._left_indicator_on or self._right_indicator_on or self._break_warning_on:
                     self._blink_timer += dt
                     while self._blink_timer >= self._blink_interval:
                         self._blink_timer -= self._blink_interval
@@ -499,6 +509,14 @@ class CarDashboard(threading.Thread):
             car_rect = self._center_car_image.get_rect(center=(car_center_x, car_center_y))
             self._display.blit(self._center_car_image, car_rect)
 
+        if (DEBUGMODE or self._break_warning_on) and self._blink_phase_on:
+            warning_font = self._warning_font or pygame.font.SysFont(None, max(12, int(self.height * 0.07)), bold=True)
+            warning_surface = warning_font.render("Bremsfehler!", True, (255, 255, 255))
+            gauge_radius = self._velocity_circle.get_height() // 2
+            ts_y = center_y - int(gauge_radius * 1.1)
+            warning_rect = warning_surface.get_rect(center=(self.width // 2, ts_y))
+            self._display.blit(warning_surface, warning_rect)
+        
         # turn signal arrows
         if self._ts_arrow_left_grey and self._velocity_circle:
             gauge_radius = self._velocity_circle.get_height() // 2

@@ -65,6 +65,10 @@ class EventSync:
     def trigger_blinker_right(self) -> bool:
         return self._trigger_blinker("R")
 
+    def trigger_break_warning(self) -> bool:
+        self._send_dashboard("BREAK_WARNING")
+        return True
+
     def update(self):
         """ called regularly from main loop """
         now = time.time()

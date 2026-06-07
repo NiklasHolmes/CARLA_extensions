@@ -347,6 +347,8 @@ class SessionRunner:
             '--scenario-stop-file', stop_file,
             '--profile', 'simulator4home'
         ]
+        if scenario_name == 'scenario03':
+            cmd.append('--enable-break-warning')
         manual_control_process = subprocess.Popen(cmd)
         return manual_control_process
 
