@@ -8,20 +8,36 @@ import time
 import argparse
 import carla
 try:
-    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_navigation_location, get_random_pedestrian_blueprint
+    from scenario_helper import (
+        is_transform_hidden_from_hero,
+        pick_hidden_navigation_location,
+        pick_navigation_location,
+        get_random_pedestrian_blueprint,
+        build_trigger_box_configs,
+        draw_trigger_boxes,
+    )
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_navigation_location, get_random_pedestrian_blueprint
+    from scenario_events.scenario_helper import (
+        is_transform_hidden_from_hero,
+        pick_hidden_navigation_location,
+        pick_navigation_location,
+        get_random_pedestrian_blueprint,
+        build_trigger_box_configs,
+        draw_trigger_boxes,
+    )
 try:
-    from events_scenario04_static_props import STATIC_PROP_SPAWNS
+    from events_scenario04_static_props import STATIC_PROP_SPAWNS, PEDESTRIAN_START_LOCATIONS, CATSITTING_TRIGGER_CONFIGS
 except ModuleNotFoundError:
-    from scenario_events.events_scenario04_static_props import STATIC_PROP_SPAWNS
+    from scenario_events.events_scenario04_static_props import STATIC_PROP_SPAWNS, PEDESTRIAN_START_LOCATIONS, CATSITTING_TRIGGER_CONFIGS
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
 # Constants
-ANIMPED_TO_SONG_DELAY_SECONDS = 2.0
+START_TO_ANIMCAT_DELAY_SECONDS = 5.0
+ANIMCAT_TO_SONG_DELAY_SECONDS = 2.0
+ANIMCAT_SIT_SECONDS = 5.0
 SONG_TO_DANCINGM_DELAY_SECONDS = 2.0
-DANCINGM_TO_END_DELAY_SECONDS = 300.0
+DANCINGM_TO_END_DELAY_SECONDS = 5.0
 
 SONG_START_OFFSET_SECONDS = 30.0
 SONG_PLAY_DURATION_SECONDS = 2.0
@@ -30,11 +46,11 @@ SONG_FADE_OUT_MS = 3000
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 SPAWN_CARS = 5                              # 15?
 ENABLE_ROUTE_PEDESTRIANS = True
-PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
 PEDESTRIAN_MAX_SPEED = 3.5
 PEDESTRIAN_COUNT = 15                        # 15? 24 = no pedestrian walks
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 SIM_STEP_S = 0.05
+DEBUG_MODE = True
 
 BLOCKED_VEHICLE_KEYWORDS = (
     "firetruck", "ambulance", "bus", "fusorosa", "carlacola", "truck", "european_hgv", "t2",
@@ -46,9 +62,6 @@ PEDESTRIAN_MIN_HIDDEN_DISTANCE = 2.0
 PEDESTRIAN_MAX_HIDDEN_DISTANCE = 500.0
 PEDESTRIAN_MIN_ROUTE_DISTANCE = 5.0
 PEDESTRIAN_NAV_SAMPLES = 96
-ANIMATED_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
-ANIMATED_PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=284.90, y=-180.30, z=0.30)
-ANIMATED_PEDESTRIAN_SPAWN_ROTATION = carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
 DANCINGM_PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0054"
 DANCINGM_MAX_DISTANCE = 50.0
 DANCINGM_MIN_DISTANCE = 0.0
@@ -66,33 +79,6 @@ DANCINGM_TRAFFIC_LIGHT_LOOKAHEAD_METERS = 90.0
 DANCINGM_TRAFFIC_LIGHT_SPAWN_RADIUS = 18.0
 DANCINGM_TRAFFIC_LIGHT_RED_HOLD_SECONDS = 10.0
 DANCINGM_TRAFFIC_LIGHT_GREEN_RELEASE_SECONDS = 10.0
-
-PEDESTRIAN_START_LOCATIONS = [
-    carla.Location(x=137.80, y=-178.60, z=0.40),
-    carla.Location(x=136.60, y=-227.90, z=0.30),
-    carla.Location(x=195.30, y=-257.00, z=0.30),
-    carla.Location(x=223.80, y=-253.30, z=0.30),
-    carla.Location(x=231.90, y=-222.50, z=0.30),
-    carla.Location(x=262.30, y=-266.60, z=0.30),
-    carla.Location(x=262.40, y=-286.20, z=0.30),
-    carla.Location(x=285.20, y=-227.80, z=0.30),
-    carla.Location(x=267.90, y=-219.10, z=0.30),
-    carla.Location(x=299.40, y=-176.00, z=0.60),
-    carla.Location(x=299.40, y=-185.30, z=0.30),
-    carla.Location(x=344.40, y=-155.20, z=0.30),
-    carla.Location(x=344.60, y=-234.30, z=0.10),
-    carla.Location(x=251.10, y=-191.60, z=0.30),
-    carla.Location(x=217.80, y=-301.50, z=0.30),
-    carla.Location(x=168.50, y=-301.50, z=0.30),
-    carla.Location(x=122.10, y=-316.60, z=0.30),
-    carla.Location(x=89.70, y=-288.10, z=0.30),
-    carla.Location(x=73.80, y=-235.00, z=0.50),
-    carla.Location(x=-203.90, y=-91.30, z=0.50),
-    carla.Location(x=9.90, y=359.00, z=-0.80),
-    carla.Location(x=89.0, y=365.30, z=-0.80),
-    carla.Location(x=418.20, y=90.80, z=-0.70),
-    carla.Location(x=405.80, y=93.90, z=-1.50),
-]
 
 def get_actor_blueprints(world, filter_pattern):
     bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -121,9 +107,14 @@ class Scenario04Runner:
         self._pedestrians_done = False
         self._pedestrian_spawn_time = None
         self._pedestrian_routes = []
-        self._animated_pedestrian_spawned = False
-        self._animated_pedestrian_actor_id = None
-        self._animated_pedestrian_spawn_time = None
+        self._animcat_spawned = False
+        self._animcat_actor_id = None
+        self._animcat_spawn_time = None
+        self._animcat_destroy_time = None
+        self._animcat_active_trigger_name = None
+        self._animcat_triggered_keys = set()
+        self._animcat_finished = False
+        self._animcat_waiting_logged = False
         self._dancingm_pedestrian_spawned = False
         self._dancingm_pedestrian_actor_id = None
         self._dancingm_pedestrian_spawn_time = None
@@ -136,8 +127,6 @@ class Scenario04Runner:
         self._dancingm_confirmation_response = None
         self._dancingm_release_active = False
         self._dancingm_release_start_time = None
-        self._enter_requested = threading.Event()
-        self._enter_listener_started = False
         self._song_started = False
         self._song_start_time = None
         self._song_finished = False
@@ -154,6 +143,7 @@ class Scenario04Runner:
         self._scenario_done = False
         self._cars_phase_done = False
         self._pedestrians_phase_done = False
+        self._debug_trigger_box_lifetime = SIM_STEP_S * 2.0
         
         self._static_actor_ids = []
         self._vehicle_actor_ids = []
@@ -198,6 +188,200 @@ class Scenario04Runner:
                 actor = self.world.try_spawn_actor(prop_bp, prop_config["transform"])
                 if actor: self._static_actor_ids.append(actor.id)
 
+    def _draw_animcat_trigger_boxes(self):
+        if not DEBUG_MODE or self._animcat_finished or self._animcat_active_trigger_name is not None:
+            return
+
+        box_configs = build_trigger_box_configs(
+            CATSITTING_TRIGGER_CONFIGS,
+            z_extra=2.0,
+            color=(255, 0, 0, 255),
+            thickness=0.1,
+        )
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
+    def _get_animcat_trigger_config(self, hero_location, hero_velocity=None):
+        if hero_location is None:
+            return None
+
+        for trigger_config in CATSITTING_TRIGGER_CONFIGS:
+            trigger_location = trigger_config.get("trigger_location")
+            if trigger_location is None:
+                continue
+
+            if abs(hero_location.x - trigger_location.x) > float(trigger_config.get("trigger_x_tolerance", 0.0)):
+                continue
+            if abs(hero_location.y - trigger_location.y) > float(trigger_config.get("trigger_y_tolerance", 0.0)):
+                continue
+
+            required_axis = trigger_config.get("trigger_direction_axis")
+            required_sign = trigger_config.get("trigger_direction_sign")
+            if required_axis is not None and required_sign is not None:
+                if hero_velocity is None:
+                    continue
+                if required_axis == "x":
+                    axis_velocity = hero_velocity.x
+                elif required_axis == "y":
+                    axis_velocity = hero_velocity.y
+                else:
+                    continue
+                if axis_velocity * required_sign <= 0.0:
+                    continue
+
+            required_axis_2 = trigger_config.get("trigger_direction_axis_2")
+            required_sign_2 = trigger_config.get("trigger_direction_sign_2")
+            if required_axis_2 is not None and required_sign_2 is not None:
+                if hero_velocity is None:
+                    continue
+                if required_axis_2 == "x":
+                    axis_velocity_2 = hero_velocity.x
+                elif required_axis_2 == "y":
+                    axis_velocity_2 = hero_velocity.y
+                else:
+                    continue
+                if axis_velocity_2 * required_sign_2 <= 0.0:
+                    continue
+
+            return trigger_config
+
+        return None
+
+    def _spawn_animcat_from_config(self, trigger_config):
+        if trigger_config is None:
+            return False
+
+        trigger_name = trigger_config.get("name", "unknown")
+        if trigger_name in self._animcat_triggered_keys:
+            return False
+
+        spawn_location = trigger_config.get("spawn_location")
+        blueprint_id = trigger_config.get("blueprint_id", "walker.pedestrian.0060")
+        spawn_yaw = trigger_config.get("spawn_yaw", 0.0)
+
+        if spawn_location is None:
+            print(f"[Scenario04] WARNUNG: Keine spawn_location für {trigger_name}")
+            return False
+
+        bp_lib = self.world.get_blueprint_library()
+        try:
+            walker_bp = bp_lib.find(blueprint_id)
+        except Exception as exc:
+            print(f"[Scenario04] WARNUNG: Blueprint {blueprint_id} nicht gefunden für {trigger_name}: {exc}")
+            return False
+
+        if walker_bp.has_attribute("is_invincible"):
+            try:
+                walker_bp.set_attribute("is_invincible", "false")
+            except Exception:
+                pass
+
+        transform = carla.Transform(
+            spawn_location,
+            carla.Rotation(pitch=0.0, yaw=spawn_yaw if spawn_yaw is not None else 0.0, roll=0.0),
+        )
+        actor = self.world.try_spawn_actor(walker_bp, transform)
+        if actor is None:
+            print(
+                f"[Scenario04] WARNUNG: {trigger_name} konnte nicht gespawnt werden | "
+                f"blueprint={blueprint_id}, spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
+            )
+            return False
+
+        try:
+            if hasattr(actor, "set_target_velocity"):
+                actor.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+            if hasattr(actor, "set_target_angular_velocity"):
+                actor.set_target_angular_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+            if hasattr(actor, "set_simulate_physics"):
+                actor.set_simulate_physics(False)
+        except Exception:
+            pass
+
+        self._walker_actor_ids.append(actor.id)
+        self._animcat_spawned = True
+        self._animcat_actor_id = actor.id
+        self._animcat_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        self._animcat_destroy_time = None
+        self._animcat_active_trigger_name = trigger_name
+
+        print(
+            f"[Scenario04] {trigger_name} aktiviert -> ANIMCAT gespawnt: id={actor.id}, blueprint={blueprint_id}, "
+            f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
+        )
+        return True
+
+    def _start_animcat_trigger(self, trigger_config, sim_time):
+        if trigger_config is None:
+            return False
+
+        trigger_name = trigger_config.get("name", "unknown")
+        if trigger_name in self._animcat_triggered_keys:
+            return False
+
+        if not self._spawn_animcat_from_config(trigger_config):
+            return False
+
+        self._animcat_triggered_keys.add(trigger_name)
+        self._animcat_active_trigger_name = trigger_name
+        self._animcat_spawn_time = sim_time
+        self._animcat_finished = False
+        return True
+
+    def _destroy_animcat_actor(self, sim_time):
+        if self._animcat_actor_id is None:
+            return
+
+        actor_id = self._animcat_actor_id
+        self._animcat_actor_id = None
+
+        try:
+            actor = self.world.get_actor(actor_id)
+            if actor is not None:
+                actor.destroy()
+            else:
+                self.client.apply_batch([carla.command.DestroyActor(actor_id)])
+        except Exception:
+            pass
+
+        if actor_id in self._walker_actor_ids:
+            try:
+                self._walker_actor_ids.remove(actor_id)
+            except ValueError:
+                pass
+
+        self._animcat_destroy_time = sim_time
+        self._animcat_active_trigger_name = None
+        self._animcat_finished = True
+        print(f"[Scenario04] ANIMCAT destroyed: id={actor_id}")
+
+    def _update_animcat(self, sim_time, hero_location, hero_velocity=None):
+        if self._animcat_finished:
+            return
+
+        if self._start_sim_time is None:
+            return
+
+        if (sim_time - self._start_sim_time) < START_TO_ANIMCAT_DELAY_SECONDS:
+            return
+
+        if self._animcat_active_trigger_name is None:
+            if not self._animcat_waiting_logged:
+                print("[Scenario04] Waiting for cat trigger...", flush=True)
+                self._animcat_waiting_logged = True
+
+            self._draw_animcat_trigger_boxes()
+
+            trigger_config = self._get_animcat_trigger_config(hero_location, hero_velocity)
+            if trigger_config is not None:
+                self._start_animcat_trigger(trigger_config, sim_time)
+            return
+
+        if self._animcat_actor_id is None or self._animcat_spawn_time is None:
+            return
+
+        if (sim_time - self._animcat_spawn_time) >= ANIMCAT_SIT_SECONDS:
+            self._destroy_animcat_actor(sim_time)
+
     def _spawn_dynamic_traffic(self, ego_transform, sim_time):
         tm = self._get_traffic_manager()
             
@@ -241,38 +425,6 @@ class Scenario04Runner:
                 return projected_hero_location
 
         return None
-
-    def _spawn_animated_pedestrian(self):
-        if self._animated_pedestrian_spawned:
-            return True
-
-        walker_bp = self.world.get_blueprint_library().find(ANIMATED_PEDESTRIAN_BLUEPRINT_ID)
-        if walker_bp.has_attribute("is_invincible"):
-            # Keep the animation actor as a normal physical walker.
-            walker_bp.set_attribute("is_invincible", "false")
-
-        transform = carla.Transform(
-            ANIMATED_PEDESTRIAN_SPAWN_LOCATION,
-            ANIMATED_PEDESTRIAN_SPAWN_ROTATION,
-        )
-        actor = self.world.try_spawn_actor(walker_bp, transform)
-        if actor is None:
-            print(
-                f"[Scenario04] WARNUNG: Animierter Pedestrian konnte nicht gespawnt werden | "
-                f"spawn=({transform.location.x:.2f}, {transform.location.y:.2f}, {transform.location.z:.2f})"
-            )
-            return False
-
-        self._animated_pedestrian_spawned = True
-        self._animated_pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
-        self._animated_pedestrian_actor_id = actor.id
-        self._walker_actor_ids.append(actor.id)
-        print(
-            f"[Scenario04] Animierter Pedestrian gespawnt: id={actor.id}, "
-            f"blueprint={ANIMATED_PEDESTRIAN_BLUEPRINT_ID}, "
-            f"spawn=({transform.location.x:.2f}, {transform.location.y:.2f}, {transform.location.z:.2f})"
-        )
-        return True
 
     def _find_upcoming_traffic_light(self, ego_transform, lookahead_meters=DANCINGM_TRAFFIC_LIGHT_LOOKAHEAD_METERS):
         if ego_transform is None:
@@ -637,18 +789,12 @@ class Scenario04Runner:
         self._dancingm_release_active = False
         self._dancingm_release_start_time = None
 
-    def _should_spawn_animated_pedestrian(self):
-        if self._animated_pedestrian_spawned:
-            return False
-
-        return self._enter_requested.is_set()
-
     def _should_start_song(self, sim_time):
         return (
-            self._animated_pedestrian_spawned
+            self._animcat_finished
             and not self._song_started
-            and self._animated_pedestrian_spawn_time is not None
-            and (sim_time - self._animated_pedestrian_spawn_time) >= ANIMPED_TO_SONG_DELAY_SECONDS
+            and self._animcat_destroy_time is not None
+            and (sim_time - self._animcat_destroy_time) >= ANIMCAT_TO_SONG_DELAY_SECONDS
         )
 
     def _should_spawn_dancingm_pedestrian(self, sim_time):
@@ -928,22 +1074,6 @@ class Scenario04Runner:
 
         return False
 
-    def _start_enter_listener(self):
-        if self._enter_listener_started:
-            return
-        self._enter_listener_started = True
-
-        def _wait_for_enter():
-            try:
-                input()
-                self._enter_requested.set()
-                print("[Scenario04] Enter received; animated pedestrian spawn requested.")
-            except EOFError:
-                print("[Scenario04] WARNUNG: Kein stdin verfügbar; Enter-Trigger deaktiviert.")
-
-        listener_thread = threading.Thread(target=_wait_for_enter, daemon=True)
-        listener_thread.start()
-
     def run(self):
         print("[Scenario04] Running...")
         self._spawn_static_prop_once()
@@ -966,15 +1096,20 @@ class Scenario04Runner:
                     self._traffic_spawned = True
                     self._traffic_spawn_time = sim_time
 
+                hero_velocity = None
+                if ego is not None:
+                    try:
+                        hero_velocity = ego.get_velocity()
+                    except Exception:
+                        hero_velocity = None
+
+                self._update_animcat(sim_time, ego_transform.location, hero_velocity)
+
                 if not self._pedestrians_spawned and ENABLE_ROUTE_PEDESTRIANS:
                     self._spawn_pedestrians(ego_transform)
 
                 if ENABLE_ROUTE_PEDESTRIANS:
                     self._update_pedestrians(sim_time)
-
-                    if self._pedestrians_started and not self._enter_listener_started:
-                        print("[Scenario04] Dancing Manuel spawnen? Press Enter to start.", flush=True)
-                        self._start_enter_listener()
 
                     self._update_song(sim_time)
 
@@ -989,9 +1124,6 @@ class Scenario04Runner:
 
                     if self._scenario_done:
                         return
-
-                if self._should_spawn_animated_pedestrian():
-                    self._spawn_animated_pedestrian()
 
                 if self._should_start_song(sim_time):
                     self._start_song(sim_time)
