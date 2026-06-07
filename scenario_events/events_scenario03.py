@@ -9,6 +9,14 @@ import time
 import carla
 from carla import VehicleLightState
 
+BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '..',
+    'common',
+    'scenario_break.signal',
+)
+BREAK_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(BREAK_SIGNAL_FILE_DEFAULT))
+
 try:
     from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH
     from generate_audio import SongAudio
@@ -40,7 +48,7 @@ CARAWAY_TO_LTRUCK_DELAY = 1.0
 LTRUCK_TO_SONG_DELAY = 2.0
 SONG_TO_POLICE_DELAY = 1.0
 POLICE_TO_BREAK_DELAY = 1.0
-BREAK_TO_END_DELAY = 1.0
+BREAK_TO_END_DELAY = 100.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 5.0
@@ -60,7 +68,7 @@ COPWAVING_TRANSITION_BACKSTEP_M = 0.0
 TRIGGER_CARAWAY = False
 TRIGGER_LTRUCK = False
 TRIGGER_SONG = True
-TRIGGER_POLICE = True
+TRIGGER_POLICE = False
 TRIGGER_BREAK = True
 DEBUG_MODE = True
 
@@ -142,6 +150,8 @@ class Scenario03Runner:
         self._copwaving_last_status_log_time = None
         self._copwaving_transition_pending = False
         self._copwaving_transition_spawn_transform = None
+
+        self._break_signal_file = BREAK_SIGNAL_FILE_DEFAULT
 
         self._delay_states = {
             "start_to_caraway": {
@@ -1225,6 +1235,17 @@ class Scenario03Runner:
         if self.break_finished:
             return
         print("[Scenario03] break started!")
+        if self._break_signal_file:
+            try:
+                break_signal_file = os.path.normpath(os.path.abspath(self._break_signal_file))
+                break_dir = os.path.dirname(break_signal_file)
+                if break_dir:
+                    os.makedirs(break_dir, exist_ok=True)
+                with open(break_signal_file, "w", encoding="utf-8") as break_handle:
+                    break_handle.write("break\n")
+                print(f"[Scenario03] Break signal sent to manual_control: {break_signal_file}")
+            except Exception as exc:
+                print(f"[Scenario03] WARNING: could not write break signal file: {exc}")
         self.break_finished = True
 
     def _skip_caraway_trigger(self, sim_time):
@@ -1273,8 +1294,8 @@ class Scenario03Runner:
             f"fixed_delta_seconds={world_settings.fixed_delta_seconds}"
         )
         if run_in_singleFile_mode:
-            self.world.set_weather(carla.WeatherParameters.CloudyNight)
-            #self.world.set_weather(carla.WeatherParameters.CloudyNoon)        # CloudyNight
+            #self.world.set_weather(carla.WeatherParameters.CloudyNight)
+            self.world.set_weather(carla.WeatherParameters.CloudyNoon)        # CloudyNight
             print("[Scenario03] Weather set to CloudyNight for single-file mode")
 
         try:

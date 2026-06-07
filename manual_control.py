@@ -225,6 +225,15 @@ DB_SCREEN_INDEX = 2
 CHOSEN_VEHICLE = 'vehicle.lincoln.mkz_2020'
 # https://carla.readthedocs.io/en/latest/catalogue_vehicles/
 
+BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'common',
+    'scenario_break.signal',
+)
+break_signal_file = os.path.normpath(os.path.abspath(BREAK_SIGNAL_FILE_DEFAULT))
+BREAK_WARNING_BRAKE_FACTOR = 0.3
+BREAK_WARNING_ACTIVE = False
+
 PROFILE_CONFIG = {
     'simulator': {
         'cli_defaults': {
@@ -262,14 +271,15 @@ PROFILE_CONFIG = {
     },
     'simulator4home': {
         'cli_defaults': {
-            'res': '960x540',
+            'res': '3840x1080',
+            #'res': '960x540',
             'sp': 0.8,
             'input': 'keyboard',
             'rolename': 'hero',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'none',
+            'DASHBOARD_MODE': 'overlapping',
             'AUDIO_MODE': 'full',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
@@ -561,6 +571,10 @@ def _get_blinker_duration_or_raise(world):
         raise RuntimeError("Blinker duration not found: invalid world.event_sync.default_blink_duration") from exc
 
     return max(0.1, duration)
+
+
+def _get_break_warning_brake_factor():
+    return BREAK_WARNING_BRAKE_FACTOR if BREAK_WARNING_ACTIVE else 1.0
 
 
 def _apply_blinker_auto_off(current_lights, left_blinker_until, right_blinker_until, now):
@@ -1302,10 +1316,11 @@ class KeyboardControl(object):
                 if audio_manager is not None and not self._prev_brake and current_braking:
                     audio_manager.play_brake(brake_strength=next_brake, speed_kmh=speed_kmh)
                 self._prev_brake = current_braking
-                
-                self._control.brake = next_brake
+                brake_factor = _get_break_warning_brake_factor()
+                self._control.brake = min(next_brake, brake_factor)
             else:
-                self._ackermann_control.speed -= min(abs(self._ackermann_control.speed), round(milliseconds * 0.005, 2)) * self._ackermann_reverse
+                brake_factor = _get_break_warning_brake_factor()
+                self._ackermann_control.speed -= min(abs(self._ackermann_control.speed), round(milliseconds * 0.005, 2) * brake_factor) * self._ackermann_reverse
                 self._ackermann_control.speed = max(0, abs(self._ackermann_control.speed)) * self._ackermann_reverse
         else:
             if not self._ackermann_enabled:
@@ -1434,7 +1449,9 @@ class GamepadControl(object):
         r2 = self.joy.get_axis(5)
 
         brake    = max(0.0, (l2 + 1.0) / 2.0)
-        throttle = max(0.0, (r2 + 1.0) / 2.0)       # => convert from [-1, 1] to [0, 1]
+        throttle = max(0.0, (r2 + 1.0) / 2.0)                           # => convert from [-1, 1] to [0, 1]
+        brake_factor = _get_break_warning_brake_factor()                # for break failure
+        brake = min(brake, brake_factor)
 
         speed_kmh = 0.0
         try:
@@ -1699,6 +1716,8 @@ class WheelControl(object):
 
         brake    = 0 if brake < 0.01 else brake # Always minimal input prevents driving -> if too small input ignore
         throttle = 0 if throttle < 0.01 else throttle 
+        brake_factor = _get_break_warning_brake_factor()
+        brake = min(brake, brake_factor)
 
         speed_kmh = 0.0
         try:
@@ -2703,6 +2722,10 @@ def game_loop(args):
         else:
             controller = KeyboardControl(world, args.autopilot)
 
+        break_signal_seen = False
+        if args.enable_break_warning:
+            print(f"[Scenario03] Watching break signal file: {break_signal_file}")
+
         if args.sync:
             sim_world.tick()
         else:
@@ -2718,6 +2741,19 @@ def game_loop(args):
             if event_sync is not None:
                 event_sync.update()
             world.tick(clock)
+
+            if args.enable_break_warning and not break_signal_seen:
+                if os.path.exists(break_signal_file):
+                    global BREAK_WARNING_ACTIVE
+                    BREAK_WARNING_ACTIVE = True
+                    break_signal_seen = True
+                    if event_sync is not None:
+                        event_sync.trigger_break_warning()
+                    try:
+                        os.remove(break_signal_file)
+                    except Exception:
+                        pass
+                    print(f"[Scenario03] Break signal received from scenario03: {break_signal_file}. Forwarding brake warning to dashboard.")
 
             if not stop_signal_seen and getattr(args, 'scenario_stop_file', None):
                 if os.path.exists(args.scenario_stop_file):
@@ -2813,7 +2849,6 @@ def game_loop(args):
 # -- main() --------------------------------------------------------------------
 # ==============================================================================
 
-
 def main():
     argparser = argparse.ArgumentParser(
         description='CARLA Manual Control Client')
@@ -2830,6 +2865,10 @@ def main():
         '--scenario-stop-file',
         default=None,
         help='path to a stop signal file written by session_runner when the scenario ends')
+    argparser.add_argument(
+        '--enable-break-warning',
+        action='store_true',
+        help='enable Scenario03 break-warning polling')
     argparser.add_argument(
         '--host',
         metavar='H',
