@@ -407,7 +407,7 @@ CATSITTING_TRIGGER_CONFIGS = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=194.8000, y=-178.0000, z=0.2000),
+        "spawn_location": carla.Location(x=194.8000, y=-178.0000, z=0.3000),
         "spawn_yaw": 0.0,
         "blueprint_id": "walker.pedestrian.0060",
     },

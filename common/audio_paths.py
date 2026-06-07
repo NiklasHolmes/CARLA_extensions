@@ -33,3 +33,8 @@ SURPRISE_C_THE_MARRIAGE_OF_FIGARO_OVERTURE_PATH = r".\audio\songs\Surprise_C_Moz
 SURPRISE_H_WHERE_IS_THE_LOVE_PATH = r".\audio\songs\Surprise_H_The Black Eyed Peas - Where Is The Love_ (Official Music Video) 4.mp3"
 SURPRISE_RP_LITTLE_NUMBERS_PATH = r".\audio\songs\Surprise_RP_Wonder_BOY - Little Numbers (Official Video).mp3"
 
+# Radio News
+RADIO_INTRO = r".\audio\radio_intro.wav"
+NEWS_LANDSLIDE_MALE = r".\audio\news_landslide_male.wav"
+NEWS_RELATIONS_FEMALE = r".\audio\news_relations_female.wav"
+

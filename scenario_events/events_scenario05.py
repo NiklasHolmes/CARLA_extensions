@@ -11,14 +11,18 @@ import carla
 
 try:
     from scenario_helper import (
+        build_trigger_box_configs,
         get_random_pedestrian_blueprint,
+        draw_trigger_boxes,
         is_transform_hidden_from_hero,
         pick_hidden_navigation_location_near,
         pick_navigation_location,
     )
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import (
+        build_trigger_box_configs,
         get_random_pedestrian_blueprint,
+        draw_trigger_boxes,
         is_transform_hidden_from_hero,
         pick_hidden_navigation_location_near,
         pick_navigation_location,
@@ -29,13 +33,22 @@ try:
 except ModuleNotFoundError:
     from scenario_events.events_scenario05_static_props import get_static_prop_spawns
 
-from common.audio_paths import SADNESS_RP_MAD_WORLD_PATH
-from generate_audio import SongAudio
+from common.audio_paths import (
+    SADNESS_RP_MAD_WORLD_PATH,
+    RADIO_INTRO,
+    NEWS_LANDSLIDE_MALE,
+    NEWS_RELATIONS_FEMALE,
+)
+from generate_audio import SongAudio, RepeatingAudio
 
 START_TO_CARPED_DELAY_SECONDS = 3.0
 CAR_TO_PED_DELAY_SECONDS = 2.0
-ACCIDENT_TO_RADIO_DELAY_SECONDS = 1.0
+ACCIDENT_TO_RADIO_DELAY_SECONDS = 3.0
 RADIO_TO_END_DELAY_SECONDS = 100.0
+
+TRIGGER_CARPED = False
+TRIGGER_ACCIDENT = True
+TRIGGER_RADIO = True
 
 SONG_START_OFFSET_SECONDS = 30.0
 SONG_PLAY_DURATION_SECONDS = 2.0
@@ -50,6 +63,7 @@ PEDESTRIAN_MAX_SPEED = 1.5
 PEDESTRIAN_WAIT_TIMEOUT_S = 40.0
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 SIM_STEP_S = 0.05
+DEBUG_MODE = True
 
 BLOCKED_VEHICLE_KEYWORDS = (
     "firetruck",
@@ -143,14 +157,19 @@ class Scenario05Runner:
         self._song_finish_time = None
         self._accident_spawned = False
         self._accident_spawn_time = None
+        self._accident_wait_logged = False
         self._radio_started = False
         self._radio_start_time = None
         self._radio_finished = False
         self._radio_finish_time = None
+        self._radio_phase = "idle"
+        self._radio_pause_start_time = None
         self._pedestrian_confirmation_pending = False
         self._pedestrian_confirmation_listener_started = False
         self._pedestrian_confirmation_response = None
         self._ped_to_song = False
+        self._accident_wait_logged = False
+        self._debug_trigger_box_lifetime = SIM_STEP_S * 2.0
         self._song_audio = SongAudio(
             SADNESS_RP_MAD_WORLD_PATH,
             start_seconds=SONG_START_OFFSET_SECONDS,
@@ -159,6 +178,29 @@ class Scenario05Runner:
             fade_out_ms=SONG_FADE_OUT_MS,
             volume=0.85,
             channel_index=6,
+        )
+        self._radio_intro_audio = SongAudio(
+            RADIO_INTRO,
+            start_seconds=1.0,
+            play_seconds=5.0,
+            fade_in_ms=0,
+            fade_out_ms=2000,
+            volume=0.7,
+            channel_index=7,
+        )
+        self._radio_news_male_audio = RepeatingAudio(
+            NEWS_LANDSLIDE_MALE,
+            repeat_count=1,
+            volume=0.85,
+            channel_index=8,
+            fade_in_ms=0,
+        )
+        self._radio_news_female_audio = RepeatingAudio(
+            NEWS_RELATIONS_FEMALE,
+            repeat_count=1,
+            volume=0.85,
+            channel_index=9,
+            fade_in_ms=0,
         )
         self._scenario_done = False
         self._cars_phase_done = False
@@ -610,6 +652,26 @@ class Scenario05Runner:
             return True
 
         return False
+
+    def _skip_carped_phase(self, sim_time):
+        if self._cars_phase_done:
+            return False
+
+        print(f"[Scenario05] CARPED skipped at sim_time={sim_time:.2f}s")
+        self._cars_phase_done = True
+        self._traffic_spawned = True
+        self._traffic_spawn_time = sim_time
+        self._cars_spawn_time = sim_time
+        self._pedestrians_spawned = True
+        self._pedestrians_started = True
+        self._pedestrians_done = True
+        self._pedestrian_spawn_time = sim_time
+        self._pedestrian_routes = []
+        self._pedestrian_confirmation_pending = False
+        self._pedestrian_confirmation_listener_started = False
+        self._pedestrian_confirmation_response = None
+        self._ped_to_song = True
+        return True
 
     def _spawn_batch_vehicles(self, points, bps, tm):
         if not points or not bps:
@@ -1141,6 +1203,25 @@ class Scenario05Runner:
                 tl.set_state(carla.TrafficLightState.Green)
                 tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
 
+    def _draw_accident_trigger_boxes(self):
+        if not DEBUG_MODE or self._accident_spawned or self._song_finished is False:
+            return
+
+        box_configs = build_trigger_box_configs(
+            [
+                {
+                    "trigger_location": trigger_location,
+                    "trigger_x_tolerance": ACCIDENT_TRIGGER_X_TOLERANCE,
+                    "trigger_y_tolerance": ACCIDENT_TRIGGER_Y_TOLERANCE,
+                }
+                for trigger_location in ACCIDENT_TRIGGER_LOCATIONS
+            ],
+            z_extra=2.0,
+            color=(255, 0, 0, 255),
+            thickness=0.1,
+        )
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
     def _is_accident_trigger_reached(self, ego_transform):
         if ego_transform is None:
             return None
@@ -1212,32 +1293,123 @@ class Scenario05Runner:
         print(f"[Scenario05] Unfall-Trigger erreicht; Static Prop gespawnt bei sim_time={sim_time:.2f}s")
         return True
 
+    def _skip_accident_phase(self, sim_time):
+        if self._accident_spawned:
+            return False
+
+        self._accident_spawned = True
+        self._accident_spawn_time = sim_time
+        print(f"[Scenario05] ACCIDENT skipped at sim_time={sim_time:.2f}s")
+        return True
+
     def _start_radio_voice_placeholder(self, sim_time):
         if self._radio_started:
             return True
+
         self._radio_started = True
         self._radio_start_time = sim_time
-        print(f"[Scenario05] Radio-Voice-Phase noch nicht implementiert; Marker erreicht bei sim_time={sim_time:.2f}s")
+        self._radio_phase = "intro"
+        self._radio_pause_start_time = None
+        if self._radio_intro_audio.play(sim_time):
+            print(f"[Scenario05] Radio started at sim_time={sim_time:.2f}s -> intro")
+        else:
+            print(f"[Scenario05] WARNUNG: Radio intro konnte nicht gestartet werden bei sim_time={sim_time:.2f}s")
+            self._radio_finished = True
+            self._radio_finish_time = sim_time
+            self._radio_phase = "done"
         return True
+
+    def _skip_radio_phase(self, sim_time):
+        if self._radio_started and self._radio_finished:
+            return False
+
+        self._radio_started = True
+        self._radio_start_time = sim_time
+        self._radio_finished = True
+        self._radio_finish_time = sim_time
+        self._radio_phase = "done"
+        print(f"[Scenario05] RADIO skipped at sim_time={sim_time:.2f}s")
+        return True
+
+    def _update_radio_voice_sequence(self, sim_time):
+        if not self._radio_started or self._radio_finished:
+            return
+
+        if self._radio_phase == "intro":
+            self._radio_intro_audio.update(sim_time)
+            if self._radio_intro_audio.is_finished:
+                if self._radio_news_male_audio.play():
+                    self._radio_phase = "news_male"
+                    print(f"[Scenario05] Radio -> NEWS_LANDSLIDE_MALE at sim_time={sim_time:.2f}s")
+                else:
+                    print(f"[Scenario05] WARNUNG: NEWS_LANDSLIDE_MALE konnte nicht gestartet werden bei sim_time={sim_time:.2f}s")
+                    self._radio_finished = True
+                    self._radio_finish_time = sim_time
+                    self._radio_phase = "done"
+            return
+
+        if self._radio_phase == "news_male":
+            self._radio_news_male_audio.update()
+            if self._radio_news_male_audio.is_finished:
+                self._radio_pause_start_time = sim_time
+                self._radio_phase = "pause_before_news_female"
+                print(f"[Scenario05] Radio pause 1.0s before NEWS_RELATIONS_FEMALE at sim_time={sim_time:.2f}s")
+            return
+
+        if self._radio_phase == "pause_before_news_female":
+            if self._radio_pause_start_time is not None and (sim_time - self._radio_pause_start_time) >= 1.0:
+                if self._radio_news_female_audio.play():
+                    self._radio_phase = "news_female"
+                    print(f"[Scenario05] Radio -> NEWS_RELATIONS_FEMALE at sim_time={sim_time:.2f}s")
+                else:
+                    print(f"[Scenario05] WARNUNG: NEWS_RELATIONS_FEMALE konnte nicht gestartet werden bei sim_time={sim_time:.2f}s")
+                    self._radio_finished = True
+                    self._radio_finish_time = sim_time
+                    self._radio_phase = "done"
+            return
+
+        if self._radio_phase == "news_female":
+            self._radio_news_female_audio.update()
+            if self._radio_news_female_audio.is_finished:
+                self._radio_finished = True
+                self._radio_finish_time = sim_time
+                self._radio_phase = "done"
+                print(f"[Scenario05] Radio sequence finished at sim_time={sim_time:.2f}s")
+            return
 
     def _update_post_song_phases(self, sim_time, ego_transform=None):
         if self._song_finished and not self._accident_spawned:
-            trigger_key = self._is_accident_trigger_reached(ego_transform)
-            if trigger_key is not None:
-                self._spawn_accident_placeholder(sim_time, trigger_key)
+            if not TRIGGER_ACCIDENT:
+                self._skip_accident_phase(sim_time)
+            else:
+                if not self._accident_wait_logged:
+                    print("[Scenario05] Waiting for hero to reach accident trigger")
+                    self._accident_wait_logged = True
+                self._draw_accident_trigger_boxes()
+                trigger_key = self._is_accident_trigger_reached(ego_transform)
+                if trigger_key is not None:
+                    self._spawn_accident_placeholder(sim_time, trigger_key)
 
         if self._accident_spawned and not self._radio_started and self._accident_spawn_time is not None:
             if (sim_time - self._accident_spawn_time) >= ACCIDENT_TO_RADIO_DELAY_SECONDS:
-                self._start_radio_voice_placeholder(sim_time)
+                if TRIGGER_RADIO:
+                    self._start_radio_voice_placeholder(sim_time)
+                else:
+                    self._skip_radio_phase(sim_time)
 
-        if self._radio_started and not self._radio_finished and self._radio_start_time is not None:
-            if (sim_time - self._radio_start_time) >= RADIO_TO_END_DELAY_SECONDS:
-                self._radio_finished = True
-                self._radio_finish_time = sim_time
+        self._update_radio_voice_sequence(sim_time)
+
+        if self._radio_finished and self._radio_finish_time is not None:
+            if (sim_time - self._radio_finish_time) >= RADIO_TO_END_DELAY_SECONDS:
                 self._scenario_done = True
 
     def _should_spawn_traffic(self, sim_time):
-        return (not self._traffic_spawned) and (not getattr(self, '_cars_phase_done', False)) and (sim_time - self._start_sim_time) >= START_TO_CARPED_DELAY_SECONDS
+        return (
+            TRIGGER_CARPED
+            and (not self._traffic_spawned)
+            and (not getattr(self, '_cars_phase_done', False))
+            and (sim_time - self._start_sim_time) >= START_TO_CARPED_DELAY_SECONDS
+        )
 
     def _should_start_song(self, sim_time):
         return (
@@ -1269,6 +1441,9 @@ class Scenario05Runner:
                         if self._spawn_pedestrians(ego_transform):
                             self._traffic_spawned = True
                             self._traffic_spawn_time = sim_time
+
+                if not TRIGGER_CARPED and not self._cars_phase_done and (sim_time - self._start_sim_time) >= START_TO_CARPED_DELAY_SECONDS:
+                    self._skip_carped_phase(sim_time)
 
                 # After cars spawned, wait CAR_TO_PED_DELAY_SECONDS then spawn pedestrian
                 if getattr(self, '_cars_phase_done', False) and self._cars_spawn_time is not None and not self._pedestrians_spawned:
@@ -1311,6 +1486,9 @@ class Scenario05Runner:
     def destroy(self):
         print("[Scenario05] Cleanup...")
         self._song_audio.stop(0)
+        self._radio_intro_audio.stop(0)
+        self._radio_news_male_audio.stop(0)
+        self._radio_news_female_audio.stop(0)
         self._pending_vehicle_immobilizations = {}
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids + self._walker_controller_ids
         self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])
