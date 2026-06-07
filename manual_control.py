@@ -205,7 +205,7 @@ ENABLE_OBSTACLE_SENSOR = False
 HERO_MARKER_INTERVAL = 2.0
 HERO_MARKER_TOP_OFFSET = carla.Location(z=40.0)
 HERO_MARKER_TOP_EXTENT = carla.Vector3D(1.5, 1.5, 0.01)
-HERO_MARKER_REAR_LOCAL_OFFSET = carla.Location(x=-2.4, y=0.0, z=0.6)
+# HERO_MARKER_REAR_LOCAL_OFFSET = carla.Location(x=-2.4, y=0.0, z=0.6)
 HERO_MARKER_REAR_EXTENT = carla.Vector3D(0.05, 0.8, 0.1)
 HERO_MARKER_COLOR = carla.Color(255, 0, 0)
 
@@ -2806,15 +2806,15 @@ def game_loop(args):
                             life_time=life_time,
                         )
 
-                        rear_marker_location = hero_transform.transform(HERO_MARKER_REAR_LOCAL_OFFSET)
-                        rear_box = carla.BoundingBox(rear_marker_location, HERO_MARKER_REAR_EXTENT)
-                        debug.draw_box(
-                            rear_box,
-                            hero_rotation,
-                            thickness=0.12,
-                            color=HERO_MARKER_COLOR,
-                            life_time=life_time,
-                        )
+                        # rear_marker_location = hero_transform.transform(HERO_MARKER_REAR_LOCAL_OFFSET)
+                        # rear_box = carla.BoundingBox(rear_marker_location, HERO_MARKER_REAR_EXTENT)
+                        # debug.draw_box(
+                        #     rear_box,
+                        #     hero_rotation,
+                        #     thickness=0.12,
+                        #     color=HERO_MARKER_COLOR,
+                        #     life_time=life_time,
+                        # )
                     hero_marker_last = now
             except Exception:
                 pass
