@@ -48,7 +48,7 @@ CARAWAY_TO_LTRUCK_DELAY = 1.0
 LTRUCK_TO_SONG_DELAY = 2.0
 SONG_TO_POLICE_DELAY = 1.0
 POLICE_TO_BREAK_DELAY = 1.0
-BREAK_TO_END_DELAY = 100.0
+BREAK_TO_END_DELAY = 20.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 5.0
@@ -68,7 +68,7 @@ COPWAVING_TRANSITION_BACKSTEP_M = 0.0
 TRIGGER_CARAWAY = False
 TRIGGER_LTRUCK = False
 TRIGGER_SONG = True
-TRIGGER_POLICE = False
+TRIGGER_POLICE = True
 TRIGGER_BREAK = True
 DEBUG_MODE = True
 
@@ -1450,6 +1450,16 @@ class Scenario03Runner:
             self._destroy_temp_firetruck_barriers()
         except Exception:
             pass
+
+        # Remove stale break signal file so the next run starts clean.
+        if self._break_signal_file:
+            try:
+                break_signal_file = os.path.normpath(os.path.abspath(self._break_signal_file))
+                if os.path.exists(break_signal_file):
+                    os.remove(break_signal_file)
+                    print(f"[Scenario03] Break signal file removed during destroy: {break_signal_file}")
+            except Exception as exc:
+                print(f"[Scenario03] WARNING: could not remove break signal file during destroy: {exc}")
 
     def _signal_done(self):
         if not self._done_file:
