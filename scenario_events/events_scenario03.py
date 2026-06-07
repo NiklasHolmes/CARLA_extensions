@@ -16,17 +16,18 @@ BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
     'scenario_break.signal',
 )
 BREAK_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(BREAK_SIGNAL_FILE_DEFAULT))
+BREAK_WARNING_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
 
 try:
     from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH
-    from generate_audio import SongAudio
+    from generate_audio import RepeatingAudio, SongAudio
 except ModuleNotFoundError:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
     if extensions_root not in sys.path:
         sys.path.insert(0, extensions_root)
     from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH
-    from generate_audio import SongAudio
+    from generate_audio import RepeatingAudio, SongAudio
 
 try:
     from scenario_helper import start_manual_control_process
@@ -194,6 +195,12 @@ class Scenario03Runner:
             fade_out_ms=SONG_FADE_OUT_MS,
             volume=0.85,
             channel_index=6,
+        )
+        self._break_warning_audio = RepeatingAudio(
+            BREAK_WARNING_CHIME_PATH,
+            repeat_count=5,
+            volume=0.85,
+            channel_index=7,
         )
 
     def _start_delay_timer(self, delay_name, sim_time):
@@ -1246,6 +1253,9 @@ class Scenario03Runner:
                 print(f"[Scenario03] Break signal sent to manual_control: {break_signal_file}")
             except Exception as exc:
                 print(f"[Scenario03] WARNING: could not write break signal file: {exc}")
+
+        if not self._break_warning_audio.play():
+            print("[Scenario03] WARNING: Break warning sound konnte nicht gestartet werden.")
         self.break_finished = True
 
     def _skip_caraway_trigger(self, sim_time):
@@ -1448,6 +1458,7 @@ class Scenario03Runner:
             self._copwaving_walk_started = False
             self._copwaving_target_location = None
             self._destroy_temp_firetruck_barriers()
+            self._break_warning_audio.stop(0)
         except Exception:
             pass
 
