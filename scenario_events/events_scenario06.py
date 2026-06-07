@@ -20,18 +20,12 @@ except ModuleNotFoundError:
     from generate_audio import RepeatingAudio, SongAudio
 
 try:
-    from scenario_helper import is_transform_hidden_from_hero
+    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero
-
-try:
-    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_highped_barrier_spawns, get_start_fence_spawns
-except ModuleNotFoundError:
-    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, get_highped_barrier_spawns, get_start_fence_spawns
+    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns
 
 
-START_TO_CAR_DELAY = 1.0
-CAR_TO_RAIN_DELAY = 1.0
+START_TO_RAIN_DELAY = 1.0
 MID_RAIN_LEAD_IN_S = 1.0
 HARD_RAIN_DURATION_S = 1.0
 MID_RAIN_FOLLOW_UP_S = 1.0
@@ -73,7 +67,7 @@ SANIMAL_LIFETIME_S = 20.0
 # 6 - HardRainNoon
 # 7 - SoftRainNoon
 
-SPAWN_CARS = 0
+SPAWN_CARS = len(CAR_START_LOCATIONS)
 SIM_STEP_S = 0.05
 
 BLOCKED_VEHICLE_KEYWORDS = (
@@ -87,11 +81,6 @@ BLOCKED_VEHICLE_KEYWORDS = (
     "t2",
     "police",
 )
-
-MIN_SPAWN_DISTANCE = 30.0
-MAX_SPAWN_DISTANCE = 100.0
-CAR_RESPAWN_MAX_DISTANCE = 80.0
-VEHICLE_SPAWN_MIN_SEPARATION = 8.0
 run_in_singleFile_mode = True                       # attention! single file mode!
 
 TRIGGER_TRAFFIC =False
@@ -188,7 +177,7 @@ class Scenario06Runner:
         self.fuelempty_finished = False
         self._delay_states = {
             "car_to_rain": {
-                "delay": CAR_TO_RAIN_DELAY,
+                "delay": START_TO_RAIN_DELAY,
                 "started_at": None,
                 "finished": False,
             },
@@ -242,6 +231,59 @@ class Scenario06Runner:
         tm.set_synchronous_mode(self.world.get_settings().synchronous_mode)
         return tm
 
+    def _spawn_start_cars(self, sim_time):
+        if self._traffic_spawned:
+            return True
+
+        tm = self._get_traffic_manager()
+        spawn_points = list(CAR_START_LOCATIONS)
+        if not spawn_points:
+            print("[Scenario06] WARNUNG: Keine CAR_START_LOCATIONS vorhanden.")
+            return False
+
+        route_straight = ["Straight"] * 20
+        blueprint_library = get_actor_blueprints(self.world, "vehicle.*")
+        vehicle_blueprints = filter_blocked_vehicle_blueprints(blueprint_library, BLOCKED_VEHICLE_KEYWORDS)
+        if not vehicle_blueprints:
+            print("[Scenario06] WARNUNG: Keine Fahrzeug-Blueprints für Start-Spawn verfügbar.")
+            return False
+
+        batch = []
+        for transform in spawn_points[:SPAWN_CARS]:
+            blueprint = self._rng.choice(vehicle_blueprints)
+            if blueprint.has_attribute("role_name"):
+                blueprint.set_attribute("role_name", "autopilot")
+            batch.append(
+                carla.command.SpawnActor(blueprint, transform).then(
+                    carla.command.SetAutopilot(carla.command.FutureActor, True, tm.get_port())
+                )
+            )
+
+        results = self.client.apply_batch_sync(batch, False)
+        spawned_vehicle_ids = []
+        for response in results:
+            if response.error:
+                print(f"[Scenario06] WARNUNG: Start-Fahrzeug konnte nicht gespawnt werden: {response.error}")
+                continue
+            spawned_vehicle_ids.append(response.actor_id)
+            self._vehicle_actor_ids.append(response.actor_id)
+
+        self.world.wait_for_tick()
+
+        vehicle_actors = self.world.get_actors(spawned_vehicle_ids)
+        for vehicle_actor in vehicle_actors:
+            try:
+                tm.set_route(vehicle_actor, route_straight)
+            except Exception as exc:
+                print(f"[Scenario06] WARNUNG: Route konnte nicht gesetzt werden für actor_id={vehicle_actor.id}: {exc}")
+
+        self._traffic_spawned = True
+        self._traffic_spawn_time = sim_time
+        self._cars_phase_done = True
+        print(f"[Scenario06] Start cars spawned: {len(spawned_vehicle_ids)}/{len(spawn_points)}")
+        print(f"[Scenario06] First delay START_TO_RAIN_DELAY={START_TO_RAIN_DELAY:.1f}s startet jetzt.")
+        return len(spawned_vehicle_ids) > 0
+
     def find_hero(self):
         for actor in self.world.get_actors():
             if actor.attributes.get("role_name") in ["hero", "default_player"]:
@@ -264,127 +306,6 @@ class Scenario06Runner:
             except Exception:
                 continue
         return actor_locations
-
-    def _pick_hidden_vehicle_spawn_transform(self, ego_transform, used_locations=None, max_attempts=64):
-        used_locations = used_locations or []
-        actor_locations = self._get_actor_locations()
-        spawn_points = list(self.world.get_map().get_spawn_points())
-        self._rng.shuffle(spawn_points)
-
-        for spawn_point in spawn_points[:max_attempts]:
-            if not is_transform_hidden_from_hero(spawn_point, ego_transform, MIN_SPAWN_DISTANCE, MAX_SPAWN_DISTANCE):
-                continue
-
-            spawn_location = spawn_point.location
-            if any(self._distance_2d(spawn_location, existing) < VEHICLE_SPAWN_MIN_SEPARATION for existing in used_locations):
-                continue
-
-            if any(self._distance_2d(spawn_location, existing) < VEHICLE_SPAWN_MIN_SEPARATION for existing in actor_locations):
-                continue
-
-            return spawn_point
-
-        return None
-
-    def _spawn_single_vehicle(self, ego_transform, sim_time):
-        all_bps = get_actor_blueprints(self.world, "vehicle.*")
-        vehicle_bps = filter_blocked_vehicle_blueprints(all_bps, BLOCKED_VEHICLE_KEYWORDS)
-        if not vehicle_bps:
-            return False
-
-        active_locations = []
-        for vehicle_id in self._vehicle_actor_ids:
-            actor = self.world.get_actor(vehicle_id)
-            if actor is None:
-                continue
-            try:
-                active_locations.append(actor.get_location())
-            except Exception:
-                continue
-
-        spawn_transform = self._pick_hidden_vehicle_spawn_transform(ego_transform, active_locations)
-        if spawn_transform is None:
-            return False
-
-        bp = self._rng.choice(vehicle_bps)
-        tm = self._get_traffic_manager()
-        actor = self.world.try_spawn_actor(bp, spawn_transform)
-        if actor is None:
-            print(
-                f"[Scenario06] WARNUNG: Vehicle konnte nicht gespawnt werden | sim_time={sim_time:.2f}s | "
-                f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
-            )
-            return False
-
-        try:
-            actor.set_autopilot(True, tm.get_port())
-        except Exception:
-            pass
-        self._vehicle_actor_ids.append(actor.id)
-        print(
-            f"[Scenario06] Vehicle respawned: id={actor.id}, sim_time={sim_time:.2f}s, "
-            f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
-        )
-        return True
-
-    def _prune_far_vehicles(self, ego_transform):
-        if ego_transform is None:
-            return
-
-        active_vehicle_ids = []
-        for vehicle_id in list(self._vehicle_actor_ids):
-            actor = self.world.get_actor(vehicle_id)
-            if actor is None:
-                continue
-
-            try:
-                actor_location = actor.get_location()
-            except Exception:
-                continue
-
-            distance = self._distance_2d(actor_location, ego_transform.location)
-            if distance > CAR_RESPAWN_MAX_DISTANCE:
-                print(f"[Scenario06] Vehicle removed: id={vehicle_id}, distance={distance:.1f}m")
-                try:
-                    actor.destroy()
-                except Exception:
-                    pass
-                continue
-
-            active_vehicle_ids.append(vehicle_id)
-
-        self._vehicle_actor_ids = active_vehicle_ids
-
-    def _maintain_spawn_pools(self, ego_transform, sim_time):
-        self._prune_far_vehicles(ego_transform)
-
-        vehicle_attempts = max(1, (SPAWN_CARS - len(self._vehicle_actor_ids)) * 3)
-        for _ in range(vehicle_attempts):
-            if len(self._vehicle_actor_ids) >= SPAWN_CARS:
-                break
-            if not self._spawn_single_vehicle(ego_transform, sim_time):
-                break
-
-    def _spawn_dynamic_traffic(self, ego_transform, sim_time):
-        target_count = SPAWN_CARS
-        attempts = 0
-        max_attempts = max(20, target_count * 20)
-
-        while len(self._vehicle_actor_ids) < target_count and attempts < max_attempts:
-            attempts += 1
-            if not self._spawn_single_vehicle(ego_transform, sim_time):
-                continue
-
-        print(
-            f"[Scenario06] Vehicles spawned: {len(self._vehicle_actor_ids)}/{target_count} after attempts={attempts}"
-        )
-
-        if len(self._vehicle_actor_ids) >= target_count:
-            self._cars_phase_done = True
-            self._traffic_spawn_time = sim_time
-            return True
-
-        return False
 
     def _force_green_light(self, ego):
         if ego and ego.is_at_traffic_light():
@@ -1027,8 +948,7 @@ class Scenario06Runner:
 
         self._spawn_sanimal(route_config, sim_time)
 
-    def _should_spawn_traffic(self, sim_time):
-        return (not self._traffic_spawned) and (sim_time - self._start_sim_time) >= START_TO_CAR_DELAY
+
 
     def _update_weather_cycle(self, sim_time):
         if self._start_sim_time is None:
@@ -1097,16 +1017,13 @@ class Scenario06Runner:
                 if self._start_sim_time is None:
                     self._start_sim_time = sim_time
                     self._spawn_start_static_props()
+                    self._spawn_start_cars(sim_time)
 
                 ego = self.find_hero()
                 ego_transform = ego.get_transform() if ego else carla.Transform(
                     carla.Location(x=150.60, y=-173.30, z=0.70),
                     carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
                 )
-
-                if self._should_spawn_traffic(sim_time) and self._spawn_dynamic_traffic(ego_transform, sim_time):
-                    self._traffic_spawned = True
-                    self._traffic_spawn_time = sim_time
 
                 if not self._trigger_traffic:
                     self._skip_traffic_trigger(sim_time)
@@ -1186,9 +1103,6 @@ class Scenario06Runner:
                         self._spawn_sanimal_forced(sim_time)
                     else:
                         self._maybe_spawn_sanimal(ego_transform, sim_time)
-
-                if self._traffic_spawned:
-                    self._maintain_spawn_pools(ego_transform, sim_time)
 
                 sanimal_to_cow_state = self._delay_states["sanimal_to_cow"]
                 if self.sanimal_finished:
