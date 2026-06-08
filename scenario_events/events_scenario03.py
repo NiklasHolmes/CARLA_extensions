@@ -1,4 +1,3 @@
-
 import argparse
 import os
 import math
@@ -8,6 +7,9 @@ import time
 
 import carla
 from carla import VehicleLightState
+
+# For debug start manual control with: 
+# --enable-break-warning
 
 BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),

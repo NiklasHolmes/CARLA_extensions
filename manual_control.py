@@ -225,12 +225,21 @@ DB_SCREEN_INDEX = 2
 CHOSEN_VEHICLE = 'vehicle.lincoln.mkz_2020'
 # https://carla.readthedocs.io/en/latest/catalogue_vehicles/
 
+# For debug start script with: 
+# --enable-break-warning
+# --enable-fuel-empty-warning
 BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'common',
     'scenario_break.signal',
 )
 break_signal_file = os.path.normpath(os.path.abspath(BREAK_SIGNAL_FILE_DEFAULT))
+FUEL_EMPTY_SIGNAL_FILE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'common',
+    'scenario_fuel_empty.signal',
+)
+fuel_empty_signal_file = os.path.normpath(os.path.abspath(FUEL_EMPTY_SIGNAL_FILE_DEFAULT))
 BREAK_WARNING_BRAKE_FACTOR = 0.3
 BREAK_WARNING_ACTIVE = False
 
@@ -2726,6 +2735,10 @@ def game_loop(args):
         if args.enable_break_warning:
             print(f"[Scenario03] Watching break signal file: {break_signal_file}")
 
+        fuel_empty_signal_seen = False
+        if args.enable_fuel_empty_warning:
+            print(f"[Scenario06] Watching fuel-empty signal file: {fuel_empty_signal_file}")
+
         if args.sync:
             sim_world.tick()
         else:
@@ -2754,6 +2767,17 @@ def game_loop(args):
                     except Exception:
                         pass
                     print(f"[Scenario03] Break signal received from scenario03: {break_signal_file}. Forwarding brake warning to dashboard.")
+
+            if args.enable_fuel_empty_warning and not fuel_empty_signal_seen:
+                if os.path.exists(fuel_empty_signal_file):
+                    fuel_empty_signal_seen = True
+                    if event_sync is not None:
+                        event_sync.trigger_fuel_empty_warning()
+                    try:
+                        os.remove(fuel_empty_signal_file)
+                    except Exception:
+                        pass
+                    print(f"[Scenario06] Fuel empty signal received from scenario06: {fuel_empty_signal_file}. Forwarding tank-empty warning to dashboard.")
 
             if not stop_signal_seen and getattr(args, 'scenario_stop_file', None):
                 if os.path.exists(args.scenario_stop_file):
@@ -2869,6 +2893,10 @@ def main():
         '--enable-break-warning',
         action='store_true',
         help='enable Scenario03 break-warning polling')
+    argparser.add_argument(
+        '--enable-fuel-empty-warning',
+        action='store_true',
+        help='enable Scenario06 fuel-empty warning polling')
     argparser.add_argument(
         '--host',
         metavar='H',
