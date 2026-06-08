@@ -124,6 +124,7 @@ class CarDashboard(threading.Thread):
         self._left_indicator_on = False
         self._right_indicator_on = False
         self._break_warning_on = False
+        self._fuel_empty_warning_on = False
         self._sync_socket = None
         self._blink_interval = 0.3
         self._blink_timer = 0.0
@@ -191,6 +192,10 @@ class CarDashboard(threading.Thread):
                 self._break_warning_on = True
             elif cmd == "BREAK_WARNING_OFF":
                 self._break_warning_on = False
+            elif cmd == "FUEL_EMPTY_WARNING":
+                self._fuel_empty_warning_on = True
+            elif cmd == "FUEL_EMPTY_WARNING_OFF":
+                self._fuel_empty_warning_on = False
 
     def _apply_window_policy_windows(self, hwnd, resolved_display_index, log_output=False):
         """Apply placement/topmost policy once; can be called periodically at low rate."""
@@ -390,7 +395,7 @@ class CarDashboard(threading.Thread):
                             hwnd = get_pygame_window_hwnd(pygame)
                         self._apply_window_policy_windows(hwnd, resolved_display_index, log_output=False)
 
-                if DEBUGMODE or self._left_indicator_on or self._right_indicator_on or self._break_warning_on:
+                if DEBUGMODE or self._left_indicator_on or self._right_indicator_on or self._break_warning_on or self._fuel_empty_warning_on:
                     self._blink_timer += dt
                     while self._blink_timer >= self._blink_interval:
                         self._blink_timer -= self._blink_interval
@@ -509,9 +514,17 @@ class CarDashboard(threading.Thread):
             car_rect = self._center_car_image.get_rect(center=(car_center_x, car_center_y))
             self._display.blit(self._center_car_image, car_rect)
 
-        if (DEBUGMODE or self._break_warning_on) and self._blink_phase_on:
+        warning_text = None
+        if self._break_warning_on:
+            warning_text = "Bremsfehler!"
+        elif self._fuel_empty_warning_on:
+            warning_text = "Tank leer!"
+        elif DEBUGMODE:
+            warning_text = "Bremsfehler!"
+
+        if warning_text is not None and self._blink_phase_on:
             warning_font = self._warning_font or pygame.font.SysFont(None, max(12, int(self.height * 0.07)), bold=True)
-            warning_surface = warning_font.render("Bremsfehler!", True, (255, 255, 255))
+            warning_surface = warning_font.render(warning_text, True, (255, 255, 255))
             gauge_radius = self._velocity_circle.get_height() // 2
             ts_y = center_y - int(gauge_radius * 1.1)
             warning_rect = warning_surface.get_rect(center=(self.width // 2, ts_y))

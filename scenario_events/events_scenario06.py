@@ -7,6 +7,9 @@ import random
 import sys
 import time
 
+# For debug start manual control with: 
+# --enable-fuel-empty-warning
+
 import carla
 try:
     from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH
@@ -29,7 +32,6 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
 
-
 DEBUG_MODE = True
 START_TO_RAIN_DELAY = 1.0
 MID_RAIN_LEAD_IN_S = 1.0
@@ -43,13 +45,20 @@ BUS_TO_SONG_DELAY = 20.0
 SONG_TO_SANIMAL_DELAY = 1.0
 SANIMAL_TO_COW_DELAY = 1.0
 COW_TO_FUEL_DELAY = 1.0
-FUEL_TO_END_DELAY = 1.0
+FUEL_TO_END_DELAY = 100.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 10.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 FUEL_EMPTY_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
+FUEL_EMPTY_SIGNAL_FILE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '..',
+    'common',
+    'scenario_fuel_empty.signal',
+)
+FUEL_EMPTY_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(FUEL_EMPTY_SIGNAL_FILE_DEFAULT))
 
 HIGHPED_BLUEPRINT_ID = "walker.pedestrian.0038"
 HIGHPED_MAX_SPEED = 1.0
@@ -95,8 +104,8 @@ TRIGGER_WEATHER = False
 TRIGGER_HIGHPED = False
 TRIGGER_BUS = False
 TRIGGER_SONG = False
-TRIGGER_SANIMAL = True
-TRIGGER_COW = False
+TRIGGER_SANIMAL = False
+TRIGGER_COW = True
 TRIGGER_FUELEMPTY = True
 TRIGGER_SANIMAL_IMMEDIATE = False
 
@@ -156,6 +165,7 @@ class Scenario06Runner:
             volume=0.85,
             channel_index=7,
         )
+        self._fuel_empty_signal_file = FUEL_EMPTY_SIGNAL_FILE_DEFAULT
 
         self._highped_route_done = False
         self._highped_route_active = False
@@ -919,6 +929,18 @@ class Scenario06Runner:
         self.cow_finished = True
 
     def _start_fuelempty_trigger(self):
+        if self._fuel_empty_signal_file:
+            try:
+                fuel_empty_signal_file = os.path.normpath(os.path.abspath(self._fuel_empty_signal_file))
+                fuel_empty_dir = os.path.dirname(fuel_empty_signal_file)
+                if fuel_empty_dir:
+                    os.makedirs(fuel_empty_dir, exist_ok=True)
+                with open(fuel_empty_signal_file, "w", encoding="utf-8") as fuel_empty_handle:
+                    fuel_empty_handle.write("fuel_empty\n")
+                print(f"[Scenario06] Fuel empty signal sent to manual_control: {fuel_empty_signal_file}")
+            except Exception as exc:
+                print(f"[Scenario06] WARNING: could not write fuel empty signal file: {exc}")
+
         if not self._fuel_empty_audio.play():
             print("[Scenario06] WARNUNG: Fuel empty sound konnte nicht gestartet werden.")
             self.fuelempty_started = True
@@ -1556,6 +1578,16 @@ class Scenario06Runner:
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids
         if all_ids:
             self.client.apply_batch([carla.command.DestroyActor(actor_id) for actor_id in all_ids])
+
+        # Remove stale break signal file so the next run starts clean.
+        if self._fuel_empty_signal_file:
+            try:
+                fuel_empty_signal_file = os.path.normpath(os.path.abspath(self._fuel_empty_signal_file))
+                if os.path.exists(fuel_empty_signal_file):
+                    os.remove(fuel_empty_signal_file)
+                    print(f"[Scenario06] Fuel empty signal file removed during destroy: {fuel_empty_signal_file}")
+            except Exception as exc:
+                print(f"[Scenario06] WARNING: could not remove fuel empty signal file during destroy: {exc}")
 
     def _signal_done(self):
         if not self._done_file:

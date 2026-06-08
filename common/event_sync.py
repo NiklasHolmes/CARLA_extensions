@@ -69,6 +69,10 @@ class EventSync:
         self._send_dashboard("BREAK_WARNING")
         return True
 
+    def trigger_fuel_empty_warning(self) -> bool:
+        self._send_dashboard("FUEL_EMPTY_WARNING")
+        return True
+
     def update(self):
         """ called regularly from main loop """
         now = time.time()
