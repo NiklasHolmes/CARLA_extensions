@@ -19,21 +19,21 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes
 
-START_TO_TRAFFIC_DELAY = 1.0
-TRAFFIC_TO_TRASH_DELAY = 1.0
-TRASH_TO_SNAKE_DELAY = 1.0
-SNAKE_TO_SMELL_DELAY = 2.0
-SMELL_TO_POORROAD_DELAY = 1.0
-POORROAD_TO_DRIVERTRASH_DELAY = 1.0
-DRIVERTRASH_TO_END_DELAY = 1.0
+START_TO_TRAFFIC_DELAY = 10.0
+TRAFFIC_TO_TRASH_DELAY = 20.0
+TRASH_TO_SNAKE_DELAY = 30.0
+SNAKE_TO_SMELL_DELAY = 20.0
+SMELL_TO_POORROAD_DELAY = 30.0
+POORROAD_TO_DRIVERTRASH_DELAY = 30.0
+DRIVERTRASH_TO_END_DELAY = 10.0
 
 SIM_STEP_S = 0.05
-run_in_singleFile_mode = True
-DEBUG_MODE = True
+run_in_singleFile_mode = False
+DEBUG_MODE = False
 
-TRIGGER_TRAFFIC = False
-TRIGGER_TRASH = False
-TRIGGER_SNAKE = False
+TRIGGER_TRAFFIC = True
+TRIGGER_TRASH = True
+TRIGGER_SNAKE = True
 TRIGGER_SMELL = True
 TRIGGER_POORROAD = True
 TRIGGER_DRIVERTRASH = True
@@ -829,7 +829,7 @@ class Scenario02Runner:
         self._drivertrash_process = start_manual_control_process(
             host=self.host,
             port=self.port,
-            profile='supervisor4home',
+            profile='supervisor',
             done_file=None,
             vehicle_id=vehicle_id,
             vehicle_color=vehicle_color,
@@ -845,7 +845,7 @@ class Scenario02Runner:
         print(
             f"[Scenario02] Started drivertrash manual_control: "
             f"vehicleID={vehicle_id}, vehicleColor={vehicle_color}, audio_mode={audio_mode}\n"
-            f"Press F to throw a cola can from the right window\n"
+            f"Press F or L3 to throw a cola can from the right window\n"
         )
 
         while True:

@@ -32,25 +32,38 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
 
-DEBUG_MODE = True
-START_TO_RAIN_DELAY = 1.0
-MID_RAIN_LEAD_IN_S = 1.0
-HARD_RAIN_DURATION_S = 1.0
-MID_RAIN_FOLLOW_UP_S = 1.0
-SOFT_RAIN_DURATION_S = 1.0
+DEBUG_MODE = False
+run_in_singleFile_mode = False                       # attention! single file mode!
 
-RAIN_TO_HIGHPED_DELAY = 1.0
-HIGHPED_TO_BUS_DELAY = 1.0
+TRIGGER_TRAFFIC =True
+TRIGGER_WEATHER = True
+TRIGGER_HIGHPED = True
+TRIGGER_BUS = True
+TRIGGER_SONG = True
+TRIGGER_SANIMAL = True
+TRIGGER_COW = True
+TRIGGER_FUELEMPTY = True
+TRIGGER_SANIMAL_IMMEDIATE = True
+
+START_TO_RAIN_DELAY = 20.0
+MID_RAIN_LEAD_IN_S = 5.0
+HARD_RAIN_DURATION_S = 15.0
+MID_RAIN_FOLLOW_UP_S = 10.0
+SOFT_RAIN_DURATION_S = 10.0
+
+RAIN_TO_HIGHPED_DELAY = 20.0
+HIGHPED_TO_BUS_DELAY = 20.0
 BUS_TO_SONG_DELAY = 20.0
-SONG_TO_SANIMAL_DELAY = 1.0
-SANIMAL_TO_COW_DELAY = 1.0
-COW_TO_FUEL_DELAY = 1.0
-FUEL_TO_END_DELAY = 100.0
+SONG_TO_SANIMAL_DELAY = 20.0
+SANIMAL_TO_COW_DELAY = 10.0
+COW_TO_FUEL_DELAY = 10.0
+FUEL_TO_END_DELAY = 10.0
 
 SONG_START_OFFSET_SECONDS = 0.0
-SONG_PLAY_DURATION_SECONDS = 10.0
+SONG_PLAY_DURATION_SECONDS = 30.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
+
 FUEL_EMPTY_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
 FUEL_EMPTY_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -97,17 +110,7 @@ BLOCKED_VEHICLE_KEYWORDS = (
     "t2",
     "police",
 )
-run_in_singleFile_mode = True                       # attention! single file mode!
 
-TRIGGER_TRAFFIC =False
-TRIGGER_WEATHER = False
-TRIGGER_HIGHPED = False
-TRIGGER_BUS = False
-TRIGGER_SONG = False
-TRIGGER_SANIMAL = False
-TRIGGER_COW = True
-TRIGGER_FUELEMPTY = True
-TRIGGER_SANIMAL_IMMEDIATE = False
 
 def get_actor_blueprints(world, filter_pattern):
     bps = list(world.get_blueprint_library().filter(filter_pattern))

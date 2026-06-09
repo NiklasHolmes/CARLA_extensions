@@ -269,12 +269,12 @@ PROFILE_CONFIG = {
             'rolename': 'supervisor',
         },
         'code_overrides': {
-            'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'inside',
-            'AUDIO_MODE': 'none',
+            'USE_SCENE_FINAL': False,
+            'DASHBOARD_MODE': 'none',
+            'AUDIO_MODE': 'horn_only',
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
-            'WINDOW_BORDERLESS': False,
+            'WINDOW_BORDERLESS': True,
             'chosen_vehicle': 'vehicle.dodge.charger_2020',
         },
     },
@@ -1586,8 +1586,9 @@ class GamepadControl(object):
 
         prev_L3 = getattr(self, "_prev_L3", False)
         if btn_L3 and not prev_L3:
-            _export_performance_metrics(world)
-            world.hud.toggle_info()
+            # _export_performance_metrics(world)
+            # world.hud.toggle_info()
+            world.throw_prop_from_right_window()
         self._prev_L3 = btn_L3
 
         prev_R3 = getattr(self, "_prev_R3", False)
