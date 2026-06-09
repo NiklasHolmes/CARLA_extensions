@@ -1,0 +1,9 @@
+numpy>=1.22.0,<=1.24.4
+pygame==2.5.2
+PyYAML==6.0.1
+screeninfo
+opencv-python
+matplotlib>=3.3.0,<=3.7.5
+
+# Pfad zu deiner lokalen CARLA 0.9.15 Version (Python 3.8)
+file:///C:/Users/department/Documents/Carla_0.9.15_Legion/WindowsNoEditor/PythonAPI/carla/dist/carla-0.9.15-cp38-cp38-win_amd64.whl
