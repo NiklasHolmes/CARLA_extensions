@@ -47,18 +47,18 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 		result.append(bp)
 	return result
 
-START_TO_REDLIGHT_DELAY = 1.0
-REDLIGHT_TO_TRAFFICJAM_DELAY = 1.0
-TRAFFICJAM_TO_BADGUY_DELAY = 2.0
-BADGUY_TO_SONG_DELAY = 2.0
-SONG_TO_CROSSPED_DELAY = 1.0
-CROSSPED_TO_OCCUPY_DELAY = 1.0
+START_TO_REDLIGHT_DELAY = 10.0
+REDLIGHT_TO_TRAFFICJAM_DELAY = 30.0
+TRAFFICJAM_TO_BADGUY_DELAY = 20.0
+BADGUY_TO_SONG_DELAY = 20.0
+SONG_TO_CROSSPED_DELAY = 10.0
+CROSSPED_TO_OCCUPY_DELAY = 10.0
+OCCUPY_TO_END_DELAY = 1.0
 
 SONG_START_OFFSET_SECONDS = 0.0
-SONG_PLAY_DURATION_SECONDS = 5.0
+SONG_PLAY_DURATION_SECONDS = 20.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
-OCCUPY_TO_END_DELAY = 1.0
 REDLIGHT_PHASE_MAX_SECONDS = 2.0
 REDLIGHT_YELLOW_SECONDS = 2.0
 HERO_GREEN_LIGHT_HOLD_SECONDS = 3.0
@@ -68,9 +68,21 @@ REDLIGHT_MAX_RED_SECONDS = 12.0
 REDLIGHT_GREEN_RELEASE_SECONDS = 8.0
 REDLIGHT_MAX_TRAFFIC_LIGHTS = 4
 TRAFFICJAM_PRUNE_DISTANCE_METERS = 150.0
-TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 15.0
+
+TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 10.0
 TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 10.0
 trafficJam_carWaitingTime = 20.0
+
+SIM_STEP_S = 0.05
+run_in_singleFile_mode = False
+DEBUG_MODE = False
+
+TRIGGER_REDLIGHT = True
+TRIGGER_TRAFFICJAM = True
+TRIGGER_BADGUY = True
+TRIGGER_SONG = True
+TRIGGER_CROSSPED = True
+TRIGGER_OCCUPY = True
 
 BLOCKED_VEHICLE_KEYWORDS = (
 	"firetruck",
@@ -94,15 +106,6 @@ BLOCKED_VEHICLE_KEYWORDS = (
 	"vehicle.gazelle.omafiets",
 )
 
-SIM_STEP_S = 0.05
-run_in_singleFile_mode = True
-
-TRIGGER_REDLIGHT = True
-TRIGGER_TRAFFICJAM = True
-TRIGGER_BADGUY = True
-TRIGGER_SONG = True
-TRIGGER_CROSSPED = True
-TRIGGER_OCCUPY = True
 # For testing: when set to an integer index, the corresponding trafficjam trigger
 # will be considered triggered instantly. Use `None` to disable this override.
 # Example: 0 -> first trigger, 1 -> second trigger, etc.
@@ -111,7 +114,7 @@ TEST_INSTANT_TRIGGER_TRAFFICJAM = None
 # instead of simulation time (`world.get_snapshot().timestamp.elapsed_seconds`).
 TRAFFICJAM_USE_REAL_TIME = True
 PRUNE_TJ_CARS = True
-DEBUG_MODE = True
+
 # Debug: force all traffic lights to green
 TL_FORCE_GREEN = False
 
@@ -1052,7 +1055,7 @@ class Scenario01Runner:
 			script_path,
 			'--host', self.host,
 			'--port', str(self.port),
-			'--profile', 'supervisor4home',
+			'--profile', 'supervisor',
 		]
 		if self._done_file:
 			cmd.extend(['--scenario-stop-file', self._done_file])

@@ -46,19 +46,19 @@ try:
 except ModuleNotFoundError:
     from scenario_events.events_scenario03_static_props import get_barrier_spawn, TEMP_BARRIER_FIRETRUCK, LTRUCK_SPAWN_CONFIGS, COPWAVING_TRIGGER_CONFIGS, CARAWAY
 
-START_TO_CARAWAY_DELAY = 1.0
-CARAWAY_TO_LTRUCK_DELAY = 1.0
-LTRUCK_TO_SONG_DELAY = 2.0
-SONG_TO_POLICE_DELAY = 1.0
-POLICE_TO_BREAK_DELAY = 1.0
-BREAK_TO_END_DELAY = 20.0
+START_TO_CARAWAY_DELAY = 20.0
+CARAWAY_TO_LTRUCK_DELAY = 30.0
+LTRUCK_TO_SONG_DELAY = 30.0
+SONG_TO_POLICE_DELAY = 20.0
+POLICE_TO_BREAK_DELAY = 30.0
+BREAK_TO_END_DELAY = 5.0
 
 SONG_START_OFFSET_SECONDS = 0.0
-SONG_PLAY_DURATION_SECONDS = 5.0
+SONG_PLAY_DURATION_SECONDS = 20.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 SIM_STEP_S = 0.05
-run_in_singleFile_mode = True
+run_in_singleFile_mode = False
 
 route_green = ["Straight", "Straight", "Straight", "Straight", "Straight", "Straight"]
 
@@ -68,8 +68,9 @@ COPWAVING_WALK_SPEED = 1.4
 COPWAVING_ARRIVE_THRESH = 1.2
 COPWAVING_STATUS_LOG_INTERVAL_S = 1.0
 COPWAVING_TRANSITION_BACKSTEP_M = 0.0
-TRIGGER_CARAWAY = False
-TRIGGER_LTRUCK = False
+
+TRIGGER_CARAWAY = True
+TRIGGER_LTRUCK = True
 TRIGGER_SONG = True
 TRIGGER_POLICE = True
 TRIGGER_BREAK = True
@@ -529,7 +530,7 @@ class Scenario03Runner:
         self._ltruck_process = start_manual_control_process(
             host=self.host,
             port=self.port,
-            profile='supervisor4home',
+            profile='supervisor',
             done_file=None,
             vehicle_id=vehicle_id,
             vehicle_color=vehicle_color,
