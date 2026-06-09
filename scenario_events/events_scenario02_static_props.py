@@ -359,26 +359,7 @@ POORROAD_TRIGGER_CONFIG = (
         "trigger_location": carla.Location(x=8, y=114.5, z=0.30),
         "trigger_x_tolerance": 7.0,
         "trigger_y_tolerance": 145.0,
-        "spawn_configs": [
-            {
-                "name": "trashbag_01",
-                "blueprints": ["static.prop.ironplank"],
-                "transform": carla.Transform(
-                    carla.Location(x=16.00, y=231.30, z=0.20),
-                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
-                ),
-                "scale": None,
-            },
-            {
-                "name": "container_01",
-                "blueprints": ["static.prop.ironplank"],
-                "transform": carla.Transform(
-                    carla.Location(x=16.00, y=236.60, z=0.20),
-                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
-                ),
-                "scale": None,
-            },
-        ],
+
     },
     {
         "name": "poorroadtrigger2",
@@ -386,6 +367,41 @@ POORROAD_TRIGGER_CONFIG = (
         "trigger_x_tolerance": 7.0,
         "trigger_y_tolerance": 145.0,
         "spawn_configs": [],
+    },
+)
+
+POORROAD_SPAWNBOX_CONFIG = (
+    {
+        "name": "PoorRoadBox1",
+        "x_min": 46.70,
+        "x_max": 578.00,
+        "y_min": 237.50,
+        "y_max": 251.80,
+        "z": 0.0,
+    },
+    {
+        "name": "PoorRoadBox2",
+        "x_min": 46.70,
+        "x_max": 578.00,
+        "y_min": 136.80,
+        "y_max": 153.60,
+        "z": 0.0,
+    },
+    {
+        "name": "PoorRoadBox3",
+        "x_min": 46.70,
+        "x_max": 578.00,
+        "y_min": 237.50,
+        "y_max": 251.80,
+        "z": 0.0,
+    },
+    {
+        "name": "PoorRoadBox4",
+        "x_min": 46.70,
+        "x_max": 578.00,
+        "y_min": -25.30,
+        "y_max": -8.70,
+        "z": 0.0,
     },
 )
 

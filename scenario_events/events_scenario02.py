@@ -10,9 +10,9 @@ import time
 import carla
 
 try:
-    from events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config
+    from events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config, POORROAD_SPAWNBOX_CONFIG
 except ModuleNotFoundError:
-    from scenario_events.events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config
+    from scenario_events.events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config, POORROAD_SPAWNBOX_CONFIG
 
 try:
     from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes
@@ -31,9 +31,9 @@ SIM_STEP_S = 0.05
 run_in_singleFile_mode = True
 DEBUG_MODE = True
 
-TRIGGER_TRAFFIC = True
-TRIGGER_TRASH = True
-TRIGGER_SNAKE = True
+TRIGGER_TRAFFIC = False
+TRIGGER_TRASH = False
+TRIGGER_SNAKE = False
 TRIGGER_SMELL = True
 TRIGGER_POORROAD = True
 TRIGGER_DRIVERTRASH = True
@@ -291,36 +291,79 @@ class Scenario02Runner:
                 return trigger_config
         return None
 
-    def _spawn_poorroad_static_props(self, trigger_config):
-        if not trigger_config:
-            return False
-        bp_lib = self.world.get_blueprint_library()
-        spawned = 0
-        for spawn in trigger_config.get("spawn_configs", []):
-            transform = spawn.get("transform")
-            blueprint_ids = spawn.get("blueprints", [])
-            bp = None
-            for bid in blueprint_ids:
-                try:
-                    bp = bp_lib.find(bid)
-                except Exception:
-                    bp = None
-                if bp is not None:
-                    break
-            if bp is None:
-                matches = list(bp_lib.filter("static.prop.*"))
-                bp = matches[0] if matches else None
-            if bp is None:
-                print("[Scenario02] WARNUNG: Keine static props Blueprints gefunden fuer PoorRoad.")
-                continue
-            actor = self.world.try_spawn_actor(bp, transform)
-            if actor is None:
-                print(f"[Scenario02] WARNUNG: PoorRoad static prop spawn fehlgeschlagen blueprint={bp.id}")
-                continue
-            self._poorroad_actor_ids.append(actor.id)
-            spawned += 1
-            print(f"[Scenario02] PoorRoad static prop gespawnt id={actor.id} blueprint={bp.id}")
-        return spawned > 0
+    def _spawn_poorroad_static_props(self):
+        # if not trigger_config:
+        #     return False
+        print("Spawning random poorroad static props...")
+
+        blueprints_to_spawn = [
+            "static.prop.ironplank",
+            "static.prop.dirtdebris01",
+            "static.prop.dirtdebris02",
+            "static.prop.dirtdebris03"
+        ]
+
+        poorroad_spawned_actors = []
+        min_distance = 40.0
+        max_try_attempts = 10 # higher?
+
+        for selected_box in POORROAD_SPAWNBOX_CONFIG:
+            print(f"Starte Spawn-Vorgang für {selected_box['name']}...")
+
+            # WICHTIG: Wir tracken die Locations NUR FÜR DIESE BOX separat für den Abstand!
+            current_box_locations = []
+
+            box_spawn_pool = []
+            for bp_name in blueprints_to_spawn:
+                box_spawn_pool.extend([bp_name] * 4)
+
+            for bp_name in box_spawn_pool:
+                blueprint_list = self.world.get_blueprint_library().filter(bp_name)
+                if not blueprint_list:
+                    print(f"Blueprint {bp_name} nicht in CARLA gefunden. Überspringe.")
+                    continue
+                bp = blueprint_list[0]
+
+                spawned_successfully = False
+                attempts = 0
+
+                while not spawned_successfully and attempts < max_try_attempts:
+                    attempts += 1
+
+                    random_x = random.uniform(selected_box["x_min"], selected_box["x_max"])
+                    random_y = random.uniform(selected_box["y_min"], selected_box["y_max"])
+                    
+                    potential_location = carla.Location(x=random_x, y=random_y, z=0.01)
+
+                    too_close = False
+
+                    for existing_loc in current_box_locations:
+                        if potential_location.distance(existing_loc) < min_distance:
+                            too_close = True
+                            break
+
+                    if not too_close:
+                        random_rot = carla.Rotation(pitch=0.0, yaw=random.uniform(0.0, 360.0), roll=0.0)
+                        transform = carla.Transform(potential_location, random_rot)
+
+                        actor = self.world.try_spawn_actor(bp, transform)
+                        
+                        if actor is not None:
+                            poorroad_spawned_actors.append(actor)
+                            current_box_locations.append(potential_location)
+
+                            if hasattr(self, '_poorroad_actor_ids'):
+                                self._poorroad_actor_ids.append(actor.id)
+                            if hasattr(self, 'static_props'):
+                                self.static_props.append(actor)
+                            
+                            spawned_successfully = True
+                            print(f"[{selected_box['name']}] Erfolgreich gespawned: {bp_name} bei X: {random_x:.2f}, Y: {random_y:.2f}")
+
+                if not spawned_successfully:
+                    print(f"[{selected_box['name']}] Konnte keinen Platz für {bp_name} finden nach {max_try_attempts} Versuchen.")
+
+        print(f"Fertig! Insgesamt {len(poorroad_spawned_actors)} PoorRoad-Objekte platziert (Soll: 64).")
 
     def _destroy_poorroad_static_props(self):
         if not self._poorroad_actor_ids:
@@ -352,23 +395,22 @@ class Scenario02Runner:
         trigger_config = self._get_poorroad_trigger_for_location(hero_location)
         if trigger_config is None:
             return
+        
         trigger_name = trigger_config.get("name")
         if trigger_name == self._poorroad_active_trigger_name:
             return
+        
         if self._poorroad_active_trigger_name is None:
             self._poorroad_active_trigger_name = trigger_name
-            spawn_config = trigger_config if trigger_config.get("spawn_configs") else next(
-                (cfg for cfg in self._poorroad_trigger_configs if cfg.get("spawn_configs")),
-                None,
-            )
-            spawned = False
-            if spawn_config is not None:
-                spawned = self._spawn_poorroad_static_props(spawn_config)
+            
+            spawned = self._spawn_poorroad_static_props()
+
             if spawned:
-                print(f"[Scenario02] PoorRoad props bei erstem Trigger '{trigger_name}' gespawnt.")
+                print(f"[Scenario02] PoorRoad random Props erfolgreich in den Boxen über Trigger '{trigger_name}' gespawnt.")
             else:
-                print(f"[Scenario02] PoorRoad erster Trigger '{trigger_name}' erkannt, aber keine Props gespawnt.")
+                print(f"[Scenario02] PoorRoad Trigger '{trigger_name}' erkannt, aber Spawn fehlgeschlagen.")
             return
+        
         if self._poorroad_active_trigger_name is not None and trigger_name != self._poorroad_active_trigger_name:
             self._destroy_poorroad_static_props()
             self.poorroad_finished = True
