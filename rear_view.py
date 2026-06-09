@@ -110,7 +110,7 @@ def main():
     bound_z = 0.5 + hero.bounding_box.extent.z
 
     transform = carla.Transform(
-        carla.Location(x=-1.5 * bound_x, z=1.2 * bound_z),
+        carla.Location(x=-0.75 * bound_x, z=1.0 * bound_z),
         carla.Rotation(yaw=180)
     )
 
