@@ -99,10 +99,10 @@ run_in_singleFile_mode = True
 
 TRIGGER_REDLIGHT = True
 TRIGGER_TRAFFICJAM = True
-TRIGGER_BADGUY = False
+TRIGGER_BADGUY = True
 TRIGGER_SONG = True
-TRIGGER_CROSSPED = False
-TRIGGER_OCCUPY = False
+TRIGGER_CROSSPED = True
+TRIGGER_OCCUPY = True
 # For testing: when set to an integer index, the corresponding trafficjam trigger
 # will be considered triggered instantly. Use `None` to disable this override.
 # Example: 0 -> first trigger, 1 -> second trigger, etc.
