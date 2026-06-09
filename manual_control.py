@@ -105,8 +105,8 @@ os.environ["SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS"] = "1"
 os.environ["SDL_GAMECONTROLLER_ALLOW_BACKGROUND_EVENTS"] = "1"
 
 try:
-    import pygame.mixer
     import pygame
+    import pygame.mixer
     from pygame.locals import KMOD_CTRL
     from pygame.locals import KMOD_SHIFT
     from pygame.locals import K_0
@@ -218,14 +218,14 @@ WINDOW_BORDERLESS = True
 # Dashboard config (code-only, no terminal input required) => Modes: 'none', 'inside', 'basic', 'second_screen', 'overlapping'
 DASHBOARD_MODE = 'none'
 # Size used by basic + overlapping mode (ignored for second_screen => fullscreen)
-DASHBOARD_SIZE = (800, 450)
+DASHBOARD_SIZE = (600, 337)     # (800, 450)
 # Monitor index used by second_screen mode (0-based)
 DB_SCREEN_INDEX = 2
 
 CHOSEN_VEHICLE = 'vehicle.lincoln.mkz_2020'
 # https://carla.readthedocs.io/en/latest/catalogue_vehicles/
 
-# For debug start script with: 
+# For scenario specific debug start script with: 
 # --enable-break-warning
 # --enable-fuel-empty-warning
 BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
@@ -253,7 +253,7 @@ PROFILE_CONFIG = {
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'none',
+            'DASHBOARD_MODE': 'overlapping',
             'AUDIO_MODE': 'full',
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
@@ -851,6 +851,7 @@ class World(object):
             upscale_filter=self._sp_upscale,
             use_scene_final=USE_SCENE_FINAL
         )
+            
         self.camera_manager.transform_index = cam_pos_index
         self.camera_manager.set_sensor(cam_index, notify=False)
         actor_type = get_actor_display_name(self.player)
@@ -1750,7 +1751,8 @@ class WheelControl(object):
         btn_square = self.joy.get_button(1)     # []
         btn_triangle = self.joy.get_button(3)   # /\
         btn_L1 = self.joy.get_button(5)         # L1
-        btn_R1 = self.joy.get_button(4)        # R1
+        btn_R1 = self.joy.get_button(4)         # R1
+        btn_R2 = self.joy.get_button(6)         # R2
         # 7+8 => Left/Right stick (L3/R3)
         self._control.hand_brake = bool(btn_cross)
         #print('0:',self.shifter.get_button(1))
@@ -1784,6 +1786,17 @@ class WheelControl(object):
             if world.event_sync is not None:
                 world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
+
+
+        prev_R2 = getattr(self, "_prev_R2", False)
+        if btn_R2 and not prev_R2:
+            if self._autopilot_enabled:
+                world.player.set_autopilot(False)
+                world.restart()
+                world.player.set_autopilot(True)
+            else:
+                world.restart()
+        self._prev_R2 = btn_R2
 
         # --- ENGINE AUDIO (GAMEPAD) ---
         try:
@@ -2014,14 +2027,13 @@ class HUD(object):
                     surface = self._font_mono.render(item, True, (255, 255, 255))
                     display.blit(surface, (8, v_offset))
                 v_offset += 18
-        self._notifications.render(display)
+        if self._show_info:
+            self._notifications.render(display)
         self.help.render(display)
-
 
 # ==============================================================================
 # -- FadingText ----------------------------------------------------------------
 # ==============================================================================
-
 
 class FadingText(object):
     def __init__(self, font, dim, pos):
