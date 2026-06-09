@@ -17,7 +17,7 @@ SCENARIO_CONFIGS = {
         "description": "neutral (00)",
     },
     "scenario01": {
-        "map": "Town03_Opt",
+        "map": "Town05_Opt",
         "weather": carla.WeatherParameters.CloudySunset,
         "description": "anger",
     },
@@ -345,7 +345,7 @@ class SessionRunner:
             '--host', self.host,
             '--port', str(self.port),
             '--scenario-stop-file', stop_file,
-            '--profile', 'simulator4home'
+            '--profile', 'simulator'
         ]
         if scenario_name == 'scenario03':
             cmd.append('--enable-break-warning')
@@ -369,6 +369,23 @@ class SessionRunner:
             '--done-file', done_file,
         ]
         return subprocess.Popen(cmd)
+    
+    def _run_rear_view(self):
+        print("Starting rear_view.py...")
+        
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(current_dir, 'rear_view.py')
+
+        if not os.path.exists(script_path):
+            print(f"[Error] rear_view.py not available via: {script_path}")
+            return None
+
+        cmd = [
+            sys.executable,
+            script_path,
+        ]
+        
+        return subprocess.Popen(cmd, cwd=current_dir, env=os.environ)
 
     def _show_black_screen(self):
         try:
@@ -494,12 +511,19 @@ class SessionRunner:
         run_number = self._record_scenario_start(scenario_name, scenario_index)
         started_at_text = self.session_state['scenarios_log'][-1]['started_at']
 
+        rear_view_process = self._run_rear_view()
+
         manual_control_process = self._run_manual_control(scenario_name, stop_file)
         if self._black_screen_active:
             self._destroy_black_screen()
         events_process = self._run_events_scenario(scenario_name, done_file)
 
         if events_process is None:
+            try:
+                rear_view_process.terminate()
+            except Exception:
+                pass
+
             self._mark_scenario_skipped(
                 scenario_name,
                 run_number,
@@ -524,6 +548,14 @@ class SessionRunner:
             run_number,
             started_at_text,
         )
+        try:
+            if rear_view_process and rear_view_process.poll() is None:
+                print("Stopping rear_view.py...")
+                rear_view_process.terminate()
+                rear_view_process.wait(timeout=3)
+        except Exception as e:
+            print(f"[Warning] Could not terminate rear_view.py: {e}")
+
         if completed:
             self._show_black_screen()
             print(f"[SessionRunner] Scenario {scenario_index + 1} completed for {self.participant_id}, start survey. Enter to continue.")
