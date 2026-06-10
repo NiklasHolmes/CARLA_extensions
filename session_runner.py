@@ -9,6 +9,7 @@ from datetime import datetime
 import carla
 from common.window_positioning import get_pygame_window_hwnd, apply_borderless_style_windows
 
+use_profile = "simulator4home"
 # --- Scenario Configurations ---
 SCENARIO_CONFIGS = {
     "scenario00": {
@@ -345,7 +346,7 @@ class SessionRunner:
             '--host', self.host,
             '--port', str(self.port),
             '--scenario-stop-file', stop_file,
-            '--profile', 'simulator'
+            '--profile', use_profile,
         ]
         if scenario_name == 'scenario03':
             cmd.append('--enable-break-warning')
@@ -598,7 +599,13 @@ class SessionRunner:
 
             for i in range(start_index, len(scenario_order)):
                 scenario_name = scenario_order[i]
-                print(f"\n--- Running Scenario {i+1}/{len(scenario_order)}: {scenario_name} ---")
+                config = SCENARIO_CONFIGS.get(scenario_name)
+                if not config:
+                    print(f"[Error] No configuration found for scenario: {scenario_name}. Skipping setup.")
+                    return
+                description = config["description"]
+
+                print(f"\n--- Running Scenario {i+1}/{len(scenario_order)}: {scenario_name} ({description})---")
                 
                 # Set up the world for the current scenario
                 self._load_scenario_map_and_weather(scenario_name)
