@@ -349,6 +349,170 @@ TRASH_TRIGGER_CONFIG = (
                 ),
                 "scale": None,
             },
+            {
+                "name": "bin_01",
+                "blueprints": ["static.prop.bin"],
+                "transform": carla.Transform(
+                    carla.Location(x=35.10, y=233.90, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "bin_02",
+                "blueprints": ["static.prop.bin"],
+                "transform": carla.Transform(
+                    carla.Location(x=80.10, y=233.90, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "bin_03",
+                "blueprints": ["static.prop.bin"],
+                "transform": carla.Transform(
+                    carla.Location(x=68.30, y=127.20, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "bin_04",
+                "blueprints": ["static.prop.bin"],
+                "transform": carla.Transform(
+                    carla.Location(x=69.10, y=127.20, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "bin_05",
+                "blueprints": ["static.prop.bin"],
+                "transform": carla.Transform(
+                    carla.Location(x=69.80, y=127.20, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "bin_06",
+                "blueprints": ["static.prop.bin"],
+                "transform": carla.Transform(
+                    carla.Location(x=70.50, y=127.20, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            # --- static.prop.box03 ---
+            {
+                "name": "box03_01",
+                "blueprints": ["static.prop.box03"],
+                "transform": carla.Transform(
+                    carla.Location(x=21.10, y=127.60, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "box03_02",
+                "blueprints": ["static.prop.box03"],
+                "transform": carla.Transform(
+                    carla.Location(x=75.10, y=152.00, z=0.00),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "box03_03",
+                "blueprints": ["static.prop.box03"],
+                "transform": carla.Transform(
+                    carla.Location(x=119.60, y=154.70, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            # --- static.prop.trashbag (Neue Objekte) ---
+            {
+                "name": "trashbag_02",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=52.40, y=127.70, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_03",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=53.00, y=127.70, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_04",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=52.60, y=128.40, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_05",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=52.60, y=60.00, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_06",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=53.00, y=59.30, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_07",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=52.40, y=59.30, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_08",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=17.40, y=57.60, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_09",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=16.80, y=57.60, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
+            {
+                "name": "trashbag_10",
+                "blueprints": ["static.prop.trashbag"],
+                "transform": carla.Transform(
+                    carla.Location(x=17.00, y=58.30, z=0.20),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                "scale": None,
+            },
         ],
     },
 )
