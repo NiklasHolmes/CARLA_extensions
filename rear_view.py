@@ -14,7 +14,7 @@ import os
 # ==============================================================================
 REAR_VIEW_WIDTH = 1920
 REAR_VIEW_HEIGHT = 1080
-REAR_VIEW_SCREEN_PERCENTAGE = 0.3
+REAR_VIEW_SCREEN_PERCENTAGE = 0.6
 REAR_VIEW_FPS = 10
 REAR_VIEW_ROLE_NAME = "hero"
 
@@ -149,23 +149,47 @@ def main():
     print("Streaming…")
 
     running = True
-    while running:
-        clock.tick(60)
+    try:
+        while running:
+            clock.tick(60)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if not hero or not hero.is_alive:
+                print("[Rear View] Hero vehicle destroyed, stopping rear view.")
                 running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == K_ESCAPE:
+                break
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == K_ESCAPE:
+                        running = False
 
-        if surface is not None:
-            window.blit(surface, (0, 0))
+            if surface is not None:
+                window.blit(surface, (0, 0))
+            
+            pygame.display.flip()
 
-        pygame.display.flip()
+    except KeyboardInterrupt:
+        print("\n[Rear View] Abgebrochen durch Nutzer (KeyboardInterrupt)...")
 
-    rear_cam.stop()
-    pygame.quit()
+    finally:
+        # Dieser Block wird IMMER ausgeführt, egal was passiert
+        print("[Rear View] Aufräumen: Stoppe Kamera-Stream und lösche Sensor...")
+        try:
+            rear_cam.stop()
+        except Exception:
+            pass
+            
+        try:
+            if rear_cam.is_alive:
+                rear_cam.destroy()
+                print("[Rear View] Camera eliminated successfully.")
+        except Exception as e:
+            print(f"[Rear View] Error occurred while eliminating camera: {e}")
+
+        pygame.quit()
+        print("[Rear View] Cleanup done.")
 
 
 if __name__ == "__main__":
