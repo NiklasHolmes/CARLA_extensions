@@ -1,34 +1,373 @@
 {
   "current_session": {
-    "participant_id": "P_01_20260525_1907",
+    "participant_id": "P_09_20260610_1502",
     "scenario_order": [
       "scenario00",
-      "scenario03",
       "scenario06",
       "scenario02",
-      "scenario05",
       "scenario04",
-      "scenario01"
+      "scenario01",
+      "scenario05",
+      "scenario03"
     ],
     "current_state": {
-      "next_scenario_index": 1,
-      "current_scenario_name": null,
-      "current_run_number": null,
-      "current_status": "COMPLETED",
+      "next_scenario_index": 3,
+      "current_scenario_name": "scenario04",
+      "current_run_number": 1,
+      "current_status": "STARTED",
       "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
     },
     "scenarios_log": [
       {
-        "scenario_name": "events_scenario00.py",
+        "scenario_name": "events_scenario04.py",
         "run_number": 1,
-        "started_at": "2026-05-25 19:07:52",
-        "duration_seconds": 43.70508670806885,
-        "status": "COMPLETED",
+        "started_at": "2026-06-10 17:00:37",
+        "duration_seconds": null,
+        "status": "STARTED",
         "error_message": null,
-        "ended_at": "2026-05-25 19:08:35",
-        "scenario_index": 0
+        "ended_at": null,
+        "scenario_index": 3
       }
     ]
   },
-  "session_history": []
+  "session_history": [
+    {
+      "participant_id": "P_01_20260610_1027",
+      "scenario_order": [
+        "scenario00",
+        "scenario04",
+        "scenario06",
+        "scenario05",
+        "scenario03",
+        "scenario02",
+        "scenario01"
+      ],
+      "current_state": {
+        "next_scenario_index": 1,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario00.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 10:27:35",
+          "duration_seconds": 184.46187615394592,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 10:30:39",
+          "scenario_index": 0
+        }
+      ]
+    },
+    {
+      "participant_id": "P_02_20260610_1036",
+      "scenario_order": [
+        "scenario00",
+        "scenario01",
+        "scenario03",
+        "scenario05",
+        "scenario06",
+        "scenario04",
+        "scenario02"
+      ],
+      "current_state": {
+        "next_scenario_index": 2,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario00.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 10:36:23",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 0
+        },
+        {
+          "scenario_name": "events_scenario00.py",
+          "run_number": 2,
+          "started_at": "2026-06-10 10:37:20",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 0
+        },
+        {
+          "scenario_name": "events_scenario01.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 10:40:56",
+          "duration_seconds": 501.5689628124237,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 10:49:17",
+          "scenario_index": 1
+        }
+      ]
+    },
+    {
+      "participant_id": "P_03_20260610_1053",
+      "scenario_order": [
+        "scenario00",
+        "scenario06",
+        "scenario03",
+        "scenario04",
+        "scenario03",
+        "scenario05",
+        "scenario02"
+      ],
+      "current_state": {
+        "next_scenario_index": 3,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario01.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 10:54:01",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 2
+        },
+        {
+          "scenario_name": "events_scenario03.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 10:55:24",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 2
+        },
+        {
+          "scenario_name": "events_scenario03.py",
+          "run_number": 2,
+          "started_at": "2026-06-10 10:56:52",
+          "duration_seconds": 817.2899420261383,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 11:10:29",
+          "scenario_index": 2
+        }
+      ]
+    },
+    {
+      "participant_id": "P_04_20260610_1112",
+      "scenario_order": [
+        "scenario00",
+        "scenario01",
+        "scenario05",
+        "scenario05",
+        "scenario02",
+        "scenario04",
+        "scenario03"
+      ],
+      "current_state": {
+        "next_scenario_index": 4,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario06.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:12:29",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 3
+        },
+        {
+          "scenario_name": "events_scenario05.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:17:56",
+          "duration_seconds": 225.11201000213623,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 11:21:41",
+          "scenario_index": 3
+        }
+      ]
+    },
+    {
+      "participant_id": "P_05_20260610_1122",
+      "scenario_order": [
+        "scenario00",
+        "scenario02",
+        "scenario05",
+        "scenario04",
+        "scenario06",
+        "scenario03",
+        "scenario06"
+      ],
+      "current_state": {
+        "next_scenario_index": 5,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario01.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:22:37",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 4
+        },
+        {
+          "scenario_name": "events_scenario06.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:25:47",
+          "duration_seconds": 235.53268241882324,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 11:29:42",
+          "scenario_index": 4
+        }
+      ]
+    },
+    {
+      "participant_id": "P_06_20260610_1130",
+      "scenario_order": [
+        "scenario00",
+        "scenario05",
+        "scenario04",
+        "scenario01",
+        "scenario03",
+        "scenario04",
+        "scenario06"
+      ],
+      "current_state": {
+        "next_scenario_index": 6,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario02.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:31:00",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 5
+        },
+        {
+          "scenario_name": "events_scenario04.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:34:55",
+          "duration_seconds": 264.5721712112427,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 11:39:19",
+          "scenario_index": 5
+        }
+      ]
+    },
+    {
+      "participant_id": "P_07_20260610_1139",
+      "scenario_order": [
+        "scenario00",
+        "scenario05",
+        "scenario04",
+        "scenario01",
+        "scenario06",
+        "scenario03",
+        "scenario02"
+      ],
+      "current_state": {
+        "next_scenario_index": 7,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario02.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 11:40:00",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 6
+        },
+        {
+          "scenario_name": "events_scenario02.py",
+          "run_number": 2,
+          "started_at": "2026-06-10 11:42:45",
+          "duration_seconds": 580.3927907943726,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 11:52:25",
+          "scenario_index": 6
+        }
+      ]
+    },
+    {
+      "participant_id": "P_08_20260610_1201",
+      "scenario_order": [
+        "scenario00",
+        "scenario04",
+        "scenario05",
+        "scenario02",
+        "scenario06",
+        "scenario03",
+        "scenario03"
+      ],
+      "current_state": {
+        "next_scenario_index": 7,
+        "current_scenario_name": null,
+        "current_run_number": null,
+        "current_status": "COMPLETED",
+        "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+      },
+      "scenarios_log": [
+        {
+          "scenario_name": "events_scenario01.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 12:01:14",
+          "duration_seconds": null,
+          "status": "STARTED",
+          "error_message": null,
+          "ended_at": null,
+          "scenario_index": 6
+        },
+        {
+          "scenario_name": "events_scenario03.py",
+          "run_number": 1,
+          "started_at": "2026-06-10 12:02:02",
+          "duration_seconds": 159.86840105056763,
+          "status": "COMPLETED",
+          "error_message": null,
+          "ended_at": "2026-06-10 12:04:41",
+          "scenario_index": 6
+        }
+      ]
+    }
+  ]
 }
