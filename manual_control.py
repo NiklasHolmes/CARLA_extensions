@@ -1639,7 +1639,7 @@ class WheelControl(object):
     - Buttons
     - 0             :   Cross       :   hand-brake
     - 1             :   Square      :   Horn
-    - 2             :   Circle      :   togggle reverse
+    - 2             :   Circle      :   toggle reverse
     - 3             :   Triangle    :
     - 4             :   Shift Up    :   blinker right
     - 5             :   Shift Down  :   blinker left
@@ -1788,7 +1788,6 @@ class WheelControl(object):
                 world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
 
-
         prev_R2 = getattr(self, "_prev_R2", False)
         if btn_R2 and not prev_R2:
             if self._autopilot_enabled:
@@ -1798,6 +1797,33 @@ class WheelControl(object):
             else:
                 world.restart()
         self._prev_R2 = btn_R2
+
+        prev_cross = getattr(self, "_prev_cross", False)
+        if btn_cross and not prev_cross:
+            front_mask = (
+                carla.VehicleLightState.Position |
+                carla.VehicleLightState.LowBeam |
+                carla.VehicleLightState.Fog
+            )
+            if (current_lights & front_mask) == front_mask:
+                current_lights &= ~front_mask
+                world.hud.notification("Front lights off")
+            else:
+                current_lights |= front_mask
+                world.hud.notification("Front lights")
+        self._prev_cross = btn_cross
+
+        now = time.time()
+        current_lights, self._left_blinker_until, self._right_blinker_until = _apply_blinker_auto_off(
+            current_lights,
+            self._left_blinker_until,
+            self._right_blinker_until,
+            now,
+        )
+        current_lights = _apply_control_vehicle_lights(current_lights, self._control)
+        if current_lights != self._lights:
+            self._lights = current_lights
+            world.player.set_light_state(carla.VehicleLightState(self._lights))
 
         # --- ENGINE AUDIO (GAMEPAD) ---
         try:
