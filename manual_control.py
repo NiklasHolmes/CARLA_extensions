@@ -818,6 +818,12 @@ class World(object):
                 spawn_point.location.z += 2.0
                 spawn_point.rotation.roll = 0.0
                 spawn_point.rotation.pitch = 0.0
+            # Stop external dashboard process before destroying the old player
+            try:
+                # if dashboard is an external process, stop it so it doesn't hold stale actor refs
+                _stop_dashboard_process()
+            except Exception:
+                pass
             self.destroy()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
@@ -865,6 +871,27 @@ class World(object):
             self.world.tick()
         else:
             self.world.wait_for_tick()
+
+        # Recreate or restart dashboard after respawn depending on mode
+        try:
+            dashboard_mode = str(DASHBOARD_MODE).strip().lower()
+            if dashboard_mode == 'inside':
+                # recreate renderer bound to new world/player
+                if self.dashboard_renderer is not None:
+                    try:
+                        self.dashboard_renderer = DashboardRenderer(self.args.width, self.args.height, self)
+                        print("[Dashboard] Recreated inside DashboardRenderer after restart")
+                    except Exception as e:
+                        print(f"[Dashboard] WARNING: failed to recreate inside dashboard: {e}")
+            elif dashboard_mode != 'none':
+                # external process: start it again and pass main window title if available
+                try:
+                    _start_dashboard_process(self.args.host, self.args.port, main_window_title=getattr(self.args, 'main_window_title', None))
+                    print("[Dashboard] External dashboard restarted after world.restart()")
+                except Exception as e:
+                    print(f"[Dashboard] WARNING: failed to start external dashboard after restart: {e}")
+        except Exception:
+            pass
 
     # def next_weather(self, reverse=False):
     #     self._weather_index += -1 if reverse else 1
@@ -1144,9 +1171,11 @@ class KeyboardControl(object):
                         index_ctrl = 9
                     world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
                 elif event.key == K_r and not (pygame.key.get_mods() & KMOD_CTRL):
-                    world.camera_manager.toggle_recording()
-                    if world.camera_manager.recording:
-                        world.capture_full_frame_once = True
+                    #world.camera_manager.toggle_recording()
+                    #if world.camera_manager.recording:
+                        #world.capture_full_frame_once = True
+                    print("Recording deactivated!")
+                    return
                 elif event.key == K_r and (pygame.key.get_mods() & KMOD_CTRL):
                     if (world.recording_enabled):
                         client.stop_recorder()
@@ -2720,6 +2749,8 @@ def game_loop(args):
                   "experience some issues with the traffic simulation")
 
         main_window_title = f"CARLA Manual Control [{args.input}] (joy #0)"
+        # expose main window title to other modules (used by dashboard overlapping)
+        args.main_window_title = main_window_title
         pygame.display.set_caption(main_window_title)
         window_flags = pygame.HWSURFACE | pygame.DOUBLEBUF
         if WINDOW_BORDERLESS:
