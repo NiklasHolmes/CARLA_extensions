@@ -48,6 +48,7 @@ class CarDashboard(threading.Thread):
         overlap_margin=DASHBOARD_DEFAULT_OVERLAP_MARGIN,
         always_on_top=False,
         no_focus=False,
+        sync_port: int = 39841,
     ):
         """Initialize dashboard in separate thread.
         
@@ -130,6 +131,11 @@ class CarDashboard(threading.Thread):
         self._blink_timer = 0.0
         self._blink_phase_on = True
         self._warning_font = None
+        # UDP sync port for receiving EventSync commands
+        try:
+            self.sync_port = int(sync_port)
+        except Exception:
+            self.sync_port = 39841
 
     def _resolve_display_index(self, requested_index, num_displays):
         """Resolve requested monitor index with support for 0-based and common 1-based input."""
@@ -154,7 +160,7 @@ class CarDashboard(threading.Thread):
         """Receive EventSync commands via localhost UDP."""
         try:
             self._sync_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self._sync_socket.bind(("127.0.0.1", 39841))
+            self._sync_socket.bind(("127.0.0.1", self.sync_port))
             self._sync_socket.setblocking(False)
         except Exception as e:
             self._sync_socket = None
@@ -570,6 +576,9 @@ if __name__ == '__main__':
         '-p', '--port', metavar='P', default=2000, type=int,
         help='TCP port to listen to (default: 2000)')
     argparser.add_argument(
+        '--sync-port', metavar='S', default=39841, type=int,
+        help='UDP port to listen for EventSync commands (default: 39841)')
+    argparser.add_argument(
         '--offline', action='store_true',
         help='start dashboard without CARLA server connection')
     argparser.add_argument(
@@ -652,6 +661,7 @@ if __name__ == '__main__':
             overlap_margin=overlap_margin,
             always_on_top=args.always_on_top,
             no_focus=args.no_focus,
+            sync_port=args.sync_port,
         )
         nonlocal_dashboard.start()
         if args.mode == 'second_screen':

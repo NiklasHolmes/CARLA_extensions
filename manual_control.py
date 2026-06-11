@@ -300,7 +300,7 @@ PROFILE_CONFIG = {
         'cli_defaults': {
             'res': '960x540',
             'sp': 0.7,
-            'input': 'keyboard',
+            'input': 'gamepad',
             'rolename': 'supervisor',
         },
         'code_overrides': {
@@ -387,8 +387,8 @@ def _audio_quit():
         audio_manager.quit()
         audio_manager = None
 
-def _start_dashboard_process(host: str, port: int, main_window_title: Optional[str] = None):
-    """Start dashboard in a separate process to avoid pygame display conflicts."""
+def _start_dashboard_process(host: str, port: int, main_window_title: Optional[str] = None, sync_port: Optional[int] = None):
+    """ Start dashboard in a separate process to avoid pygame display conflicts. """
     global dashboard_process
     try:
         if dashboard_process is not None and dashboard_process.poll() is None:
@@ -417,6 +417,11 @@ def _start_dashboard_process(host: str, port: int, main_window_title: Optional[s
         elif mode == 'overlapping':
             if main_window_title:
                 cmd.extend(['--main-window-title', main_window_title])
+
+        # Pass sync port if provided so multiple manual_control instances can use
+        # different UDP ports for dashboard sync (blinkers, warnings, ...)
+        if sync_port is not None:
+            cmd.extend(['--sync-port', str(int(sync_port))])
 
         dashboard_process = subprocess.Popen(cmd, cwd=script_dir)
         print(f"[Dashboard] External process started (mode={mode}, size={size_w}x{size_h})")
@@ -886,7 +891,9 @@ class World(object):
             elif dashboard_mode != 'none':
                 # external process: start it again and pass main window title if available
                 try:
-                    _start_dashboard_process(self.args.host, self.args.port, main_window_title=getattr(self.args, 'main_window_title', None))
+                    # choose UDP sync port based on role unless explicitly provided via args
+                    sync_port = getattr(self.args, 'sync_port', None) or (39841 if str(getattr(self.args, 'rolename', '')).strip().lower() == 'hero' else 39842)
+                    _start_dashboard_process(self.args.host, self.args.port, main_window_title=getattr(self.args, 'main_window_title', None), sync_port=sync_port)
                     print("[Dashboard] External dashboard restarted after world.restart()")
                 except Exception as e:
                     print(f"[Dashboard] WARNING: failed to start external dashboard after restart: {e}")
@@ -1353,6 +1360,7 @@ class KeyboardControl(object):
                 next_brake = min(self._control.brake + 0.2, 1)
                 current_braking = next_brake > 0.1
                 if audio_manager is not None and not self._prev_brake and current_braking:
+                    print(f"Playing brake sound with strength {current_braking} at speed {speed_kmh} km/h")
                     audio_manager.play_brake(brake_strength=next_brake, speed_kmh=speed_kmh)
                 self._prev_brake = current_braking
                 brake_factor = _get_break_warning_brake_factor()
@@ -1666,7 +1674,7 @@ class WheelControl(object):
     - 3             :   Clutch
 
     - Buttons
-    - 0             :   Cross       :   hand-brake
+    - 0             :   Cross       :   hand-brake / light toggle
     - 1             :   Square      :   Horn
     - 2             :   Circle      :   toggle reverse
     - 3             :   Triangle    :
@@ -1788,7 +1796,7 @@ class WheelControl(object):
         btn_R1 = self.joy.get_button(4)         # R1
         btn_R2 = self.joy.get_button(6)         # R2
         # 7+8 => Left/Right stick (L3/R3)
-        self._control.hand_brake = bool(btn_cross)
+        # self._control.hand_brake = bool(btn_cross)
         #print('0:',self.shifter.get_button(1))
 
         if btn_circle and not getattr(self, "_prev_circle", False):
@@ -2788,14 +2796,18 @@ def game_loop(args):
         
         # Initialize dashboard based on DASHBOARD_MODE
         dashboard_mode = str(DASHBOARD_MODE).strip().lower()
+        # choose UDP sync port based on role unless explicitly provided via args
+        sync_port = getattr(args, 'sync_port', None) or (39841 if str(getattr(args, 'rolename', '')).strip().lower() == 'hero' else 39842)
         if dashboard_mode == 'none':
             pass
         elif dashboard_mode == 'inside':
             world.dashboard_renderer = DashboardRenderer(args.width, args.height, world)
             print(f"[Dashboard] Inside dashboard enabled ({args.width}x{args.height})")
         else:
-            _start_dashboard_process(args.host, args.port, main_window_title=main_window_title)
-        event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
+            # choose UDP sync port based on role unless explicitly provided via args
+            sync_port = getattr(args, 'sync_port', None) or (39841 if str(getattr(args, 'rolename', '')).strip().lower() == 'hero' else 39842)
+            _start_dashboard_process(args.host, args.port, main_window_title=main_window_title, sync_port=sync_port)
+        event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0, dashboard_port=sync_port)
         world.event_sync = event_sync
         print(args.input)
         if args.input == 'gamepad':
