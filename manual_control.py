@@ -280,15 +280,15 @@ PROFILE_CONFIG = {
     },
     'simulator4home': {
         'cli_defaults': {
-            'res': '3840x1080',
-            #'res': '960x540',
+            #'res': '3840x1080',
+            'res': '960x540',
             'sp': 0.8,
             'input': 'keyboard',
             'rolename': 'hero',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'overlapping',
+            'DASHBOARD_MODE': 'none',
             'AUDIO_MODE': 'full',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
