@@ -25,6 +25,7 @@ except ModuleNotFoundError:
         build_trigger_box_configs,
         draw_trigger_boxes,
     )
+    
 try:
     from events_scenario04_static_props import STATIC_PROP_SPAWNS, PEDESTRIAN_START_LOCATIONS, CATSITTING_TRIGGER_CONFIGS
 except ModuleNotFoundError:
@@ -32,11 +33,18 @@ except ModuleNotFoundError:
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
-# Constants
-START_TO_ANIMCAT_DELAY_SECONDS = 5.0
-ANIMCAT_TO_SONG_DELAY_SECONDS = 5.0
-SONG_TO_DANCINGM_DELAY_SECONDS = 5.0
-DANCINGM_TO_END_DELAY_SECONDS = 5.0
+DEBUG_MODE = False
+
+if DEBUG_MODE:
+    START_TO_ANIMCAT_DELAY_SECONDS = 2.0
+    ANIMCAT_TO_SONG_DELAY_SECONDS = 2.0
+    SONG_TO_DANCINGM_DELAY_SECONDS = 2.0
+    DANCINGM_TO_END_DELAY_SECONDS = 2.0
+else:  
+    START_TO_ANIMCAT_DELAY_SECONDS = 20.0
+    ANIMCAT_TO_SONG_DELAY_SECONDS = 20.0
+    SONG_TO_DANCINGM_DELAY_SECONDS = 20.0
+    DANCINGM_TO_END_DELAY_SECONDS = 20.0
 
 SONG_START_OFFSET_SECONDS = 30.0
 SONG_PLAY_DURATION_SECONDS = 30.0
@@ -50,8 +58,6 @@ PEDESTRIAN_COUNT = 15                        # 15? 24 = no pedestrian walks
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 ANIMCAT_SIT_SECONDS = 15.0
 SIM_STEP_S = 0.05
-
-DEBUG_MODE = False
 
 BLOCKED_VEHICLE_KEYWORDS = (
     "firetruck", "ambulance", "bus", "fusorosa", "carlacola", "truck", "european_hgv", "t2",
