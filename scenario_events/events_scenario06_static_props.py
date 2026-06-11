@@ -434,20 +434,20 @@ HIGHPED_BARRIER_CONFIGS = (
         "trigger_y_tolerance": 5.0,
         "spawn_configs": [
             {
-                "name": "highped_barrier_2_firetruck_01",
+                "name": "highped_barrier_1_firetruck_03",
                 "blueprints": ["vehicle.carlamotors.firetruck"],
                 "transform": carla.Transform(
-                    carla.Location(x=37.80, y=-179.40, z=2.00),
-                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                    carla.Location(x=25.10, y=182.20, z=2.00),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
                 ),
                 "scale": None,
             },
             {
-                "name": "highped_barrier_2_firetruck_02",
+                "name": "highped_barrier_1_firetruck_04",
                 "blueprints": ["vehicle.carlamotors.firetruck"],
                 "transform": carla.Transform(
-                    carla.Location(x=29.30, y=-182.80, z=2.00),
-                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                    carla.Location(x=33.60, y=185.60, z=2.00),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
                 ),
                 "scale": None,
             },
@@ -460,7 +460,7 @@ HIGHPED_BARRIER_CONFIGS = (
         "trigger_y_tolerance": 5.0,
         "spawn_configs": [
             {
-                "name": "highped_barrier_1_firetruck_01",
+                "name": "highped_barrier_1_firetruck_03",
                 "blueprints": ["vehicle.carlamotors.firetruck"],
                 "transform": carla.Transform(
                     carla.Location(x=25.10, y=182.20, z=2.00),
@@ -469,7 +469,7 @@ HIGHPED_BARRIER_CONFIGS = (
                 "scale": None,
             },
             {
-                "name": "highped_barrier_1_firetruck_02",
+                "name": "highped_barrier_1_firetruck_04",
                 "blueprints": ["vehicle.carlamotors.firetruck"],
                 "transform": carla.Transform(
                     carla.Location(x=33.60, y=185.60, z=2.00),
@@ -479,7 +479,127 @@ HIGHPED_BARRIER_CONFIGS = (
             },
         ],
     },
+    {
+        "name": "highpedBarrierTrigger3",
+        "trigger_location": carla.Location(x=200.400, y=3.5, z=0.4),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "spawn_configs": [
+            # {
+            #     "name": "highped_barrier_1_firetruck_01",
+            #     "blueprints": ["vehicle.carlamotors.firetruck"],
+            #     "transform": carla.Transform(
+            #         carla.Location(x=25.10, y=182.20, z=2.00),
+            #         carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            #     ),
+            #     "scale": None,
+            # },
+            # {
+            #     "name": "highped_barrier_1_firetruck_02",
+            #     "blueprints": ["vehicle.carlamotors.firetruck"],
+            #     "transform": carla.Transform(
+            #         carla.Location(x=33.60, y=185.60, z=2.00),
+            #         carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+            #     ),
+            #     "scale": None,
+            # },
+        ],
+    },
 )
+
+START_TEMP_BARRIER_CONFIGS = [
+    {
+        "name": "temp_start_barrier_01",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=41.50, y=84.60, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_start_barrier_02",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=41.50, y=88.00, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_start_barrier_03",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=41.50, y=91.50, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_start_barrier_04",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=41.50, y=94.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_start_barrier_05",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=20.70, y=84.60, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+        {
+        "name": "temp_start_barrier_06",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=20.70, y=88.00, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_start_barrier_07",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=20.70, y=91.50, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_start_barrier_08",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=20.70, y=94.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    # FIRE TRUCKS:
+    {
+        "name": "highped_barrier_2_firetruck_01",
+        "blueprints": ["vehicle.carlamotors.firetruck"],
+        "transform": carla.Transform(
+            carla.Location(x=37.80, y=-179.40, z=2.00),
+            carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "highped_barrier_2_firetruck_02",
+        "blueprints": ["vehicle.carlamotors.firetruck"],
+        "transform": carla.Transform(
+            carla.Location(x=29.30, y=-182.80, z=2.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+]
 
 SANIMAL_ROUTE_CONFIGS = (
     {
@@ -713,5 +833,5 @@ def get_highped_barrier_spawns():
     return HIGHPED_BARRIER_CONFIGS
 
 def get_start_fence_spawns():
-    return START_FENCE_SPAWNS
+    return START_FENCE_SPAWNS + START_TEMP_BARRIER_CONFIGS
 
