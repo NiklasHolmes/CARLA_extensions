@@ -280,15 +280,15 @@ PROFILE_CONFIG = {
     },
     'simulator4home': {
         'cli_defaults': {
-            'res': '3840x1080',
-            #'res': '960x540',
+            #'res': '3840x1080',
+            'res': '960x540',
             'sp': 0.8,
             'input': 'keyboard',
             'rolename': 'hero',
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'overlapping',
+            'DASHBOARD_MODE': 'none',
             'AUDIO_MODE': 'full',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
@@ -300,7 +300,7 @@ PROFILE_CONFIG = {
         'cli_defaults': {
             'res': '960x540',
             'sp': 0.7,
-            'input': 'keyboard',
+            'input': 'gamepad',
             'rolename': 'supervisor',
         },
         'code_overrides': {
@@ -387,8 +387,8 @@ def _audio_quit():
         audio_manager.quit()
         audio_manager = None
 
-def _start_dashboard_process(host: str, port: int, main_window_title: Optional[str] = None):
-    """Start dashboard in a separate process to avoid pygame display conflicts."""
+def _start_dashboard_process(host: str, port: int, main_window_title: Optional[str] = None, sync_port: Optional[int] = None):
+    """ Start dashboard in a separate process to avoid pygame display conflicts. """
     global dashboard_process
     try:
         if dashboard_process is not None and dashboard_process.poll() is None:
@@ -417,6 +417,11 @@ def _start_dashboard_process(host: str, port: int, main_window_title: Optional[s
         elif mode == 'overlapping':
             if main_window_title:
                 cmd.extend(['--main-window-title', main_window_title])
+
+        # Pass sync port if provided so multiple manual_control instances can use
+        # different UDP ports for dashboard sync (blinkers, warnings, ...)
+        if sync_port is not None:
+            cmd.extend(['--sync-port', str(int(sync_port))])
 
         dashboard_process = subprocess.Popen(cmd, cwd=script_dir)
         print(f"[Dashboard] External process started (mode={mode}, size={size_w}x{size_h})")
@@ -818,6 +823,12 @@ class World(object):
                 spawn_point.location.z += 2.0
                 spawn_point.rotation.roll = 0.0
                 spawn_point.rotation.pitch = 0.0
+            # Stop external dashboard process before destroying the old player
+            try:
+                # if dashboard is an external process, stop it so it doesn't hold stale actor refs
+                _stop_dashboard_process()
+            except Exception:
+                pass
             self.destroy()
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.show_vehicle_telemetry = False
@@ -865,6 +876,29 @@ class World(object):
             self.world.tick()
         else:
             self.world.wait_for_tick()
+
+        # Recreate or restart dashboard after respawn depending on mode
+        try:
+            dashboard_mode = str(DASHBOARD_MODE).strip().lower()
+            if dashboard_mode == 'inside':
+                # recreate renderer bound to new world/player
+                if self.dashboard_renderer is not None:
+                    try:
+                        self.dashboard_renderer = DashboardRenderer(self.args.width, self.args.height, self)
+                        print("[Dashboard] Recreated inside DashboardRenderer after restart")
+                    except Exception as e:
+                        print(f"[Dashboard] WARNING: failed to recreate inside dashboard: {e}")
+            elif dashboard_mode != 'none':
+                # external process: start it again and pass main window title if available
+                try:
+                    # choose UDP sync port based on role unless explicitly provided via args
+                    sync_port = getattr(self.args, 'sync_port', None) or (39841 if str(getattr(self.args, 'rolename', '')).strip().lower() == 'hero' else 39842)
+                    _start_dashboard_process(self.args.host, self.args.port, main_window_title=getattr(self.args, 'main_window_title', None), sync_port=sync_port)
+                    print("[Dashboard] External dashboard restarted after world.restart()")
+                except Exception as e:
+                    print(f"[Dashboard] WARNING: failed to start external dashboard after restart: {e}")
+        except Exception:
+            pass
 
     # def next_weather(self, reverse=False):
     #     self._weather_index += -1 if reverse else 1
@@ -1144,9 +1178,11 @@ class KeyboardControl(object):
                         index_ctrl = 9
                     world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
                 elif event.key == K_r and not (pygame.key.get_mods() & KMOD_CTRL):
-                    world.camera_manager.toggle_recording()
-                    if world.camera_manager.recording:
-                        world.capture_full_frame_once = True
+                    #world.camera_manager.toggle_recording()
+                    #if world.camera_manager.recording:
+                        #world.capture_full_frame_once = True
+                    print("Recording deactivated!")
+                    return
                 elif event.key == K_r and (pygame.key.get_mods() & KMOD_CTRL):
                     if (world.recording_enabled):
                         client.stop_recorder()
@@ -1324,6 +1360,7 @@ class KeyboardControl(object):
                 next_brake = min(self._control.brake + 0.2, 1)
                 current_braking = next_brake > 0.1
                 if audio_manager is not None and not self._prev_brake and current_braking:
+                    print(f"Playing brake sound with strength {current_braking} at speed {speed_kmh} km/h")
                     audio_manager.play_brake(brake_strength=next_brake, speed_kmh=speed_kmh)
                 self._prev_brake = current_braking
                 brake_factor = _get_break_warning_brake_factor()
@@ -1637,9 +1674,9 @@ class WheelControl(object):
     - 3             :   Clutch
 
     - Buttons
-    - 0             :   Cross       :   hand-brake
+    - 0             :   Cross       :   hand-brake / light toggle
     - 1             :   Square      :   Horn
-    - 2             :   Circle      :   togggle reverse
+    - 2             :   Circle      :   toggle reverse
     - 3             :   Triangle    :
     - 4             :   Shift Up    :   blinker right
     - 5             :   Shift Down  :   blinker left
@@ -1674,6 +1711,9 @@ class WheelControl(object):
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
         self._prev_brake = False
+        self._lights = carla.VehicleLightState.NONE
+        self._left_blinker_until = 0.0
+        self._right_blinker_until = 0.0
 
         pygame.joystick.init()
         count = pygame.joystick.get_count()
@@ -1682,7 +1722,6 @@ class WheelControl(object):
             raise RuntimeError("No game controller detected. Plug in a controller or use --input keyboard.")
         if joystick_id < 0 or joystick_id >= count:
             raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
-
 
         self.joy = None
         self.shifter = None
@@ -1697,7 +1736,8 @@ class WheelControl(object):
                     self.shifter.init()
         if self.shifter == None or self.joy == None:
             raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
-
+        
+        world.player.set_light_state(self._lights)
         world.player.set_autopilot(self._autopilot_enabled)
         world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
 
@@ -1706,7 +1746,8 @@ class WheelControl(object):
 
     def parse_events(self, client, world, clock, sync_mode):
         import pygame
-
+        current_lights = self._lights
+        
         # pump events to update joystick state (also if window not focused)
         pygame.event.pump()
 
@@ -1755,7 +1796,7 @@ class WheelControl(object):
         btn_R1 = self.joy.get_button(4)         # R1
         btn_R2 = self.joy.get_button(6)         # R2
         # 7+8 => Left/Right stick (L3/R3)
-        self._control.hand_brake = bool(btn_cross)
+        # self._control.hand_brake = bool(btn_cross)
         #print('0:',self.shifter.get_button(1))
 
         if btn_circle and not getattr(self, "_prev_circle", False):
@@ -1788,7 +1829,6 @@ class WheelControl(object):
                 world.event_sync.trigger_blinker_right()
         self._prev_R1 = btn_R1
 
-
         prev_R2 = getattr(self, "_prev_R2", False)
         if btn_R2 and not prev_R2:
             if self._autopilot_enabled:
@@ -1798,6 +1838,33 @@ class WheelControl(object):
             else:
                 world.restart()
         self._prev_R2 = btn_R2
+
+        prev_cross = getattr(self, "_prev_cross", False)
+        if btn_cross and not prev_cross:
+            front_mask = (
+                carla.VehicleLightState.Position |
+                carla.VehicleLightState.LowBeam |
+                carla.VehicleLightState.Fog
+            )
+            if (current_lights & front_mask) == front_mask:
+                current_lights &= ~front_mask
+                world.hud.notification("Front lights off")
+            else:
+                current_lights |= front_mask
+                world.hud.notification("Front lights")
+        self._prev_cross = btn_cross
+
+        now = time.time()
+        current_lights, self._left_blinker_until, self._right_blinker_until = _apply_blinker_auto_off(
+            current_lights,
+            self._left_blinker_until,
+            self._right_blinker_until,
+            now,
+        )
+        current_lights = _apply_control_vehicle_lights(current_lights, self._control)
+        if current_lights != self._lights:
+            self._lights = current_lights
+            world.player.set_light_state(carla.VehicleLightState(self._lights))
 
         # --- ENGINE AUDIO (GAMEPAD) ---
         try:
@@ -2690,6 +2757,8 @@ def game_loop(args):
                   "experience some issues with the traffic simulation")
 
         main_window_title = f"CARLA Manual Control [{args.input}] (joy #0)"
+        # expose main window title to other modules (used by dashboard overlapping)
+        args.main_window_title = main_window_title
         pygame.display.set_caption(main_window_title)
         window_flags = pygame.HWSURFACE | pygame.DOUBLEBUF
         if WINDOW_BORDERLESS:
@@ -2727,14 +2796,18 @@ def game_loop(args):
         
         # Initialize dashboard based on DASHBOARD_MODE
         dashboard_mode = str(DASHBOARD_MODE).strip().lower()
+        # choose UDP sync port based on role unless explicitly provided via args
+        sync_port = getattr(args, 'sync_port', None) or (39841 if str(getattr(args, 'rolename', '')).strip().lower() == 'hero' else 39842)
         if dashboard_mode == 'none':
             pass
         elif dashboard_mode == 'inside':
             world.dashboard_renderer = DashboardRenderer(args.width, args.height, world)
             print(f"[Dashboard] Inside dashboard enabled ({args.width}x{args.height})")
         else:
-            _start_dashboard_process(args.host, args.port, main_window_title=main_window_title)
-        event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0)
+            # choose UDP sync port based on role unless explicitly provided via args
+            sync_port = getattr(args, 'sync_port', None) or (39841 if str(getattr(args, 'rolename', '')).strip().lower() == 'hero' else 39842)
+            _start_dashboard_process(args.host, args.port, main_window_title=main_window_title, sync_port=sync_port)
+        event_sync = EventSync(audio_manager=audio_manager, default_blink_duration=4.0, dashboard_port=sync_port)
         world.event_sync = event_sync
         print(args.input)
         if args.input == 'gamepad':

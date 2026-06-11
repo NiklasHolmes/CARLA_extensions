@@ -48,8 +48,8 @@ PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
 PEDESTRIAN_SPAWN_LOCATION = carla.Location(x=216.3, y=4.9, z=0.35)
 PEDESTRIAN_TARGET_LOCATION = carla.Location(x=306.7, y=4.9, z=0.35)
 PEDESTRIAN_MAX_SPEED = 2.5
-PEDESTRIAN_COUNT = 5
-PEDESTRIAN_WAIT_TIMEOUT_S = 40.0
+PEDESTRIAN_COUNT = 10
+PEDESTRIAN_WAIT_TIMEOUT_S = 120.0
 PEDESTRIAN_ARRIVE_THRESH = 1.0
 SIM_STEP_S = 0.05
 
@@ -160,6 +160,7 @@ class Scenario00Runner:
             volume=0.85,
             channel_index=6,
         )
+        self._free_driving_finished = False
         self._scenario_done = False
         self._cars_phase_done = False
         self._pedestrians_phase_done = False
@@ -521,9 +522,27 @@ class Scenario00Runner:
 
     def _should_start_song(self, sim_time):
         return self._pedestrians_phase_done and not self._song_started and (sim_time - self._pedestrian_spawn_time) >= PED_TO_SONG_DELAY_SECONDS
-
-    def _should_end_scenario(self, sim_time):
-        return self._song_finished and self._song_finish_time is not None and (sim_time - self._song_finish_time) >= SONG_TO_END_DELAY_SECONDS
+    
+    def _should_start_free_driving(self):
+        return self._song_finished and not self._free_driving_finished
+    
+    def _should_end_scenario(self):
+        return self._free_driving_finished
+    
+    def _update_free_driving(self):
+        if self._free_driving_finished:
+            return
+        print("[Scenario00] start_free_driving()")
+        while True:
+            try:
+                user_input = input("Press J + Enter to continue: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                print("[Scenario00] Free driving interrupted, waiting for J + Enter...")
+                continue
+            if user_input == "j":
+                break
+            print("Please press J and Enter to continue.")
+        self._free_driving_finished = True
 
     def run(self):
         print("[Scenario00] Running...")
@@ -573,7 +592,10 @@ class Scenario00Runner:
 
                     self._update_song(sim_time)
 
-                    if self._should_end_scenario(sim_time):
+                    if self._should_start_free_driving():
+                        self._update_free_driving()
+
+                    if self._should_end_scenario():
                         self._scenario_done = True
 
                     if self._scenario_done:

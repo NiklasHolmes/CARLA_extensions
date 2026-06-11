@@ -5,6 +5,9 @@ import os
 import sys
 import time
 import random
+import pygame
+import yaml
+
 from datetime import datetime
 import carla
 from common.window_positioning import get_pygame_window_hwnd, apply_borderless_style_windows
@@ -388,7 +391,7 @@ class SessionRunner:
         
         return subprocess.Popen(cmd, cwd=current_dir, env=os.environ)
 
-    def _show_black_screen(self):
+    def _show_black_screen2(self):
         try:
             import pygame
         except Exception:
@@ -408,6 +411,71 @@ class SessionRunner:
             self._black_screen_pygame = pygame
             self._black_screen_active = True
             print("[SessionRunner] Black screen displayed fullscreen.")
+            return
+        finally:
+            pass
+        
+    def _show_black_screen(self):
+        try:
+            import pygame
+        except Exception:
+            print("[SessionRunner] pygame not available for black screen; continuing without pause.")
+            return
+        
+        try:
+            from screeninfo import get_monitors
+        except Exception:
+            get_monitors = None
+
+        try:
+            with open("config.yaml", "r") as f:
+                cfg = yaml.load(f, Loader=yaml.FullLoader)
+            sim_display_name = cfg["monitor"]["simulator"]  # e.g. "\\\\.\\DISPLAY1"
+        except Exception as e:
+            print(f"[SessionRunner] Could not load monitor.simulator from config.yaml: {e}")
+            sim_display_name = None
+
+        pygame.init()
+        try:
+            target_x = target_y = 0
+            target_w = target_h = 0
+            monitor_index = 0
+            found = False
+
+            if sim_display_name and get_monitors is not None:
+                for i, m in enumerate(get_monitors()):
+                    if getattr(m, "name", None) == sim_display_name:
+                        target_x = m.x
+                        target_y = m.y
+                        target_w = m.width
+                        target_h = m.height
+                        monitor_index = i
+                        found = True
+                        break
+
+            if not found:
+                print("[SessionRunner] Target monitor not found via screeninfo; falling back to default fullscreen.")
+                screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN | pygame.DOUBLEBUF)
+            else:
+                os.environ['SDL_VIDEO_WINDOW_POS'] = f"{target_x},{target_y}"
+                screen = pygame.display.set_mode((target_w, target_h), pygame.FULLSCREEN | pygame.DOUBLEBUF, display=monitor_index)
+
+            pygame.display.set_caption("CARLA Session Runner - Black Screen")
+
+            try:
+                hwnd = get_pygame_window_hwnd(pygame)
+                if hwnd:
+                    apply_borderless_style_windows(hwnd)
+            except Exception:
+                pass
+
+            screen.fill((0, 0, 0))
+            pygame.display.flip()
+            pygame.mouse.set_visible(False)
+
+            self._black_screen_pygame = pygame
+            self._black_screen_active = True
+            print("[SessionRunner] Black screen displayed fullscreen on configured simulator monitor." if found else "[SessionRunner] Black screen displayed fullscreen (fallback).")
             return
         finally:
             pass
