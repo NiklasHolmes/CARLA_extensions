@@ -32,18 +32,30 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
 
-DEBUG_MODE = False
-run_in_singleFile_mode = False                       # attention! single file mode!
+DEBUG_MODE = True
+run_in_singleFile_mode = True                       # attention! single file mode!
 
-TRIGGER_TRAFFIC =True
-TRIGGER_WEATHER = True
-TRIGGER_HIGHPED = True
-TRIGGER_BUS = True
-TRIGGER_SONG = True
+TRIGGER_TRAFFIC = False
+TRIGGER_WEATHER = False
+TRIGGER_HIGHPED = False
+TRIGGER_BUS = False
+TRIGGER_SONG = False
 TRIGGER_SANIMAL = True
-TRIGGER_COW = True
-TRIGGER_FUELEMPTY = True
-TRIGGER_SANIMAL_IMMEDIATE = True
+TRIGGER_COW = False
+TRIGGER_FUELEMPTY = False
+TRIGGER_SANIMAL_IMMEDIATE = False
+
+if not DEBUG_MODE:
+    run_in_singleFile_mode = False  
+    TRIGGER_TRAFFIC = True
+    TRIGGER_WEATHER = True
+    TRIGGER_HIGHPED = True
+    TRIGGER_BUS = True
+    TRIGGER_SONG = True
+    TRIGGER_SANIMAL = True
+    TRIGGER_COW = False
+    TRIGGER_FUELEMPTY = True
+    TRIGGER_SANIMAL_IMMEDIATE = False
 
 START_TO_RAIN_DELAY = 10.0
 MID_RAIN_LEAD_IN_S = 5.0
@@ -105,7 +117,7 @@ SANIMAL_LIFETIME_S = 30.0
 
 SPAWN_CARS = len(CAR_START_LOCATIONS)
 BUS_DISP_DESTROY_DISTANCE = 80.0
-SANIMAL_CLEAR_RADIUS_M = 50.0
+SANIMAL_CLEAR_RADIUS_M = 30.0
 SIM_STEP_S = 0.05
 
 BLOCKED_VEHICLE_KEYWORDS = (
