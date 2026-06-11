@@ -443,24 +443,27 @@ class BrakeAudio(BaseAudioGenerator):
             self.min_interval = max(self.min_interval, self.brake_sound.get_length())
             self._sound_loaded = True
     
-    def _get_brake_profile(self, speed_kmh: float, brake_strength: float) -> Dict[str, float]:
+    def _get_brake_profile(self, brake_strength: float, speed_kmh: float) -> Dict[str, float]:
         """Return volume scale and max playback time for the brake sound."""
+        if speed_kmh <= 30.0:
+            return {"volume": 0.0, "duration": 0.0}
+        
         audible_start = 40.0
-        almost_silent_end = 60.0
+        almost_silent_end = 50.0
         full_speed = self.speed_full_kmh
 
         if speed_kmh <= audible_start:
             speed_comp = 0.0
         elif speed_kmh < almost_silent_end:
-            speed_comp = ((speed_kmh - audible_start) / (almost_silent_end - audible_start)) * 0.02
+            speed_comp = ((speed_kmh - audible_start) / (almost_silent_end - audible_start)) * 0.10
         else:
             clipped = min(speed_kmh, full_speed)
-            speed_comp = 0.02 + ((clipped - almost_silent_end) / max(1.0, (full_speed - almost_silent_end))) * 0.98
+            speed_comp = 0.10 + ((clipped - almost_silent_end) / max(1.0, (full_speed - almost_silent_end))) * 0.90
             speed_comp = min(max(speed_comp, 0.0), 1.0)
 
         brake_comp = min(max(brake_strength, 0.0), 1.0)
 
-        intensity = 0.75 * brake_comp + 0.25 * speed_comp
+        intensity = 0.25 * brake_comp + 0.75 * speed_comp
 
         min_volume = 0.03
         max_volume = self.volume_high
@@ -485,7 +488,7 @@ class BrakeAudio(BaseAudioGenerator):
         sound_len_ms = int(self.brake_sound.get_length() * 1000)
         speed_kmh = max(0.0, speed_kmh or 0.0)
         brake_strength = 1.0 if brake_strength is None else float(brake_strength)
-        profile = self._get_brake_profile(speed_kmh, brake_strength)
+        profile = self._get_brake_profile(brake_strength, speed_kmh)
         volume_scale = profile["volume"]
         duration_scale = profile["duration"]
         maxtime_ms = 0 if duration_scale >= 1.0 else max(80, int(sound_len_ms * duration_scale))
