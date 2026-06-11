@@ -1674,6 +1674,9 @@ class WheelControl(object):
         self._deadzone = deadzone
         self._steer_gain = steer_sensitivity
         self._prev_brake = False
+        self._lights = carla.VehicleLightState.NONE
+        self._left_blinker_until = 0.0
+        self._right_blinker_until = 0.0
 
         pygame.joystick.init()
         count = pygame.joystick.get_count()
@@ -1682,7 +1685,6 @@ class WheelControl(object):
             raise RuntimeError("No game controller detected. Plug in a controller or use --input keyboard.")
         if joystick_id < 0 or joystick_id >= count:
             raise RuntimeError(f"Requested joystick_id={joystick_id}, but only {count} controller(s) available.")
-
 
         self.joy = None
         self.shifter = None
@@ -1697,7 +1699,8 @@ class WheelControl(object):
                     self.shifter.init()
         if self.shifter == None or self.joy == None:
             raise RuntimeError("Need Wheel and Shifter") #TODO change in future with failsafe
-
+        
+        world.player.set_light_state(self._lights)
         world.player.set_autopilot(self._autopilot_enabled)
         world.hud.notification(f"Gamepad control on joystick #{joystick_id} active.")
 
@@ -1706,7 +1709,8 @@ class WheelControl(object):
 
     def parse_events(self, client, world, clock, sync_mode):
         import pygame
-
+        current_lights = self._lights
+        
         # pump events to update joystick state (also if window not focused)
         pygame.event.pump()
 
