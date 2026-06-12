@@ -6,10 +6,11 @@ import random
 import time
 import argparse
 import carla
+import threading
 try:
-    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
+    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint, force_green_light
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint, force_green_light
 from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
 from generate_audio import SongAudio
 
@@ -41,7 +42,10 @@ else:
 
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
+
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
+
 SPAWN_CARS = 15
 ENABLE_ROUTE_PEDESTRIANS = True
 PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
@@ -161,6 +165,7 @@ class Scenario00Runner:
             channel_index=6,
         )
         self._free_driving_finished = False
+        self._free_driving_waiter_started = False
         self._scenario_done = False
         self._cars_phase_done = False
         self._pedestrians_phase_done = False
@@ -280,11 +285,16 @@ class Scenario00Runner:
         )
 
     def _force_green_light(self, ego, sim_time):
-        if ego and ego.is_at_traffic_light():
-            tl = ego.get_traffic_light()
-            if tl:
-                tl.set_state(carla.TrafficLightState.Green)
-                tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
+        try:
+            self._force_green_light_request_time = force_green_light(
+                ego,
+                sim_time,
+                getattr(self, "_force_green_light_request_time", None),
+                TL_HOLD_ORIGINALLIGHT_SECONDS,
+                HERO_GREEN_LIGHT_HOLD_SECONDS,
+            )
+        except Exception:
+            pass
 
     def _spawn_pedestrians(self, ego_transform=None):
         walker_controller_bp = self.world.get_blueprint_library().find("controller.ai.walker")
@@ -532,17 +542,24 @@ class Scenario00Runner:
     def _update_free_driving(self):
         if self._free_driving_finished:
             return
-        print("[Scenario00] start_free_driving()")
-        while True:
-            try:
-                user_input = input("Press J + Enter to continue: ").strip().lower()
-            except (KeyboardInterrupt, EOFError):
-                print("[Scenario00] Free driving interrupted, waiting for J + Enter...")
-                continue
-            if user_input == "j":
-                break
-            print("Please press J and Enter to continue.")
-        self._free_driving_finished = True
+        # Start a background thread that blocks on stdin, so the main loop keeps ticking
+        if not getattr(self, "_free_driving_waiter_started", False):
+            print("[Scenario00] start_free_driving() - waiting for J+Enter in background thread")
+            def _wait_for_j():
+                while True:
+                    try:
+                        user_input = input("Press J + Enter to continue: ").strip().lower()
+                    except (KeyboardInterrupt, EOFError):
+                        print("[Scenario00] Free driving interrupted, waiting for J + Enter...")
+                        continue
+                    if user_input == "j":
+                        self._free_driving_finished = True
+                        break
+                    print("Please press J and Enter to continue.")
+
+            t = threading.Thread(target=_wait_for_j, daemon=True)
+            t.start()
+            self._free_driving_waiter_started = True
 
     def run(self):
         print("[Scenario00] Running...")
@@ -603,6 +620,7 @@ class Scenario00Runner:
                 
                 if ego:
                     self._force_green_light(ego, sim_time)
+                    
                 time.sleep(SIM_STEP_S)
         except KeyboardInterrupt:
             pass
