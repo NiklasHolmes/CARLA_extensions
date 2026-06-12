@@ -150,7 +150,7 @@ class Scenario04Runner:
             play_seconds=SONG_PLAY_DURATION_SECONDS,
             fade_in_ms=SONG_FADE_IN_MS,
             fade_out_ms=SONG_FADE_OUT_MS,
-            volume=0.85,
+            volume=0.75,
             channel_index=6,
         )
 
