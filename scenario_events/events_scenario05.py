@@ -17,6 +17,7 @@ try:
         is_transform_hidden_from_hero,
         pick_hidden_navigation_location_near,
         pick_navigation_location,
+        force_green_light,
     )
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import (
@@ -26,6 +27,7 @@ except ModuleNotFoundError:
         is_transform_hidden_from_hero,
         pick_hidden_navigation_location_near,
         pick_navigation_location,
+        force_green_light,
     )
 
 try:
@@ -50,6 +52,7 @@ if DEBUG_MODE:
     ACCIDENT_TO_RADIO_DELAY_SECONDS = 1.0
     RADIO_TO_END_DELAY_SECONDS = 1.0
     ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
+    SONG_PLAY_DURATION_SECONDS = 2.0
 else:
     START_TO_CARPED_DELAY_SECONDS = 10.0
     CAR_TO_PED_DELAY_SECONDS = 20.0
@@ -57,15 +60,20 @@ else:
     ACCIDENT_TO_RADIO_DELAY_SECONDS = 2.0
     RADIO_TO_END_DELAY_SECONDS = 10.0
 
+    SONG_PLAY_DURATION_SECONDS = 20.0
+
     # Additional short delay to allow accident-related messages to finish
     ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
 
-TRIGGER_CARPED = True
+TRIGGER_CARPED = False
 TRIGGER_ACCIDENT = True
 TRIGGER_RADIO = True
 
+HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 8.0
+
 SONG_START_OFFSET_SECONDS = 30.0
-SONG_PLAY_DURATION_SECONDS = 20.0
+
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
@@ -174,7 +182,6 @@ class Scenario05Runner:
         self._debug_trigger_box_lifetime = SIM_STEP_S * 2.0
         # Time when hero first reached a traffic light (used to delay forcing green)
         self._force_green_light_request_time = None
-        self._tl_hold_originalLight_seconds = 5.0
         
         # manual-start listener state for accident -> radio confirmation
         self._accident_manual_start_listener_started = False
@@ -286,8 +293,17 @@ class Scenario05Runner:
             if prop_bp is None:
                 print(f"[Scenario05] WARNUNG: Keine Blueprint für prop '{name}' gefunden. Versuchete IDs: {blueprints}")
                 continue
-
+            # Apply configurable blueprint attributes (color, role_name, etc.) before spawning
             try:
+                color_val = prop_config.get("color")
+                if color_val is not None and hasattr(prop_bp, "has_attribute") and prop_bp.has_attribute("color"):
+                    try:
+                        prop_bp.set_attribute("color", str(color_val))
+                        print(f"[Scenario05] Applied color '{color_val}' to blueprint for '{name}'")
+                    except Exception as e:
+                        print(f"[Scenario05] WARNUNG: Farbe für '{name}' konnte nicht gesetzt werden: {e}")
+
+                # Some blueprints (walkers, vehicles) may support role_name/is_invincible etc.; keep existing patterns
                 actor = self.world.try_spawn_actor(prop_bp, prop_config["transform"])
                 if actor:
                     if prop_config.get("immobilize_vehicle"):
@@ -1232,20 +1248,14 @@ class Scenario05Runner:
         return all_done
 
     def _force_green_light(self, ego, sim_time):
-        # Wait 5 seconds after the hero is at the traffic light before forcing green.
         try:
-            if ego and ego.is_at_traffic_light():
-                tl = ego.get_traffic_light()
-                if tl:
-                    if self._force_green_light_request_time is None:
-                        # First time hero at traffic light, record time
-                        self._force_green_light_request_time = sim_time
-                    elif (sim_time - self._force_green_light_request_time) >= self._tl_hold_originalLight_seconds:
-                        # After 5 seconds, force green
-                        tl.set_state(carla.TrafficLightState.Green)
-                        tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
-            else:
-                self._force_green_light_request_time = None
+            self._force_green_light_request_time = force_green_light(
+                ego,
+                sim_time,
+                getattr(self, "_force_green_light_request_time", None),
+                TL_HOLD_ORIGINALLIGHT_SECONDS,
+                HERO_GREEN_LIGHT_HOLD_SECONDS,
+            )
         except Exception:
             pass
 
