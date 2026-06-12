@@ -370,6 +370,18 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
     "top_corner": CONSTRUCTION_CONE_SPAWNS + WARNING_ACCIDENT_SPAWNS,
 }
 
+ACCIDENT_TRIGGER_KEYS = (
+    "bottom_corner",
+    "bottom_junction",
+    #"top_corner",
+)
+
+ACCIDENT_TRIGGER_LOCATIONS = (
+    carla.Location(x=-7.53, y=288.22, z=0.50),
+    carla.Location(x=41.39, y=257.46, z=0.50),
+    #carla.Location(x=189.93, y=266.43, z=0.50),        # top_corner
+)
+
 STATIC_PROP_SPAWNS = [
     prop_config
     for trigger_spawns in STATIC_PROP_SPAWNS_BY_TRIGGER.values()
