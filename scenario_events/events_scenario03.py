@@ -37,9 +37,9 @@ except ModuleNotFoundError:
     from scenario_events.scenario_helper import start_manual_control_process
 
 try:
-    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
 try:
     from events_scenario03_static_props import get_barrier_spawn, TEMP_BARRIER_FIRETRUCK, LTRUCK_SPAWN_CONFIGS, COPWAVING_TRIGGER_CONFIGS, CARAWAY
@@ -69,6 +69,9 @@ SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 SIM_STEP_S = 0.05
 run_in_singleFile_mode = False
+
+HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
 
 route_green = ["Straight", "Straight", "Straight", "Straight", "Straight", "Straight"]
 
@@ -111,6 +114,8 @@ class Scenario03Runner:
         self._tm_port = tm_port
         self._done_file = done_file
         self._rng = random.Random()
+        self._all_traffic_lights = []
+        self._init_all_traffic_lights()
 
         self._trigger_caraway = trigger_caraway
         self._trigger_ltruck = trigger_ltruck
@@ -120,6 +125,7 @@ class Scenario03Runner:
 
         self._start_sim_time = None
         self._scenario_done = False
+        self._force_green_light_request_time = None
 
         self.caraway_finished = False
         self.caraway_active = False
@@ -214,6 +220,30 @@ class Scenario03Runner:
             volume=0.85,
             channel_index=7,
         )
+
+    def _init_all_traffic_lights(self):
+        actors = self.world.get_actors()
+        self._all_traffic_lights = [actor for actor in actors if 'traffic_light' in actor.type_id]
+        
+        for tl in self._all_traffic_lights:
+            # tln.freeze(True) => stops all traffic lights
+            tl.freeze(True)
+
+    def update_blinking_lights(self, sim_time):
+        try:
+            cycle_time = sim_time % 1.0
+            
+            if cycle_time < 0.5:
+                target_state = carla.TrafficLightState.Yellow
+            else:
+                target_state = carla.TrafficLightState.Off
+
+            for tl in self._all_traffic_lights:
+                if tl.get_state() != target_state:
+                    tl.set_state(target_state)
+                    
+        except Exception:
+            pass
 
     def _start_delay_timer(self, delay_name, sim_time):
         delay_state = self._delay_states.get(delay_name)
@@ -1325,9 +1355,9 @@ class Scenario03Runner:
                 self.world.wait_for_tick()
                 sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
 
-                hero = self.find_hero()
-                ego_location = hero.get_location() if hero else None
-                ego_velocity = hero.get_velocity() if hero else None
+                ego = self.find_hero()
+                ego_location = ego.get_location() if ego else None
+                ego_velocity = ego.get_velocity() if ego else None
 
                 if self._start_sim_time is None:
                     self._start_sim_time = sim_time
@@ -1438,6 +1468,9 @@ class Scenario03Runner:
 
                     if break_to_end["finished"]:
                         self._scenario_done = True
+
+                if ego:
+                    self.update_blinking_lights(sim_time)
 
                 if self._scenario_done:
                     return
