@@ -23,29 +23,52 @@ except ModuleNotFoundError:
     from generate_audio import RepeatingAudio, SongAudio
 
 try:
-    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS
+    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS, TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER, TEMP_BARRIER_AVOID_HIGHWAY
 except ModuleNotFoundError:
-    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS
+    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS, TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER, TEMP_BARRIER_AVOID_HIGHWAY
 
 try:
     from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
 
-DEBUG_MODE = True
-run_in_singleFile_mode = True                       # attention! single file mode!
+DEBUG_MODE = True                    # attention! single file mode!
 
-TRIGGER_TRAFFIC = True
-TRIGGER_WEATHER = True
-TRIGGER_HIGHPED = True
-TRIGGER_BUS = False
-TRIGGER_SONG = False
-TRIGGER_SANIMAL = True
-TRIGGER_COW = False
-TRIGGER_FUELEMPTY = False
-TRIGGER_SANIMAL_IMMEDIATE = False
+if DEBUG_MODE:
+    RAIN_TO_HIGHPED_DELAY = 0.0
+    HIGHPED_TO_BUS_DELAY = 0.0
+    BUS_TO_SONG_DELAY = 1.0
+    SONG_TO_SANIMAL_DELAY = 2.0
+    SANIMAL_TO_COW_DELAY = 0.0
+    COW_TO_FUEL_DELAY = 1.0
+    FUEL_TO_END_DELAY = 2.0
 
-if not DEBUG_MODE:
+    run_in_singleFile_mode = True
+    TRIGGER_TRAFFIC = False
+    TRIGGER_WEATHER = False
+    TRIGGER_HIGHPED = False
+    TRIGGER_BUS = True
+    TRIGGER_SONG = True
+    TRIGGER_SANIMAL = True
+    TRIGGER_COW = False
+    TRIGGER_FUELEMPTY = False
+    TRIGGER_SANIMAL_IMMEDIATE = False
+
+    START_TO_RAIN_DELAY = 1.0
+    MID_RAIN_LEAD_IN_S = 1.0
+    HARD_RAIN_DURATION_S = 1.0
+    MID_RAIN_FOLLOW_UP_S = 1.0
+    SOFT_RAIN_DURATION_S = 1.0
+    HIGHPED_LIFETIME_S = 20.0
+else:
+    RAIN_TO_HIGHPED_DELAY = 20.0
+    HIGHPED_TO_BUS_DELAY = 30.0
+    BUS_TO_SONG_DELAY = 30.0
+    SONG_TO_SANIMAL_DELAY = 10.0
+    SANIMAL_TO_COW_DELAY = 5.0
+    COW_TO_FUEL_DELAY = 30.0
+    FUEL_TO_END_DELAY = 10.0
+
     run_in_singleFile_mode = False  
     TRIGGER_TRAFFIC = True
     TRIGGER_WEATHER = True
@@ -57,29 +80,14 @@ if not DEBUG_MODE:
     TRIGGER_FUELEMPTY = True
     TRIGGER_SANIMAL_IMMEDIATE = False
 
-START_TO_RAIN_DELAY = 10.0
-MID_RAIN_LEAD_IN_S = 5.0
-HARD_RAIN_DURATION_S = 10.0
-MID_RAIN_FOLLOW_UP_S = 5.0
-SOFT_RAIN_DURATION_S = 5.0
-HIGHPED_LIFETIME_S = 20.0
+    START_TO_RAIN_DELAY = 10.0
+    MID_RAIN_LEAD_IN_S = 5.0
+    HARD_RAIN_DURATION_S = 10.0
+    MID_RAIN_FOLLOW_UP_S = 5.0
+    SOFT_RAIN_DURATION_S = 5.0
+    HIGHPED_LIFETIME_S = 20.0
 
-if DEBUG_MODE:
-    RAIN_TO_HIGHPED_DELAY = 1.0
-    HIGHPED_TO_BUS_DELAY = 1.0
-    BUS_TO_SONG_DELAY = 1.0
-    SONG_TO_SANIMAL_DELAY = 2.0
-    SANIMAL_TO_COW_DELAY = 0.0
-    COW_TO_FUEL_DELAY = 1.0
-    FUEL_TO_END_DELAY = 2.0
-else:
-    RAIN_TO_HIGHPED_DELAY = 20.0
-    HIGHPED_TO_BUS_DELAY = 30.0
-    BUS_TO_SONG_DELAY = 30.0
-    SONG_TO_SANIMAL_DELAY = 10.0
-    SANIMAL_TO_COW_DELAY = 5.0
-    COW_TO_FUEL_DELAY = 30.0
-    FUEL_TO_END_DELAY = 10.0
+HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 30.0
@@ -106,17 +114,9 @@ SANIMAL_ARRIVE_THRESH = 1.0
 SANIMAL_STOP_AT_TARGET_DURATION = 1.0
 SANIMAL_LIFETIME_S = 30.0
 
-#weather: 
-# 1 - ClearNoon
-# 2 - CloudyNoon
-# 3 - WetNoon
-# 4 - WetCloudyNoon
-# 5 - MidRainyNoon
-# 6 - HardRainNoon
-# 7 - SoftRainNoon
-
 SPAWN_CARS = len(CAR_START_LOCATIONS)
-BUS_DISP_DESTROY_DISTANCE = 80.0
+BUS_DISP_DESTROY_DISTANCE = 40.0
+BUS_DISP_DESTROY_TIME = 20.0
 SANIMAL_CLEAR_RADIUS_M = 30.0
 SIM_STEP_S = 0.05
 
@@ -132,6 +132,14 @@ BLOCKED_VEHICLE_KEYWORDS = (
     "police",
 )
 
+#weather: 
+# 1 - ClearNoon
+# 2 - CloudyNoon
+# 3 - WetNoon
+# 4 - WetCloudyNoon
+# 5 - MidRainyNoon
+# 6 - HardRainNoon
+# 7 - SoftRainNoon
 
 def get_actor_blueprints(world, filter_pattern):
     bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -161,10 +169,12 @@ class Scenario06Runner:
         self._highped_skip_applied = False
         self._highped_barrier_triggered_keys = set()
         self._highped_barrier_actor_ids = []
+        self._highway_barrier_triggered = False
         self._sanimal_trigger_forced = False
         self._start_static_props_spawned = False
         self._bus_trigger_listening_announced = False
         self._debug_trigger_box_lifetime = 0.15
+        self._tl_hold_originalLight_seconds = 5.0
 
         self._start_sim_time = None
         self._traffic_spawned = False
@@ -372,12 +382,23 @@ class Scenario06Runner:
                 continue
         return actor_locations
 
-    def _force_green_light(self, ego):
-        if ego and ego.is_at_traffic_light():
-            tl = ego.get_traffic_light()
-            if tl:
-                tl.set_state(carla.TrafficLightState.Green)
-                tl.set_green_time(10.0)
+    def _force_green_light(self, ego, sim_time):
+        # Wait 5 seconds after the hero is at the traffic light before forcing green.
+        try:
+            if ego and ego.is_at_traffic_light():
+                tl = ego.get_traffic_light()
+                if tl:
+                    if self._force_green_light_request_time is None:
+                        # First time hero at traffic light, record time
+                        self._force_green_light_request_time = sim_time
+                    elif (sim_time - self._force_green_light_request_time) >= self._tl_hold_originalLight_seconds:
+                        # After 5 seconds, force green
+                        tl.set_state(carla.TrafficLightState.Green)
+                        tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
+            else:
+                self._force_green_light_request_time = None
+        except Exception:
+            pass
 
     def _get_bus_trigger_config(self, hero_location, hero_velocity=None):
         if hero_location is None:
@@ -421,6 +442,18 @@ class Scenario06Runner:
             BUS_DISP_CONFIG,
             z_extra=2.0,
             color=(255, 0, 0, 100),
+            thickness=0.02,
+        )
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
+    def _draw_highway_avoid_trigger_boxes(self):
+        if not DEBUG_MODE or self.bus_finished or self._bus_active or self._highway_barrier_triggered:
+            return
+
+        box_configs = build_trigger_box_configs(
+            TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER,
+            z_extra=2.0,
+            color=(255, 255, 0, 100),
             thickness=0.02,
         )
         draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
@@ -577,6 +610,7 @@ class Scenario06Runner:
             clear_distance=BUS_DISP_DESTROY_DISTANCE,
             corridor_half_width=5.0,
         )
+        #time.sleep(1.0)
 
         actor = self.world.try_spawn_actor(bus_bp, spawn_transform)
         if actor is None:
@@ -613,7 +647,7 @@ class Scenario06Runner:
         self._vehicle_actor_ids.append(actor.id)
 
         try:
-            tm.set_route(actor, ["Straight"] * 200)
+            tm.set_route(actor, ["Right", "Straight"] * 2)
         except Exception as exc:
             print(f"[Scenario06] WARNUNG: Bus-Route (nur Straight) konnte nicht gesetzt werden: {exc}")
 
@@ -683,10 +717,14 @@ class Scenario06Runner:
         except Exception:
             return
 
-        if distance < BUS_DISP_DESTROY_DISTANCE:
+        sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
+        elapsed_time = None
+        if self._bus_spawn_time is not None:
+            elapsed_time = sim_time - self._bus_spawn_time
+
+        if distance < BUS_DISP_DESTROY_DISTANCE and (elapsed_time is None or elapsed_time < BUS_DISP_DESTROY_TIME):
             return
 
-        sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
         try:
             actor.destroy()
         except Exception:
@@ -1223,6 +1261,65 @@ class Scenario06Runner:
         self._barrier_actor_ids = []
         print("[Scenario06] HighPed barrier props removed.")
 
+    def _spawn_temp_barrier_avoid_highway(self):
+        if self._highway_barrier_triggered:
+            return False
+
+        bp_lib = self.world.get_blueprint_library()
+        spawned_count = 0
+        failed_configs = []
+
+        for prop_config in TEMP_BARRIER_AVOID_HIGHWAY:
+            name = prop_config.get("name", "unknown_prop")
+            blueprint_id = prop_config.get("blueprints", [None])[0]
+            if not blueprint_id:
+                failed_configs.append(name)
+                continue
+
+            try:
+                prop_bp = bp_lib.find(blueprint_id)
+            except Exception as exc:
+                print(f"[Scenario06] Highway-Barrier WARNUNG: Blueprint '{blueprint_id}' für '{name}' nicht gefunden: {exc}")
+                failed_configs.append(name)
+                continue
+
+            actor = self.world.try_spawn_actor(prop_bp, prop_config.get("transform"))
+            if actor is None:
+                print(f"[Scenario06] Highway-Barrier WARNUNG: Spawn für '{name}' fehlgeschlagen | blueprint='{prop_bp.id}'")
+                failed_configs.append(name)
+                continue
+
+            self._persistent_static_actor_ids.append(actor.id)
+            self._static_actor_ids.append(actor.id)
+            self._barrier_actor_ids.append(actor.id)
+            spawned_count += 1
+            print(f"[Scenario06] Highway-Barrier OK: '{name}' actor_id={actor.id} blueprint='{prop_bp.id}'")
+
+        self._highway_barrier_triggered = True
+        if spawned_count == len(TEMP_BARRIER_AVOID_HIGHWAY):
+            print(f"[Scenario06] Highway-Barrier: {spawned_count}/{len(TEMP_BARRIER_AVOID_HIGHWAY)} gespawnt.")
+        else:
+            print(
+                f"[Scenario06] Highway-Barrier: {spawned_count}/{len(TEMP_BARRIER_AVOID_HIGHWAY)} gespawnt, "
+                f"Fehlschläge={failed_configs}"
+            )
+        return spawned_count > 0
+
+    def _update_highway_avoid_trigger(self, hero_location, hero_velocity=None):
+        if self._highway_barrier_triggered or hero_location is None:
+            return False
+
+        highway_trigger_config = self._get_route_config(
+            TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER,
+            hero_location,
+            hero_velocity,
+        )
+        if highway_trigger_config is None:
+            return False
+
+        self._spawn_temp_barrier_avoid_highway()
+        return True
+
     def _update_bus_trigger(self, hero_location, hero_velocity=None):
         if self._bus_active or self.bus_finished:
             return None
@@ -1513,8 +1610,11 @@ class Scenario06Runner:
                             self._bus_trigger_listening_announced = True
 
                         self._draw_bus_trigger_boxes()
+                        self._draw_highway_avoid_trigger_boxes()
                         hero_velocity = ego.get_velocity() if ego else None
-                        bus_trigger_config = self._update_bus_trigger(ego_transform.location if ego_transform else None, hero_velocity)
+                        hero_location = ego_transform.location if ego_transform else None
+                        self._update_highway_avoid_trigger(hero_location, hero_velocity)
+                        bus_trigger_config = self._update_bus_trigger(hero_location, hero_velocity)
                         if bus_trigger_config is not None:
                             self._spawn_disappearing_bus(bus_trigger_config, sim_time)
                             self._bus_trigger_listening_announced = False
@@ -1588,7 +1688,7 @@ class Scenario06Runner:
                     self._scenario_done = True
 
                 if ego:
-                    self._force_green_light(ego)
+                    self._force_green_light(ego, sim_time)
 
                 if self._scenario_done:
                     return

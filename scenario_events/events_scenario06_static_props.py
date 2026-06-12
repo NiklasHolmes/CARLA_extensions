@@ -756,15 +756,116 @@ SANIMAL_ROUTE_CONFIGS = (
     },
 )
 
+TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER = [ {
+        "name": "ah_trigger",
+        "trigger_location": carla.Location(x=80, y=0.0, z=0.0),
+        "trigger_x_tolerance": 80.0,
+        "trigger_y_tolerance": 100.0,
+    }
+]
+
+TEMP_BARRIER_AVOID_HIGHWAY = [
+    {
+        "name": "temp_avoidHighway_barrier_01",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=24.20, y=101.0, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_02",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=27.50, y=101.0, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_03",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=41.70, y=-152.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=-45.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_04",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=38.60, y=-150.40, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=-45.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+        {
+        "name": "temp_avoidHighway_barrier_05",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=35.50, y=-148.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=-45.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_06",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=31.50, y=-147.40, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=-45.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_07",     # right lane
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=37.30, y=-98.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_08",     # right lane
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=33.80, y=-98.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    {
+        "name": "temp_avoidHighway_barrier_10",
+        "blueprints": ["static.prop.treepine2custom"],
+        "transform": carla.Transform(
+            carla.Location(x=40.10, y=-156.80, z=1.0),
+            carla.Rotation(pitch=90.0, yaw=-45.0, roll=0.0),
+        ),
+        "scale": None,
+    },
+    # {
+    #     "name": "temp_avoidHighway_barrier_08",
+    #     "blueprints": ["vehicle.carlamotors.firetruck"],
+    #     "transform": carla.Transform(
+    #         carla.Location(x=30.90, y=156.30, z=0.00),
+    #         carla.Rotation(pitch=0.0, yaw=135.0, roll=0.0),
+    #     ),
+    #     "scale": None,
+    # },
+]
+
 BUS_DISP_CONFIG = (
     {
         "name": "bus_trigger1",
-        "trigger_location": carla.Location(x=-166.5, y=84.30, z=0.6000),
-        "trigger_x_tolerance": 2.0,
-        "trigger_y_tolerance": 5.0,
+        "trigger_location": carla.Location(x=-193.28, y=20.0, z=0.3000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-216.1000, y=91.2000, z=0.3000),
+        "spawn_location": carla.Location(x=-161.350, y=84.3800, z=0.3000),
         "spawn_yaw": 180,
     },
     {
@@ -774,7 +875,7 @@ BUS_DISP_CONFIG = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "x",
         "trigger_direction_sign": -1,
-        "spawn_location": carla.Location(x=-184.3000, y=-65.9000, z=0.3000),
+        "spawn_location": carla.Location(x=-185.3000, y=-65.9000, z=0.5000),
         "spawn_yaw": -90.0,
     },
     {
@@ -784,8 +885,8 @@ BUS_DISP_CONFIG = (
         "trigger_y_tolerance": 5.0,
         "trigger_direction_axis": "x",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-55.9000, y=-105.8000, z=0.3000),
-        "spawn_yaw": -90.0,
+        "spawn_location": carla.Location(x=-54.9000, y=-109.8000, z=0.5000),
+        "spawn_yaw": 75.0,
     },
     {
         "name": "bus_trigger4",
@@ -799,23 +900,23 @@ BUS_DISP_CONFIG = (
     },
     {
         "name": "bus_trigger5",
-        "trigger_location": carla.Location(x=-83.7, y=91.50, z=0.6000),
-        "trigger_x_tolerance": 2.0,
-        "trigger_y_tolerance": 5.0,
+        "trigger_location": carla.Location(x=-52.51, y=34.89, z=0.3000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
-        "spawn_location": carla.Location(x=-78.2000, y=84.3000, z=0.3000),
-        "spawn_yaw": None,
+        "spawn_location": carla.Location(x=-19.30, y=84.50, z=0.3000),
+        "spawn_yaw": 180.0,
     },
     {
         "name": "bus_trigger6",
         "trigger_location": carla.Location(x=-45.6918, y=-21.4710, z=0.4500),
-        "trigger_x_tolerance": 2.0,
-        "trigger_y_tolerance": 5.0,
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
         "trigger_direction_axis": "y",
         "trigger_direction_sign": -1,
-        "spawn_location": carla.Location(x=-24.0000, y=-94.9000, z=0.3000),
-        "spawn_yaw": 180.0,
+        "spawn_location": carla.Location(x=-71.35, y=-84.500, z=0.5000),
+        "spawn_yaw": 0.0,
     },
     {
         "name": "bus_trigger7",
@@ -825,6 +926,46 @@ BUS_DISP_CONFIG = (
         "trigger_direction_axis": "x",
         "trigger_direction_sign": -1,
         "spawn_location": carla.Location(x=-44.1000, y=115.2000, z=0.1000),
+        "spawn_yaw": -90.0,
+    },
+    {
+        "name": "bus_trigger11",
+        "trigger_location": carla.Location(x=-193.1000, y=104.6000, z=0.1000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-130.5000, y=116.8000, z=0.10000),
+        "spawn_yaw": 90.0,
+    },
+    {
+        "name": "bus_trigger21",
+        "trigger_location": carla.Location(x=-143.7276, y=86.2022, z=0.3000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_location": carla.Location(x=-184.2000, y=120.1000, z=0.1000),
+        "spawn_yaw": -90.0,
+    },
+    {
+        "name": "bus_trigger22",
+        "trigger_location": carla.Location(x=-130.0000, y=-132.0000, z=0.0000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-95.4000, y=-94.9000, z=0.10000),
+        "spawn_yaw": 180.0,
+    },
+    {
+        "name": "bus_trigger8",
+        "trigger_location": carla.Location(x=87.5000, y=72.4000, z=0.0000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_location": carla.Location(x=35.1000, y=119.2000, z=0.1000),
         "spawn_yaw": -90.0,
     },
 )
