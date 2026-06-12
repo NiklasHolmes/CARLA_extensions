@@ -29,9 +29,9 @@ except ModuleNotFoundError:
     )
 
 try:
-    from events_scenario05_static_props import get_static_prop_spawns
+    from events_scenario05_static_props import get_static_prop_spawns, ACCIDENT_TRIGGER_LOCATIONS, ACCIDENT_TRIGGER_KEYS
 except ModuleNotFoundError:
-    from scenario_events.events_scenario05_static_props import get_static_prop_spawns
+    from scenario_events.events_scenario05_static_props import get_static_prop_spawns, ACCIDENT_TRIGGER_LOCATIONS, ACCIDENT_TRIGGER_KEYS
 
 from common.audio_paths import (
     SADNESS_RP_MAD_WORLD_PATH,
@@ -41,19 +41,24 @@ from common.audio_paths import (
 )
 from generate_audio import SongAudio, RepeatingAudio
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
-    # Shortened delays for easier testing/debugging
     START_TO_CARPED_DELAY_SECONDS = 1.0
     CAR_TO_PED_DELAY_SECONDS = 1.0
+    SONG_TO_ACCIDENT_DELAY_SECONDS = 1.0
     ACCIDENT_TO_RADIO_DELAY_SECONDS = 1.0
     RADIO_TO_END_DELAY_SECONDS = 1.0
+    ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
 else:
     START_TO_CARPED_DELAY_SECONDS = 10.0
     CAR_TO_PED_DELAY_SECONDS = 20.0
-    ACCIDENT_TO_RADIO_DELAY_SECONDS = 20.0
+    SONG_TO_ACCIDENT_DELAY_SECONDS = 5.0
+    ACCIDENT_TO_RADIO_DELAY_SECONDS = 2.0
     RADIO_TO_END_DELAY_SECONDS = 10.0
+
+    # Additional short delay to allow accident-related messages to finish
+    ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
 
 TRIGGER_CARPED = True
 TRIGGER_ACCIDENT = True
@@ -67,7 +72,7 @@ HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 SPAWN_CARS = 5
 PEDESTRIAN_COUNT = 1
 ENABLE_ROUTE_PEDESTRIANS = True
-PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0046"
+PEDESTRIAN_BLUEPRINT_ID = "walker.pedestrian.0025"
 PEDESTRIAN_MAX_SPEED = 1.5
 PEDESTRIAN_WAIT_TIMEOUT_S = 40.0
 PEDESTRIAN_ARRIVE_THRESH = 1.0
@@ -99,16 +104,6 @@ IMMOBILIZE_VEHICLE_DELAY_SECONDS = 2.0
 # When True, delete all non-hero vehicles and pedestrians before spawning the accident props
 CLEAN_UP_BEFORE_ACCIDENT = True             # TODO: work with hidden radius so that car/ped doesn't disappear if hero is too close
 
-ACCIDENT_TRIGGER_LOCATIONS = (
-    carla.Location(x=-7.53, y=288.22, z=0.50),
-    carla.Location(x=41.39, y=257.46, z=0.50),
-    #carla.Location(x=189.93, y=266.43, z=0.50),
-)
-ACCIDENT_TRIGGER_KEYS = (
-    "bottom_corner",
-    "bottom_junction",
-    #"top_corner",
-)
 ACCIDENT_TRIGGER_X_TOLERANCE = 2.0
 ACCIDENT_TRIGGER_Y_TOLERANCE = 5.0
 ACCIDENT_TRIGGER_FORWARD_MIN_ALIGNMENT = 0.85
@@ -128,7 +123,6 @@ PED_CONFIRM_FORWARD_MAX_DISTANCE = 90.0
 PED_CONFIRM_HIDDEN_MIN_DISTANCE = 46.0
 PED_CONFIRM_HIDDEN_MAX_DISTANCE = 150.0
 PED_CONFIRM_CONE_ANGLE_DEGREES = 45.0
-
 
 def get_actor_blueprints(world, filter_pattern):
     bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -178,6 +172,14 @@ class Scenario05Runner:
         self._ped_to_song = False
         self._accident_wait_logged = False
         self._debug_trigger_box_lifetime = SIM_STEP_S * 2.0
+        # Time when hero first reached a traffic light (used to delay forcing green)
+        self._force_green_light_request_time = None
+        self._tl_hold_originalLight_seconds = 5.0
+        
+        # manual-start listener state for accident -> radio confirmation
+        self._accident_manual_start_listener_started = False
+        self._accident_manual_start_response = None
+        
         self._song_audio = SongAudio(
             SADNESS_RP_MAD_WORLD_PATH,
             start_seconds=SONG_START_OFFSET_SECONDS,
@@ -212,7 +214,7 @@ class Scenario05Runner:
         )
         self._scenario_done = False
         self._cars_phase_done = False
-        self._pedestrians_phase_done = False
+        self._pedestrian_confirmation_completed = False
 
         self._static_actor_ids = []
         self._vehicle_actor_ids = []
@@ -223,6 +225,7 @@ class Scenario05Runner:
         self._bottom_loop_walker_controller_id = None
         self._bottom_loop_walker_route = None
         self._pending_vehicle_immobilizations = {}
+
 
     def _get_traffic_manager(self):
         try:
@@ -809,12 +812,12 @@ class Scenario05Runner:
         return True
 
     def _get_random_non_cop_pedestrian_blueprint(self):
-        excluded_ids = set()
-        for _ in range(32):
-            walker_bp = get_random_pedestrian_blueprint(self.world, self._rng, excluded_ids=excluded_ids, max_numeric_id=50)
-            if "cop" not in walker_bp.id.lower():
-                return walker_bp
-            excluded_ids.add(walker_bp.id)
+        # excluded_ids = set()
+        # for _ in range(32):
+        #     walker_bp = get_random_pedestrian_blueprint(self.world, self._rng, excluded_ids=excluded_ids, max_numeric_id=50)
+        #     if "cop" not in walker_bp.id.lower():
+        #         return walker_bp
+        #     excluded_ids.add(walker_bp.id)
 
         fallback_bp = self.world.get_blueprint_library().find(PEDESTRIAN_BLUEPRINT_ID)
         if fallback_bp.has_attribute("is_invincible"):
@@ -999,7 +1002,7 @@ class Scenario05Runner:
 
         def _wait_for_confirmation():
             try:
-                response = input("loneleyPed gesehen? J/N? ").strip().lower()
+                response = input("loneleyPed gesehen? J/N? \n").strip().lower()
             except EOFError:
                 response = "j"
                 print("[Scenario05] WARNUNG: Kein stdin verfügbar; loneleyPed-Bestätigung default auf Ja.")
@@ -1008,6 +1011,24 @@ class Scenario05Runner:
             print(f"[Scenario05] loneleyPed-Bestätigung empfangen: {response}")
 
         listener_thread = threading.Thread(target=_wait_for_confirmation, daemon=True)
+        listener_thread.start()
+
+    def _start_accident_manual_start_listener(self):
+        if self._accident_manual_start_listener_started:
+            return
+        self._accident_manual_start_listener_started = True
+
+        def _wait_for_start():
+            try:
+                response = input("[Scenario05] Press 'J' + Enter to continue scenario (start radio): \n").strip().lower()
+            except EOFError:
+                response = "j"
+                print("[Scenario05] WARNUNG: Kein stdin verfügbar; Fortsetzung default auf 'J'.")
+
+            self._accident_manual_start_response = response
+            print(f"[Scenario05] Accident continue response received: {response}")
+
+        listener_thread = threading.Thread(target=_wait_for_start, daemon=True)
         listener_thread.start()
 
     def _reset_confirmation_pedestrian(self):
@@ -1040,6 +1061,8 @@ class Scenario05Runner:
             print("[Scenario05] loneleyPed bestätigt; starte Pedestrian und erlaube Fortsetzung.")
             self._pedestrian_confirmation_pending = False
             self._ped_to_song = True
+            # mark confirmation completed so we don't ask again
+            self._pedestrian_confirmation_completed = True
             # allow song start when conditions met
             return
 
@@ -1135,6 +1158,10 @@ class Scenario05Runner:
         return min(speed, max_speed)
 
     def _spawn_pedestrians(self, ego_transform=None):
+        # If confirmation already completed with 'J', do not spawn or ask again
+        if self._pedestrian_confirmation_completed:
+            return False
+
         if self._spawn_single_confirmation_pedestrian(ego_transform, self.world.get_snapshot().timestamp.elapsed_seconds):
             self._pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
             return True
@@ -1205,11 +1232,22 @@ class Scenario05Runner:
         return all_done
 
     def _force_green_light(self, ego, sim_time):
-        if ego and ego.is_at_traffic_light():
-            tl = ego.get_traffic_light()
-            if tl:
-                tl.set_state(carla.TrafficLightState.Green)
-                tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
+        # Wait 5 seconds after the hero is at the traffic light before forcing green.
+        try:
+            if ego and ego.is_at_traffic_light():
+                tl = ego.get_traffic_light()
+                if tl:
+                    if self._force_green_light_request_time is None:
+                        # First time hero at traffic light, record time
+                        self._force_green_light_request_time = sim_time
+                    elif (sim_time - self._force_green_light_request_time) >= self._tl_hold_originalLight_seconds:
+                        # After 5 seconds, force green
+                        tl.set_state(carla.TrafficLightState.Green)
+                        tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
+            else:
+                self._force_green_light_request_time = None
+        except Exception:
+            pass
 
     def _draw_accident_trigger_boxes(self):
         if not DEBUG_MODE or self._accident_spawned or self._song_finished is False:
@@ -1386,7 +1424,11 @@ class Scenario05Runner:
             return
 
     def _update_post_song_phases(self, sim_time, ego_transform=None):
+
         if self._song_finished and not self._accident_spawned:
+            if self._song_finish_time is None or (sim_time - self._song_finish_time) < SONG_TO_ACCIDENT_DELAY_SECONDS:
+                return
+
             if not TRIGGER_ACCIDENT:
                 self._skip_accident_phase(sim_time)
             else:
@@ -1399,11 +1441,27 @@ class Scenario05Runner:
                     self._spawn_accident_placeholder(sim_time, trigger_key)
 
         if self._accident_spawned and not self._radio_started and self._accident_spawn_time is not None:
-            if (sim_time - self._accident_spawn_time) >= ACCIDENT_TO_RADIO_DELAY_SECONDS:
-                if TRIGGER_RADIO:
-                    self._start_radio_voice_placeholder(sim_time)
-                else:
+            # wait the configured delay plus a small extra buffer, and ensure pending immobilizations are done
+            if (sim_time - self._accident_spawn_time) >= (ACCIDENT_TO_RADIO_DELAY_SECONDS + ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS):
+                if not TRIGGER_RADIO:
                     self._skip_radio_phase(sim_time)
+                else:
+                    if self._pending_vehicle_immobilizations:
+                        return
+                    if not self._accident_manual_start_listener_started:
+                        self._start_accident_manual_start_listener()
+                    if self._accident_manual_start_response is None:
+                        return
+                    response = (self._accident_manual_start_response or "").strip().lower()
+
+                    # reset listener state
+                    self._accident_manual_start_listener_started = False
+                    self._accident_manual_start_response = None
+                    if response in ("j", "ja", "y", "yes", ""):
+                        self._start_radio_voice_placeholder(sim_time)
+                    else:
+                        print("[Scenario05] Accident continue declined; skipping radio.")
+                        self._skip_radio_phase(sim_time)
 
         self._update_radio_voice_sequence(sim_time)
 

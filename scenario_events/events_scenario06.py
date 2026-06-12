@@ -23,9 +23,9 @@ except ModuleNotFoundError:
     from generate_audio import RepeatingAudio, SongAudio
 
 try:
-    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns
+    from events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS
 except ModuleNotFoundError:
-    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns
+    from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS
 
 try:
     from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
@@ -35,9 +35,9 @@ except ModuleNotFoundError:
 DEBUG_MODE = True
 run_in_singleFile_mode = True                       # attention! single file mode!
 
-TRIGGER_TRAFFIC = False
-TRIGGER_WEATHER = False
-TRIGGER_HIGHPED = False
+TRIGGER_TRAFFIC = True
+TRIGGER_WEATHER = True
+TRIGGER_HIGHPED = True
 TRIGGER_BUS = False
 TRIGGER_SONG = False
 TRIGGER_SANIMAL = True
@@ -265,6 +265,8 @@ class Scenario06Runner:
 
         self._static_actor_ids = []
         self._persistent_static_actor_ids = []
+        # tracked barrier actors (start temp barriers + highped barrier spawns)
+        self._barrier_actor_ids = []
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
 
@@ -1138,6 +1140,9 @@ class Scenario06Runner:
                 continue
 
             self._persistent_static_actor_ids.append(actor.id)
+            # track start temp barrier actors as barrier actors
+            if name.startswith("temp_start_barrier_") or name.startswith("highped_barrier_2_"):
+                self._barrier_actor_ids.append(actor.id)
             spawned_count += 1
             print(f"[Scenario06] Start-Props OK: '{name}' actor_id={actor.id} blueprint='{prop_bp.id}' persistent=True")
 
@@ -1186,6 +1191,8 @@ class Scenario06Runner:
 
             self._static_actor_ids.append(actor.id)
             self._highped_barrier_actor_ids.append(actor.id)
+            # also track barrier actors for cleanup
+            self._barrier_actor_ids.append(actor.id)
             spawned_count += 1
             print(f"[Scenario06] Barrier-Props OK: '{name}' actor_id={actor.id} blueprint='{prop_bp.id}'")
 
@@ -1200,11 +1207,7 @@ class Scenario06Runner:
         return spawned_count > 0
 
     def _cleanup_highped_barrier_props(self):
-        if not self._highped_barrier_actor_ids:
-            self._highped_barrier_triggered_keys.clear()
-            return
-
-        for actor_id in list(self._highped_barrier_actor_ids):
+        for actor_id in list(self._barrier_actor_ids):
             actor = self.world.get_actor(actor_id)
             if actor is not None:
                 try:
@@ -1213,9 +1216,11 @@ class Scenario06Runner:
                     pass
             if actor_id in self._static_actor_ids:
                 self._static_actor_ids.remove(actor_id)
+            if actor_id in self._persistent_static_actor_ids:
+                self._persistent_static_actor_ids.remove(actor_id)
 
         self._highped_barrier_actor_ids = []
-        self._highped_barrier_triggered_keys.clear()
+        self._barrier_actor_ids = []
         print("[Scenario06] HighPed barrier props removed.")
 
     def _update_bus_trigger(self, hero_location, hero_velocity=None):
