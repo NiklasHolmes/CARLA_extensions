@@ -28,9 +28,9 @@ except ModuleNotFoundError:
     from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS, TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER, TEMP_BARRIER_AVOID_HIGHWAY
 
 try:
-    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
 DEBUG_MODE = True                    # attention! single file mode!
 
@@ -88,6 +88,7 @@ else:
     HIGHPED_LIFETIME_S = 20.0
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 30.0
@@ -174,7 +175,7 @@ class Scenario06Runner:
         self._start_static_props_spawned = False
         self._bus_trigger_listening_announced = False
         self._debug_trigger_box_lifetime = 0.15
-        self._tl_hold_originalLight_seconds = 5.0
+        self._force_green_light_request_time = None
 
         self._start_sim_time = None
         self._traffic_spawned = False
@@ -383,20 +384,14 @@ class Scenario06Runner:
         return actor_locations
 
     def _force_green_light(self, ego, sim_time):
-        # Wait 5 seconds after the hero is at the traffic light before forcing green.
         try:
-            if ego and ego.is_at_traffic_light():
-                tl = ego.get_traffic_light()
-                if tl:
-                    if self._force_green_light_request_time is None:
-                        # First time hero at traffic light, record time
-                        self._force_green_light_request_time = sim_time
-                    elif (sim_time - self._force_green_light_request_time) >= self._tl_hold_originalLight_seconds:
-                        # After 5 seconds, force green
-                        tl.set_state(carla.TrafficLightState.Green)
-                        tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
-            else:
-                self._force_green_light_request_time = None
+            self._force_green_light_request_time = force_green_light(
+                ego,
+                sim_time,
+                getattr(self, "_force_green_light_request_time", None),
+                TL_HOLD_ORIGINALLIGHT_SECONDS,
+                HERO_GREEN_LIGHT_HOLD_SECONDS,
+            )
         except Exception:
             pass
 

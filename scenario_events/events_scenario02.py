@@ -15,11 +15,11 @@ except ModuleNotFoundError:
     from scenario_events.events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config, POORROAD_SPAWNBOX_CONFIG
 
 try:
-    from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes
+    from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes
+    from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 run_in_singleFile_mode = False
 
 if DEBUG_MODE:
@@ -40,6 +40,9 @@ else:
     DRIVERTRASH_TO_END_DELAY = 10.0
 
 SIM_STEP_S = 0.05
+
+HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
 
 TRIGGER_TRAFFIC = True
 TRIGGER_TRASH = True
@@ -149,6 +152,7 @@ class Scenario02Runner:
 
         self._start_sim_time = None
         self._scenario_done = False
+        self._force_green_light_request_time = None
 
         self.traffic_finished = False
         self.trash_finished = False
@@ -441,52 +445,27 @@ class Scenario02Runner:
         return [bp for bp in blueprints if not any(k in bp.id.lower() for k in BLOCKED_VEHICLE_KEYWORDS)]
 
     def _get_traffic_manager(self):
-        return self.client.get_trafficmanager(self._tm_port)
-
-    def _force_hero_traffic_light(self, ego, sim_time):
-        if not hero_green:
-            return
-        if ego is None:
-            return
-        
         try:
-            if not ego.is_at_traffic_light():
-                return
-        except Exception as e:
-            return
-
+            tm = self.client.get_trafficmanager(self._tm_port)
+        except Exception:
+            tm = self.client.get_trafficmanager()
         try:
-            tl = ego.get_traffic_light()
-        except Exception as e:
-            return
+            tm.set_synchronous_mode(self.world.get_settings().synchronous_mode)
+        except Exception:
+            pass
+        return tm
 
-        if tl is None:
-            return
-
+    def _force_green_light(self, ego, sim_time):
         try:
-            current_state = tl.get_state()
-            state_name = "Unknown"
-            if current_state == carla.TrafficLightState.Red:
-                state_name = "Red"
-            elif current_state == carla.TrafficLightState.Yellow:
-                state_name = "Yellow"
-            elif current_state == carla.TrafficLightState.Green:
-                state_name = "Green"
-            
-            print(f"[Scenario02] HERO TRAFFIC LIGHT DETECTED: light_id={tl.id}, current_state={state_name}")
-            if current_state != carla.TrafficLightState.Green:
-                print(f"[Scenario02] HERO setting traffic light to GREEN (was {state_name})")
-                tl.set_state(carla.TrafficLightState.Green)
-            if hasattr(tl, 'set_green_time'):
-                tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
-                print(f"[Scenario02] HERO traffic light green time set to {HERO_GREEN_LIGHT_HOLD_SECONDS}s")
-            # record forced green timestamp so we can release control after hold time
-            try:
-                self._forced_hero_tl[tl.id] = sim_time
-            except Exception:
-                pass
-        except Exception as e:
-            print(f"[Scenario02] ERROR setting hero traffic light: {e}")
+            self._force_green_light_request_time = force_green_light(
+                ego,
+                sim_time,
+                getattr(self, "_force_green_light_request_time", None),
+                TL_HOLD_ORIGINALLIGHT_SECONDS,
+                HERO_GREEN_LIGHT_HOLD_SECONDS,
+            )
+        except Exception:
+            pass
 
     def _project_to_driving_lane(self, location):
         map_ = self.world.get_map()
@@ -544,9 +523,19 @@ class Scenario02Runner:
 
         # if spawned (initial or retry), continue setup
         try:
-            actor.set_autopilot(True, self._get_traffic_manager().get_port())
-        except Exception:
-            pass
+            tm = self._get_traffic_manager()
+            try:
+                tm_port = tm.get_port()
+            except Exception:
+                tm_port = getattr(self, '_tm_port', None)
+            try:
+                sync_mode = self.world.get_settings().synchronous_mode
+            except Exception:
+                sync_mode = None
+            #print(f"[Scenario02] Setting autopilot for actor id={actor.id} using TM port={tm_port} sync_mode={sync_mode}")
+            actor.set_autopilot(True, tm_port)
+        except Exception as exc:
+            print(f"[Scenario02] WARNUNG: set_autopilot failed for actor id={getattr(actor,'id',None)}: {exc}")
 
         try:
             self._get_traffic_manager().set_route(actor, ["Straight"] * 40)
@@ -647,48 +636,18 @@ class Scenario02Runner:
         if self.traffic_finished:
             return
         traffic_count = int(traffic_vehicle_count) if traffic_vehicle_count is not None else int(globals().get('traffic_vehicle_count', 8))
-        print("[Scenario02] start_traffic()")
-        total_route_configs = len(self._traffic_route_configs) if self._traffic_route_configs is not None else 0
-        print(f"[Scenario02] Traffic: route config count={total_route_configs}")
+        print("[Scenario02] start_traffic() -- spawning random vehicles")
 
-        route_entries = []
-        for route_config in self._traffic_route_configs:
-            spawn_locations = self._build_spawn_locations_from_waypoints(route_config.get("waypoints", []))
-            if len(spawn_locations) < 1:
-                print(f"[Scenario02] Traffic: Route '{route_config.get('name')}' skipped (not enough projected spawn points: {len(spawn_locations)})")
-                continue
-            max_starts = len(spawn_locations)
-            route_entries.append({
-                "route_config": route_config,
-                "spawn_locations": spawn_locations,
-                "max_starts": max_starts,
-                "next_start": 0,
-            })
-
-        if not route_entries:
-            print("[Scenario02] WARNUNG: Keine Traffic-Routen verfügbar, Traffic event abgeschlossen.")
+        spawn_points = list(self.world.get_map().get_spawn_points())
+        if not spawn_points:
+            print("[Scenario02] WARNUNG: Keine Spawn-Punkte auf der Karte gefunden.")
             self.traffic_finished = True
             return
 
-        # allocate vehicles evenly across routes in round-robin order
-        allocations = []
-        while len(allocations) < traffic_count:
-            allocated_this_round = False
-            for entry in route_entries:
-                if len(allocations) >= traffic_count:
-                    break
-                if entry["next_start"] < entry["max_starts"]:
-                    allocations.append((entry["route_config"], entry["spawn_locations"], entry["next_start"]))
-                    entry["next_start"] += 1
-                    allocated_this_round = True
-            if not allocated_this_round:
-                break
+        self._rng.shuffle(spawn_points)
 
-        possible_spawns = len(allocations)
-        if possible_spawns == 0:
-            print("[Scenario02] WARNUNG: Keine möglichen Spawn-Positionen für Traffic erkannt.")
-            self.traffic_finished = True
-            return
+        # limit to requested count
+        selected_points = spawn_points[:traffic_count]
 
         vehicle_blueprints = self._filter_blocked_vehicle_blueprints(self._get_actor_blueprints("vehicle.*"))
         if not vehicle_blueprints:
@@ -696,26 +655,27 @@ class Scenario02Runner:
             self.traffic_finished = True
             return
 
-        spawned = 0
-        failed_spawns = 0
-        for route_config, spawn_locations, start_index in allocations:
-            spawn_location = spawn_locations[start_index]
-            spawn_waypoint = self.world.get_map().get_waypoint(spawn_location, project_to_road=True, lane_type=carla.LaneType.Driving)
-            if spawn_waypoint is not None:
-                transform = spawn_waypoint.transform
-            else:
-                transform = carla.Transform(spawn_location, carla.Rotation(yaw=0.0, pitch=0.0, roll=0.0))
-            blueprint = self._rng.choice(vehicle_blueprints)
-            actor = self._spawn_traffic_route_vehicle(blueprint, transform, sim_time)
-            if actor is not None:
-                spawned += 1
-            else:
-                failed_spawns += 1
+        batch = []
+        tm = self._get_traffic_manager()
+        try:
+            tm_port = tm.get_port()
+        except Exception:
+            tm_port = getattr(self, '_tm_port', None)
 
-        print(f"[Scenario02] Traffic: spawned {spawned}/{possible_spawns} vehicles (requested={traffic_count}, routes={len(route_entries)})")
-        if failed_spawns > 0:
-            print(f"[Scenario02] Traffic: failed to spawn {failed_spawns} vehicles")
+        for p in selected_points:
+            bp = self._rng.choice(vehicle_blueprints)
+            batch.append(carla.command.SpawnActor(bp, p).then(
+                carla.command.SetAutopilot(carla.command.FutureActor, True, tm_port)
+            ))
 
+        results = self.client.apply_batch_sync(batch, False)
+        spawned_ids = []
+        for r in results:
+            if not r.error:
+                self._traffic_vehicle_actor_ids.append(r.actor_id)
+                spawned_ids.append(r.actor_id)
+
+        print(f"[Scenario02] Traffic: spawned {len(spawned_ids)}/{len(selected_points)} vehicles (requested={traffic_count})")
         self.traffic_finished = True
 
     def start_uncivbehav(self):
@@ -1286,7 +1246,9 @@ class Scenario02Runner:
                     self._start_sim_time = sim_time
                     self._spawn_start_static_props()
 
-                self._force_hero_traffic_light(ego, sim_time)
+                if ego:
+                    self._force_green_light(ego, sim_time)
+
                 self._update_forced_hero_lights(sim_time)
                 # update snake route state if active
                 try:

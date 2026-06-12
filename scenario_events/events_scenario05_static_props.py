@@ -327,6 +327,7 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
                 carla.Rotation(pitch=0.0, yaw=200.0, roll=0.0),
             ),
             "scale": None,
+            "color": "255,255,255",
             "immobilize_vehicle": True,
         },
         {
