@@ -15,6 +15,7 @@ try:
         get_random_pedestrian_blueprint,
         build_trigger_box_configs,
         draw_trigger_boxes,
+        force_green_light,
     )
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import (
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
         get_random_pedestrian_blueprint,
         build_trigger_box_configs,
         draw_trigger_boxes,
+        force_green_light,
     )
     
 try:
@@ -33,24 +35,28 @@ except ModuleNotFoundError:
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
     START_TO_ANIMCAT_DELAY_SECONDS = 2.0
     ANIMCAT_TO_SONG_DELAY_SECONDS = 2.0
     SONG_TO_DANCINGM_DELAY_SECONDS = 2.0
     DANCINGM_TO_END_DELAY_SECONDS = 2.0
+    SONG_PLAY_DURATION_SECONDS = 3.0
 else:  
     START_TO_ANIMCAT_DELAY_SECONDS = 20.0
     ANIMCAT_TO_SONG_DELAY_SECONDS = 20.0
     SONG_TO_DANCINGM_DELAY_SECONDS = 20.0
     DANCINGM_TO_END_DELAY_SECONDS = 20.0
+    SONG_PLAY_DURATION_SECONDS = 30.0
 
 SONG_START_OFFSET_SECONDS = 30.0
-SONG_PLAY_DURATION_SECONDS = 30.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
+
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 2.0
+
 SPAWN_CARS = 15                              # 15?
 ENABLE_ROUTE_PEDESTRIANS = True
 PEDESTRIAN_MAX_SPEED = 3.5
@@ -147,10 +153,12 @@ class Scenario04Runner:
             volume=0.85,
             channel_index=6,
         )
-        self._scenario_done = False
+
         self._cars_phase_done = False
         self._pedestrians_phase_done = False
         self._debug_trigger_box_lifetime = SIM_STEP_S * 2.0
+        self._scenario_done = False
+        self._force_green_light_request_time = None
         
         self._static_actor_ids = []
         self._vehicle_actor_ids = []
@@ -838,9 +846,11 @@ class Scenario04Runner:
         )
 
     def _force_green_light(self, ego, sim_time):
+        # Special-case for dancing-m confirmation: hold red on the targeted traffic light
         if ego and ego.is_at_traffic_light():
             tl = ego.get_traffic_light()
             if tl is None:
+                self._force_green_light_request_time = None
                 return
 
             if self._dancingm_confirmation_pending:
@@ -850,11 +860,24 @@ class Scenario04Runner:
                         tl.set_red_time(DANCINGM_TRAFFIC_LIGHT_RED_HOLD_SECONDS)
                 except Exception:
                     pass
+                # reset any pending green-light request while we're holding red
+                self._force_green_light_request_time = None
                 return
 
+            # For other traffic lights shared helper
             if tl.id != self._dancingm_traffic_light_actor_id:
-                tl.set_state(carla.TrafficLightState.Green)
-                tl.set_green_time(HERO_GREEN_LIGHT_HOLD_SECONDS)
+                try:
+                    self._force_green_light_request_time = force_green_light(
+                        ego,
+                        sim_time,
+                        getattr(self, "_force_green_light_request_time", None),
+                        TL_HOLD_ORIGINALLIGHT_SECONDS,
+                        HERO_GREEN_LIGHT_HOLD_SECONDS,
+                    )
+                except Exception:
+                    pass
+        else:
+            self._force_green_light_request_time = None
 
     def _spawn_pedestrians(self, ego_transform=None):
         walker_controller_bp = self.world.get_blueprint_library().find("controller.ai.walker")
