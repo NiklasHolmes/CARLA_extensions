@@ -352,7 +352,7 @@ class SessionRunner:
             '--profile', use_profile,
         ]
         if scenario_name == 'scenario03':
-            cmd.append('--enable-break-warning')
+            cmd.append('--enable-brake-warning')
         if scenario_name == 'scenario06':
             cmd.append('--enable-fuel-empty-warning')
         manual_control_process = subprocess.Popen(cmd)

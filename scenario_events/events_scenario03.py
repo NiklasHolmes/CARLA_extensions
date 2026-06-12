@@ -9,16 +9,16 @@ import carla
 from carla import VehicleLightState
 
 # For debug start manual control with: 
-# --enable-break-warning
+# --enable-brake-warning
 
-BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
+BRAKE_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     '..',
     'common',
-    'scenario_break.signal',
+    'scenario_brake.signal',
 )
-BREAK_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(BREAK_SIGNAL_FILE_DEFAULT))
-BREAK_WARNING_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
+BRAKE_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(BRAKE_SIGNAL_FILE_DEFAULT))
+BRAKE_WARNING_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
 
 try:
     from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH
@@ -47,28 +47,29 @@ except ModuleNotFoundError:
     from scenario_events.events_scenario03_static_props import get_barrier_spawn, TEMP_BARRIER_FIRETRUCK, LTRUCK_SPAWN_CONFIGS, COPWAVING_TRIGGER_CONFIGS, CARAWAY
 
 DEBUG_MODE = True
+run_in_singleFile_mode = True
 
 if DEBUG_MODE:
     START_TO_CARAWAY_DELAY = 2.0
     CARAWAY_TO_LTRUCK_DELAY = 3.0
     LTRUCK_TO_SONG_DELAY = 3.0
     SONG_TO_POLICE_DELAY = 2.0
-    POLICE_TO_BREAK_DELAY = 3.0
-    BREAK_TO_END_DELAY = 5.0
+    POLICE_TO_BRAKE_DELAY = 3.0
+    BRAKE_TO_END_DELAY = 5.0
 else:
     START_TO_CARAWAY_DELAY = 20.0
     CARAWAY_TO_LTRUCK_DELAY = 30.0
     LTRUCK_TO_SONG_DELAY = 30.0
     SONG_TO_POLICE_DELAY = 20.0
-    POLICE_TO_BREAK_DELAY = 30.0
-    BREAK_TO_END_DELAY = 5.0
+    POLICE_TO_BRAKE_DELAY = 30.0
+    BRAKE_TO_END_DELAY = 5.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 20.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 SIM_STEP_S = 0.05
-run_in_singleFile_mode = False
+
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
@@ -83,10 +84,10 @@ COPWAVING_STATUS_LOG_INTERVAL_S = 1.0
 COPWAVING_TRANSITION_BACKSTEP_M = 0.0
 
 TRIGGER_CARAWAY = False
-TRIGGER_LTRUCK = True
-TRIGGER_SONG = True
+TRIGGER_LTRUCK = False
+TRIGGER_SONG = False
 TRIGGER_POLICE = False
-TRIGGER_BREAK = False
+TRIGGER_BRAKE = True
 
 # For testing: when True, ltruckTrigger 1 or 2 is considered triggered instantly
 TEST_INSTANT_TRIGGER_LTRUCK = False
@@ -100,12 +101,12 @@ DELAY_LABELS = {
     "caraway_to_ltruck": "ltruck",
     "ltruck_to_song": "song",
     "song_to_police": "police",
-    "police_to_break": "break",
-    "break_to_end": "end",
+    "police_to_brake": "brake",
+    "brake_to_end": "end",
 }
 
 class Scenario03Runner:
-    def __init__(self, host, port, tm_port, done_file=None, trigger_caraway=True, trigger_ltruck=True, trigger_song=True, trigger_police=True, trigger_break=True):
+    def __init__(self, host, port, tm_port, done_file=None, trigger_caraway=True, trigger_ltruck=True, trigger_song=True, trigger_police=True, trigger_brake=True):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
@@ -121,7 +122,7 @@ class Scenario03Runner:
         self._trigger_ltruck = trigger_ltruck
         self._trigger_song = trigger_song
         self._trigger_police = trigger_police
-        self._trigger_break = trigger_break
+        self._trigger_brake = trigger_brake
 
         self._start_sim_time = None
         self._scenario_done = False
@@ -135,7 +136,7 @@ class Scenario03Runner:
         self.song_finished = False
         self.police_finished = False
         self.police_active = False
-        self.break_finished = False
+        self.brake_finished = False
 
         self._start_static_props_spawned = False
         self._persistent_static_actor_ids = []
@@ -170,7 +171,7 @@ class Scenario03Runner:
         self._copwaving_transition_pending = False
         self._copwaving_transition_spawn_transform = None
 
-        self._break_signal_file = BREAK_SIGNAL_FILE_DEFAULT
+        self._brake_signal_file = BRAKE_SIGNAL_FILE_DEFAULT
 
         self._delay_states = {
             "start_to_caraway": {
@@ -193,13 +194,13 @@ class Scenario03Runner:
                 "started_at": None,
                 "finished": False,
             },
-            "police_to_break": {
-                "delay": POLICE_TO_BREAK_DELAY,
+            "police_to_brake": {
+                "delay": POLICE_TO_BRAKE_DELAY,
                 "started_at": None,
                 "finished": False,
             },
-            "break_to_end": {
-                "delay": BREAK_TO_END_DELAY,
+            "brake_to_end": {
+                "delay": BRAKE_TO_END_DELAY,
                 "started_at": None,
                 "finished": False,
             },
@@ -214,8 +215,8 @@ class Scenario03Runner:
             volume=0.85,
             channel_index=6,
         )
-        self._break_warning_audio = RepeatingAudio(
-            BREAK_WARNING_CHIME_PATH,
+        self._brake_warning_audio = RepeatingAudio(
+            BRAKE_WARNING_CHIME_PATH,
             repeat_count=5,
             volume=0.85,
             channel_index=7,
@@ -1280,25 +1281,25 @@ class Scenario03Runner:
         )
         return True
 
-    def start_break(self):
-        if self.break_finished:
+    def start_brake(self):
+        if self.brake_finished:
             return
-        print("[Scenario03] break started!")
-        if self._break_signal_file:
+        print("[Scenario03] brake started!")
+        if self._brake_signal_file:
             try:
-                break_signal_file = os.path.normpath(os.path.abspath(self._break_signal_file))
-                break_dir = os.path.dirname(break_signal_file)
-                if break_dir:
-                    os.makedirs(break_dir, exist_ok=True)
-                with open(break_signal_file, "w", encoding="utf-8") as break_handle:
-                    break_handle.write("break\n")
-                print(f"[Scenario03] Break signal sent to manual_control: {break_signal_file}")
+                brake_signal_file = os.path.normpath(os.path.abspath(self._brake_signal_file))
+                brake_dir = os.path.dirname(brake_signal_file)
+                if brake_dir:
+                    os.makedirs(brake_dir, exist_ok=True)
+                with open(brake_signal_file, "w", encoding="utf-8") as brake_handle:
+                    brake_handle.write("brake\n")
+                print(f"[Scenario03] brake signal sent to manual_control: {brake_signal_file}")
             except Exception as exc:
-                print(f"[Scenario03] WARNING: could not write break signal file: {exc}")
+                print(f"[Scenario03] WARNING: could not write brake signal file: {exc}")
 
-        if not self._break_warning_audio.play():
-            print("[Scenario03] WARNING: Break warning sound konnte nicht gestartet werden.")
-        self.break_finished = True
+        if not self._brake_warning_audio.play():
+            print("[Scenario03] WARNING: brake warning sound konnte nicht gestartet werden.")
+        self.brake_finished = True
 
     def _skip_caraway_trigger(self, sim_time):
         if self.caraway_finished:
@@ -1331,12 +1332,12 @@ class Scenario03Runner:
         self.police_finished = True
         print("[Scenario03] police trigger skipped.")
 
-    def _skip_break_trigger(self, sim_time):
-        if self.break_finished:
+    def _skip_brake_trigger(self, sim_time):
+        if self.brake_finished:
             return
-        self._finish_delay_timer("police_to_break", sim_time)
-        self.break_finished = True
-        print("[Scenario03] break trigger skipped.")
+        self._finish_delay_timer("police_to_brake", sim_time)
+        self.brake_finished = True
+        print("[Scenario03] brake trigger skipped.")
 
     def run(self):
         print("[Scenario03] Running...")
@@ -1449,24 +1450,24 @@ class Scenario03Runner:
                 self._update_copwaving_phase(sim_time, ego_location, ego_velocity)
 
                 if self.police_finished:
-                    police_to_break = self._delay_states["police_to_break"]
-                    if police_to_break["started_at"] is None:
-                        self._start_delay_timer("police_to_break", sim_time)
-                    self._update_delay_timer("police_to_break", sim_time)
+                    police_to_brake = self._delay_states["police_to_brake"]
+                    if police_to_brake["started_at"] is None:
+                        self._start_delay_timer("police_to_brake", sim_time)
+                    self._update_delay_timer("police_to_brake", sim_time)
 
-                    if police_to_break["finished"] and not self.break_finished:
-                        if not self._trigger_break:
-                            self._skip_break_trigger(sim_time)
+                    if police_to_brake["finished"] and not self.brake_finished:
+                        if not self._trigger_brake:
+                            self._skip_brake_trigger(sim_time)
                         else:
-                            self.start_break()
+                            self.start_brake()
 
-                if self.break_finished:
-                    break_to_end = self._delay_states["break_to_end"]
-                    if break_to_end["started_at"] is None:
-                        self._start_delay_timer("break_to_end", sim_time)
-                    self._update_delay_timer("break_to_end", sim_time)
+                if self.brake_finished:
+                    brake_to_end = self._delay_states["brake_to_end"]
+                    if brake_to_end["started_at"] is None:
+                        self._start_delay_timer("brake_to_end", sim_time)
+                    self._update_delay_timer("brake_to_end", sim_time)
 
-                    if break_to_end["finished"]:
+                    if brake_to_end["finished"]:
                         self._scenario_done = True
 
                 if ego:
@@ -1503,19 +1504,19 @@ class Scenario03Runner:
             self._copwaving_walk_started = False
             self._copwaving_target_location = None
             self._destroy_temp_firetruck_barriers()
-            self._break_warning_audio.stop(0)
+            self._brake_warning_audio.stop(0)
         except Exception:
             pass
 
-        # Remove stale break signal file so the next run starts clean.
-        if self._break_signal_file:
+        # Remove stale brake signal file so the next run starts clean.
+        if self._brake_signal_file:
             try:
-                break_signal_file = os.path.normpath(os.path.abspath(self._break_signal_file))
-                if os.path.exists(break_signal_file):
-                    os.remove(break_signal_file)
-                    print(f"[Scenario03] Break signal file removed during destroy: {break_signal_file}")
+                brake_signal_file = os.path.normpath(os.path.abspath(self._brake_signal_file))
+                if os.path.exists(brake_signal_file):
+                    os.remove(brake_signal_file)
+                    print(f"[Scenario03] brake signal file removed during destroy: {brake_signal_file}")
             except Exception as exc:
-                print(f"[Scenario03] WARNING: could not remove break signal file during destroy: {exc}")
+                print(f"[Scenario03] WARNING: could not remove brake signal file during destroy: {exc}")
 
     def _signal_done(self):
         if not self._done_file:
@@ -1548,5 +1549,5 @@ if __name__ == "__main__":
         trigger_ltruck=TRIGGER_LTRUCK,
         trigger_song=TRIGGER_SONG,
         trigger_police=TRIGGER_POLICE,
-        trigger_break=TRIGGER_BREAK,
+        trigger_brake=TRIGGER_BRAKE,
     ).run()

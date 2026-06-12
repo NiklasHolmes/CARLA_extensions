@@ -65,8 +65,8 @@ class EventSync:
     def trigger_blinker_right(self) -> bool:
         return self._trigger_blinker("R")
 
-    def trigger_break_warning(self) -> bool:
-        self._send_dashboard("BREAK_WARNING")
+    def trigger_brake_warning(self) -> bool:
+        self._send_dashboard("BRAKE_WARNING")
         return True
 
     def trigger_fuel_empty_warning(self) -> bool:

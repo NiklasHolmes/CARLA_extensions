@@ -180,7 +180,7 @@ _ENGINE_MID = r".\audio\car_engine_mid.wav"
 _ENGINE_HIGH = r".\audio\car_engine_high.wav"
 _HORN_PATH = r".\audio\car_horn1_elevenlabs.wav"
 _BLINKER_PATH = r".\audio\car_blinker.wav"
-_BRAKE_PATH = r".\audio\car_break.wav"
+_BRAKE_PATH = r".\audio\car_brake.wav"
 _PROXIMITY_ALERT_PATH = r".\audio\car_proximityAlert.wav"
 
 # Central audio manager
@@ -226,22 +226,22 @@ CHOSEN_VEHICLE = 'vehicle.lincoln.mkz_2020'
 # https://carla.readthedocs.io/en/latest/catalogue_vehicles/
 
 # For scenario specific debug start script with: 
-# --enable-break-warning
+# --enable-brake-warning
 # --enable-fuel-empty-warning
-BREAK_SIGNAL_FILE_DEFAULT = os.path.join(
+BRAKE_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'common',
-    'scenario_break.signal',
+    'scenario_brake.signal',
 )
-break_signal_file = os.path.normpath(os.path.abspath(BREAK_SIGNAL_FILE_DEFAULT))
+brake_signal_file = os.path.normpath(os.path.abspath(BRAKE_SIGNAL_FILE_DEFAULT))
 FUEL_EMPTY_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'common',
     'scenario_fuel_empty.signal',
 )
 fuel_empty_signal_file = os.path.normpath(os.path.abspath(FUEL_EMPTY_SIGNAL_FILE_DEFAULT))
-BREAK_WARNING_BRAKE_FACTOR = 0.3
-BREAK_WARNING_ACTIVE = False
+BRAKE_WARNING_BRAKE_FACTOR = 0.1                # TODO configure?
+BRAKE_WARNING_ACTIVE = False
 
 PROFILE_CONFIG = {
     'simulator': {
@@ -288,7 +288,7 @@ PROFILE_CONFIG = {
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'none',
+            'DASHBOARD_MODE': 'overlapping',
             'AUDIO_MODE': 'full',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,
@@ -587,8 +587,8 @@ def _get_blinker_duration_or_raise(world):
     return max(0.1, duration)
 
 
-def _get_break_warning_brake_factor():
-    return BREAK_WARNING_BRAKE_FACTOR if BREAK_WARNING_ACTIVE else 1.0
+def _get_brake_warning_brake_factor():
+    return BRAKE_WARNING_BRAKE_FACTOR if BRAKE_WARNING_ACTIVE else 1.0
 
 
 def _apply_blinker_auto_off(current_lights, left_blinker_until, right_blinker_until, now):
@@ -1363,10 +1363,10 @@ class KeyboardControl(object):
                     print(f"Playing brake sound with strength {current_braking} at speed {speed_kmh} km/h")
                     audio_manager.play_brake(brake_strength=next_brake, speed_kmh=speed_kmh)
                 self._prev_brake = current_braking
-                brake_factor = _get_break_warning_brake_factor()
+                brake_factor = _get_brake_warning_brake_factor()
                 self._control.brake = min(next_brake, brake_factor)
             else:
-                brake_factor = _get_break_warning_brake_factor()
+                brake_factor = _get_brake_warning_brake_factor()
                 self._ackermann_control.speed -= min(abs(self._ackermann_control.speed), round(milliseconds * 0.005, 2) * brake_factor) * self._ackermann_reverse
                 self._ackermann_control.speed = max(0, abs(self._ackermann_control.speed)) * self._ackermann_reverse
         else:
@@ -1497,7 +1497,7 @@ class GamepadControl(object):
 
         brake    = max(0.0, (l2 + 1.0) / 2.0)
         throttle = max(0.0, (r2 + 1.0) / 2.0)                           # => convert from [-1, 1] to [0, 1]
-        brake_factor = _get_break_warning_brake_factor()                # for break failure
+        brake_factor = _get_brake_warning_brake_factor()                # for brake failure
         brake = min(brake, brake_factor)
 
         speed_kmh = 0.0
@@ -1768,7 +1768,7 @@ class WheelControl(object):
 
         brake    = 0 if brake < 0.01 else brake # Always minimal input prevents driving -> if too small input ignore
         throttle = 0 if throttle < 0.01 else throttle 
-        brake_factor = _get_break_warning_brake_factor()
+        brake_factor = _get_brake_warning_brake_factor()
         brake = min(brake, brake_factor)
 
         speed_kmh = 0.0
@@ -2817,9 +2817,9 @@ def game_loop(args):
         else:
             controller = KeyboardControl(world, args.autopilot)
 
-        break_signal_seen = False
-        if args.enable_break_warning:
-            print(f"[Scenario03] Watching break signal file: {break_signal_file}")
+        brake_signal_seen = False
+        if args.enable_brake_warning:
+            print(f"[Scenario03] Watching brake signal file: {brake_signal_file}")
 
         fuel_empty_signal_seen = False
         if args.enable_fuel_empty_warning:
@@ -2841,18 +2841,18 @@ def game_loop(args):
                 event_sync.update()
             world.tick(clock)
 
-            if args.enable_break_warning and not break_signal_seen:
-                if os.path.exists(break_signal_file):
-                    global BREAK_WARNING_ACTIVE
-                    BREAK_WARNING_ACTIVE = True
-                    break_signal_seen = True
+            if args.enable_brake_warning and not brake_signal_seen:
+                if os.path.exists(brake_signal_file):
+                    global BRAKE_WARNING_ACTIVE
+                    BRAKE_WARNING_ACTIVE = True
+                    brake_signal_seen = True
                     if event_sync is not None:
-                        event_sync.trigger_break_warning()
+                        event_sync.trigger_brake_warning()
                     try:
-                        os.remove(break_signal_file)
+                        os.remove(brake_signal_file)
                     except Exception:
                         pass
-                    print(f"[Scenario03] Break signal received from scenario03: {break_signal_file}. Forwarding brake warning to dashboard.")
+                    print(f"[Scenario03] Brake signal received from scenario03: {brake_signal_file}. Forwarding brake warning to dashboard.")
 
             if args.enable_fuel_empty_warning and not fuel_empty_signal_seen:
                 if os.path.exists(fuel_empty_signal_file):
@@ -2976,9 +2976,9 @@ def main():
         default=None,
         help='path to a stop signal file written by session_runner when the scenario ends')
     argparser.add_argument(
-        '--enable-break-warning',
+        '--enable-brake-warning',
         action='store_true',
-        help='enable Scenario03 break-warning polling')
+        help='enable Scenario03 brake-warning polling')
     argparser.add_argument(
         '--enable-fuel-empty-warning',
         action='store_true',

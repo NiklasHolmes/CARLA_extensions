@@ -124,7 +124,7 @@ class CarDashboard(threading.Thread):
         # Turn signal blinking
         self._left_indicator_on = False
         self._right_indicator_on = False
-        self._break_warning_on = False
+        self._brake_warning_on = False
         self._fuel_empty_warning_on = False
         self._sync_socket = None
         self._blink_interval = 0.3
@@ -194,10 +194,10 @@ class CarDashboard(threading.Thread):
                 self._blink_phase_on = True
             elif cmd == "RIGHT_OFF":
                 self._right_indicator_on = False
-            elif cmd == "BREAK_WARNING":
-                self._break_warning_on = True
-            elif cmd == "BREAK_WARNING_OFF":
-                self._break_warning_on = False
+            elif cmd == "BRAKE_WARNING":
+                self._brake_warning_on = True
+            elif cmd == "BRAKE_WARNING_OFF":
+                self._brake_warning_on = False
             elif cmd == "FUEL_EMPTY_WARNING":
                 self._fuel_empty_warning_on = True
             elif cmd == "FUEL_EMPTY_WARNING_OFF":
@@ -401,7 +401,7 @@ class CarDashboard(threading.Thread):
                             hwnd = get_pygame_window_hwnd(pygame)
                         self._apply_window_policy_windows(hwnd, resolved_display_index, log_output=False)
 
-                if DEBUGMODE or self._left_indicator_on or self._right_indicator_on or self._break_warning_on or self._fuel_empty_warning_on:
+                if DEBUGMODE or self._left_indicator_on or self._right_indicator_on or self._brake_warning_on or self._fuel_empty_warning_on:
                     self._blink_timer += dt
                     while self._blink_timer >= self._blink_interval:
                         self._blink_timer -= self._blink_interval
@@ -521,7 +521,7 @@ class CarDashboard(threading.Thread):
             self._display.blit(self._center_car_image, car_rect)
 
         warning_text = None
-        if self._break_warning_on:
+        if self._brake_warning_on:
             warning_text = "Bremsfehler!"
         elif self._fuel_empty_warning_on:
             warning_text = "Tank leer!"
