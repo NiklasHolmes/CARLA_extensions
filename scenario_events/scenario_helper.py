@@ -324,3 +324,39 @@ def draw_trigger_boxes(world, box_configs, life_time=0.1):
             world.debug.draw_line(p4, p4_top, thickness=thickness, color=color, life_time=life_time)
         except Exception:
             pass
+
+
+def force_green_light(ego, sim_time, request_time, tl_hold_originalLight_seconds, hero_green_hold_seconds):
+    """Helper to request and enforce a green traffic light for the hero vehicle.
+
+    - `ego` is the hero actor (or None).
+    - `sim_time` is the current simulation time in seconds.
+    - `request_time` is the previous request timestamp (or None). The function
+      returns the updated request_time which the caller should store.
+    - `tl_hold_originalLight_seconds` is how long we wait before forcing changes.
+    - `hero_green_hold_seconds` is the green-time to set when forcing green.
+    """
+    try:
+        if ego and ego.is_at_traffic_light():
+            tl = ego.get_traffic_light()
+            if tl:
+                if request_time is None:
+                    request_time = sim_time
+                elif (sim_time - request_time) >= tl_hold_originalLight_seconds:
+                    current_state = tl.get_state()
+
+                    if current_state == carla.TrafficLightState.Red:
+                        # print("Now Red!")
+                        tl.set_state(carla.TrafficLightState.Green)
+                        tl.set_green_time(hero_green_hold_seconds)
+                    elif current_state == carla.TrafficLightState.Yellow:
+                        tl.set_state(carla.TrafficLightState.Red)
+                        request_time = sim_time
+                    elif current_state == carla.TrafficLightState.Green:
+                        tl.set_green_time(hero_green_hold_seconds)
+        else:
+            request_time = None
+    except Exception:
+        pass
+
+    return request_time
