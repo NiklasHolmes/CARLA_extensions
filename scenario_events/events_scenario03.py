@@ -7,6 +7,7 @@ import time
 
 import carla
 from carla import VehicleLightState
+import threading
 
 # For debug start manual control with: 
 # --enable-brake-warning
@@ -42,9 +43,23 @@ except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
 try:
-    from events_scenario03_static_props import get_barrier_spawn, TEMP_BARRIER_FIRETRUCK, LTRUCK_SPAWN_CONFIGS, COPWAVING_TRIGGER_CONFIGS, CARAWAY
+    from events_scenario03_static_props import (
+        get_barrier_spawn,
+        TEMP_BARRIER_FIRETRUCK,
+        LTRUCK_SPAWN_CONFIGS,
+        COPWAVING_TRIGGER_CONFIGS,
+        CARAWAY,
+        TARGET_TL_RED,
+    )
 except ModuleNotFoundError:
-    from scenario_events.events_scenario03_static_props import get_barrier_spawn, TEMP_BARRIER_FIRETRUCK, LTRUCK_SPAWN_CONFIGS, COPWAVING_TRIGGER_CONFIGS, CARAWAY
+    from scenario_events.events_scenario03_static_props import (
+        get_barrier_spawn,
+        TEMP_BARRIER_FIRETRUCK,
+        LTRUCK_SPAWN_CONFIGS,
+        COPWAVING_TRIGGER_CONFIGS,
+        CARAWAY,
+        TARGET_TL_RED,
+    )
 
 DEBUG_MODE = True
 run_in_singleFile_mode = True
@@ -56,6 +71,12 @@ if DEBUG_MODE:
     SONG_TO_POLICE_DELAY = 2.0
     POLICE_TO_BRAKE_DELAY = 3.0
     BRAKE_TO_END_DELAY = 5.0
+
+    TRIGGER_CARAWAY = False
+    TRIGGER_LTRUCK = False
+    TRIGGER_SONG = False
+    TRIGGER_POLICE = False
+    TRIGGER_BRAKE = True
 else:
     START_TO_CARAWAY_DELAY = 20.0
     CARAWAY_TO_LTRUCK_DELAY = 30.0
@@ -64,17 +85,20 @@ else:
     POLICE_TO_BRAKE_DELAY = 30.0
     BRAKE_TO_END_DELAY = 5.0
 
+    TRIGGER_CARAWAY = True
+    TRIGGER_LTRUCK = True
+    TRIGGER_SONG = True
+    TRIGGER_POLICE = True
+    TRIGGER_BRAKE = True
+
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 20.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 SIM_STEP_S = 0.05
 
-
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
-
 route_green = ["Straight", "Straight", "Straight", "Straight", "Straight", "Straight"]
+
 
 # copWaving lifetime (seconds) before removal
 COPWAVING_LIFETIME_S = 10.0
@@ -82,12 +106,6 @@ COPWAVING_WALK_SPEED = 1.4
 COPWAVING_ARRIVE_THRESH = 1.2
 COPWAVING_STATUS_LOG_INTERVAL_S = 1.0
 COPWAVING_TRANSITION_BACKSTEP_M = 0.0
-
-TRIGGER_CARAWAY = False
-TRIGGER_LTRUCK = False
-TRIGGER_SONG = False
-TRIGGER_POLICE = False
-TRIGGER_BRAKE = True
 
 # For testing: when True, ltruckTrigger 1 or 2 is considered triggered instantly
 TEST_INSTANT_TRIGGER_LTRUCK = False
@@ -116,6 +134,11 @@ class Scenario03Runner:
         self._done_file = done_file
         self._rng = random.Random()
         self._all_traffic_lights = []
+        # Will pin the target traffic lights by location during init
+        self._pinned_traffic_light_ids = set()
+        # Mapping of pinned TL id -> red hold duration (seconds)
+        self._pinned_traffic_light_durations = {}
+        self._ltruck_tl_hold_start = None
         self._init_all_traffic_lights()
 
         self._trigger_caraway = trigger_caraway
@@ -170,6 +193,11 @@ class Scenario03Runner:
         self._copwaving_last_status_log_time = None
         self._copwaving_transition_pending = False
         self._copwaving_transition_spawn_transform = None
+        self._copwaving_target_locations = None
+        self._copwaving_current_target_idx = 0
+        # support multiple sequential targets for cop waving (list of carla.Location)
+        self._copwaving_target_locations = None
+        self._copwaving_current_target_idx = 0
 
         self._brake_signal_file = BRAKE_SIGNAL_FILE_DEFAULT
 
@@ -225,10 +253,54 @@ class Scenario03Runner:
     def _init_all_traffic_lights(self):
         actors = self.world.get_actors()
         self._all_traffic_lights = [actor for actor in actors if 'traffic_light' in actor.type_id]
-        
+
         for tl in self._all_traffic_lights:
             # tln.freeze(True) => stops all traffic lights
-            tl.freeze(True)
+            try:
+                tl.freeze(True)
+            except Exception:
+                pass
+            try:
+                loc = tl.get_transform().location
+                print(f"[Scenario03] TrafficLight found: id={tl.id} type_id={tl.type_id} loc=({loc.x:.2f},{loc.y:.2f},{loc.z:.2f}) state={tl.get_state()}")
+            except Exception:
+                try:
+                    print(f"[Scenario03] TrafficLight found: id={getattr(tl, 'id', 'n/a')} type_id={getattr(tl, 'type_id', 'n/a')}")
+                except Exception:
+                    pass
+
+        # Try to pin traffic lights based on TARGET_TL_RED definitions from static props
+        try:
+            for targ_idx, targ in enumerate(TARGET_TL_RED, start=1):
+                tloc = targ.get("location")
+                trad = float(targ.get("search_radius", 2.0))
+                hold_dur = float(targ.get("red_hold_duration", 20.0))
+                best_tl = None
+                best_dist = None
+                for tl in self._all_traffic_lights:
+                    try:
+                        loc = tl.get_transform().location
+                    except Exception:
+                        continue
+                    dx = loc.x - tloc.x
+                    dy = loc.y - tloc.y
+                    dist = math.hypot(dx, dy)
+                    if dist <= trad and (best_dist is None or dist < best_dist):
+                        best_dist = dist
+                        best_tl = tl
+                if best_tl is not None:
+                    tl_id = best_tl.id
+                    self._pinned_traffic_light_ids.add(tl_id)
+                    self._pinned_traffic_light_durations[tl_id] = hold_dur
+                    try:
+                        loc = best_tl.get_transform().location
+                        print(f"[Scenario03] Pinned traffic light[{targ_idx}] id={tl_id} at loc=({loc.x:.2f},{loc.y:.2f},{loc.z:.2f}) dist={best_dist:.2f}m hold={hold_dur:.1f}s")
+                    except Exception:
+                        print(f"[Scenario03] Pinned traffic light[{targ_idx}] id={tl_id} (no transform) hold={hold_dur:.1f}s")
+                else:
+                    print(f"[Scenario03] Kein TrafficLight innerhalb {trad}m von {tloc} gefunden (target {targ_idx}).")
+        except Exception:
+            pass
 
     def update_blinking_lights(self, sim_time):
         try:
@@ -239,9 +311,43 @@ class Scenario03Runner:
             else:
                 target_state = carla.TrafficLightState.Off
 
+            # Compute elapsed time since L-truck hold started (if any)
+            hold_elapsed = None
+            try:
+                if self._ltruck_tl_hold_start is not None:
+                    hold_elapsed = time.time() - self._ltruck_tl_hold_start
+            except Exception:
+                hold_elapsed = None
+
             for tl in self._all_traffic_lights:
-                if tl.get_state() != target_state:
-                    tl.set_state(target_state)
+                try:
+                    tl_id = getattr(tl, 'id', None)
+                    # If hold is active for this pinned TL, keep it red (per-TL duration)
+                    if tl_id in self._pinned_traffic_light_ids and hold_elapsed is not None:
+                        try:
+                            dur = float(self._pinned_traffic_light_durations.get(tl_id, 0.0))
+                        except Exception:
+                            dur = 0.0
+                        if hold_elapsed < dur:
+                            if tl.get_state() != carla.TrafficLightState.Red:
+                                tl.set_state(carla.TrafficLightState.Red)
+                            continue
+
+                    # All other traffic lights: blink yellow (toggle Yellow/Off)
+                    if tl.get_state() != target_state:
+                        tl.set_state(target_state)
+                except Exception:
+                    # ignore per-light errors
+                    pass
+
+            # Expire hold if elapsed longer than all pinned durations
+            try:
+                if self._ltruck_tl_hold_start is not None:
+                    max_dur = max(self._pinned_traffic_light_durations.values()) if self._pinned_traffic_light_durations else 0.0
+                    if hold_elapsed is not None and hold_elapsed >= max_dur:
+                        self._ltruck_tl_hold_start = None
+            except Exception:
+                pass
                     
         except Exception:
             pass
@@ -525,7 +631,15 @@ class Scenario03Runner:
             self._caraway_vehicle_last_locations[actor_id] = current_location
 
     def _get_ltruck_config(self, hero_location, hero_velocity=None):
+        if not LTRUCK_SPAWN_CONFIGS:
+            return None
+
         for config in LTRUCK_SPAWN_CONFIGS:
+            trigger_name = config.get("name")
+            # skip triggers that already fired once
+            if trigger_name in self._ltruck_triggered_keys:
+                continue
+
             trigger_location = config["trigger_location"]
             if abs(hero_location.x - trigger_location.x) > config["trigger_x_tolerance"]:
                 continue
@@ -587,17 +701,40 @@ class Scenario03Runner:
             f"[Scenario03] Started ltruck manual_control: "
             f"vehicleID={vehicle_id}, vehicleColor={vehicle_color}, audio_mode={audio_mode}\n"
             f"1. honk from behind\n"
-            f"2. turn on light (with TODO)\n"
+            f"2. turn on light (with L or X)\n"
             f"3. drive next to car"
         )
 
-        while True:
-            user_input = input("\n[Scenario03] Press 'J' + Enter to continue scenario: ").strip().upper()
-            if user_input == 'J':
-                break
+        # Mark this trigger so we don't re-enter this routine repeatedly
+        try:
+            self._ltruck_triggered_keys.add(name)
+        except Exception:
+            pass
 
-        self._ltruck_triggered_keys.add(name)
-        return True
+        # Start a background thread to wait for the user's 'J' confirmation so
+        # the main simulation loop is not blocked and timers (like the 20s hold)
+        # can run concurrently.
+        def _wait_for_confirm():
+            try:
+                while True:
+                    user_input = input("\n[Scenario03] Press 'J' + Enter to continue scenario: ").strip().upper()
+                    if user_input == 'J' or user_input == 'j':
+                        break
+            except Exception:
+                return
+
+            try:
+                # set finished flag when user confirms
+                self.ltruck_finished = True
+                print(f"[Scenario03] LTruck manual control confirmed by user (J).")
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_wait_for_confirm, daemon=True)
+        t.start()
+
+        # Return False to indicate manual-control confirmation will happen asynchronously.
+        return False
 
     def start_ltruck(self):
         if self.ltruck_active or self.ltruck_finished:
@@ -607,6 +744,10 @@ class Scenario03Runner:
 
     def _draw_ltruck_trigger_boxes(self):
         if not DEBUG_MODE or not self.ltruck_active or self.ltruck_finished:
+            return
+
+        # If any ltruck trigger has already fired, stop drawing/listening
+        if self._ltruck_triggered_keys:
             return
 
         box_configs = build_trigger_box_configs(
@@ -872,7 +1013,10 @@ class Scenario03Runner:
 
     def _spawn_copwaving_walker_controller(self, trigger_config, spawn_transform=None):
         spawn_location = trigger_config.get("spawn_location")
+        # support either single target_location or sequential target_location1/target_location2
         target_location = trigger_config.get("target_location")
+        target_location1 = trigger_config.get("target_location1")
+        target_location2 = trigger_config.get("target_location2")
         blueprint_id_walk = trigger_config.get("blueprint_id_walk", "walker.pedestrian.0030")
         spawn_yaw = trigger_config.get("spawn_yaw", 0.0)
 
@@ -893,11 +1037,23 @@ class Scenario03Runner:
             except Exception:
                 pass
 
-        target_location = self._snap_location_to_navigation(target_location)
+        # build target list
+        targets = []
+        if target_location1 is not None and target_location2 is not None:
+            targets = [self._snap_location_to_navigation(target_location1), self._snap_location_to_navigation(target_location2)]
+        elif target_location is not None:
+            targets = [self._snap_location_to_navigation(target_location)]
+
+        if not targets:
+            print("[Scenario03] WARNUNG: copWaving walker needs at least one target_location.")
+            return False
+
+        # log first target
+        t0 = targets[0]
         print(
             f"[Scenario03] copWaving switching to walking model | blueprint={blueprint_id_walk} | "
             f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f}) | "
-            f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f})"
+            f"target=({t0.x:.2f}, {t0.y:.2f}, {t0.z:.2f})"
         )
 
         if spawn_transform is None:
@@ -929,7 +1085,9 @@ class Scenario03Runner:
         self._copwaving_walk_actor_id = walker_actor.id
         self._copwaving_walk_controller_id = None
         self._copwaving_walk_started = True
-        self._copwaving_target_location = target_location
+        self._copwaving_target_locations = targets
+        self._copwaving_current_target_idx = 0
+        self._copwaving_target_location = self._copwaving_target_locations[0]
         self._copwaving_last_update_time = None
         self._copwaving_last_status_log_time = None
         self._static_actor_ids.append(walker_actor.id)
@@ -1009,7 +1167,25 @@ class Scenario03Runner:
         self._copwaving_walk_actor_id = new_actor.id
         self._copwaving_walk_controller_id = None
         self._copwaving_walk_started = True
-        self._copwaving_target_location = self._snap_location_to_navigation(trigger_config.get("target_location"))
+        # handle multiple sequential targets if provided
+        t1 = trigger_config.get("target_location1")
+        t2 = trigger_config.get("target_location2")
+        t_single = trigger_config.get("target_location")
+        targets = []
+        if t1 is not None and t2 is not None:
+            targets = [self._snap_location_to_navigation(t1), self._snap_location_to_navigation(t2)]
+        elif t_single is not None:
+            targets = [self._snap_location_to_navigation(t_single)]
+        else:
+            targets = []
+
+        if not targets:
+            print("[Scenario03] WARNUNG: copWaving transition has no target(s).")
+            return False
+
+        self._copwaving_target_locations = targets
+        self._copwaving_current_target_idx = 0
+        self._copwaving_target_location = self._copwaving_target_locations[0]
         self._copwaving_last_update_time = None
         self._copwaving_last_status_log_time = None
         self._static_actor_ids.append(new_actor.id)
@@ -1112,8 +1288,18 @@ class Scenario03Runner:
             )
 
         if distance <= COPWAVING_ARRIVE_THRESH:
+            # if multiple targets are defined, advance to the next one
+            if self._copwaving_target_locations and self._copwaving_current_target_idx < (len(self._copwaving_target_locations) - 1):
+                self._copwaving_current_target_idx += 1
+                self._copwaving_target_location = self._copwaving_target_locations[self._copwaving_current_target_idx]
+                print(
+                    f"[Scenario03] copWaving walker reached intermediate target and moving to next | walker_id={walker.id} | sim_time={sim_time:.2f}s | "
+                    f"next_target=({self._copwaving_target_location.x:.2f}, {self._copwaving_target_location.y:.2f}, {self._copwaving_target_location.z:.2f})"
+                )
+                return
+
             print(
-                f"[Scenario03] copWaving walker reached target | walker_id={walker.id} | sim_time={sim_time:.2f}s | "
+                f"[Scenario03] copWaving walker reached final target | walker_id={walker.id} | sim_time={sim_time:.2f}s | "
                 f"distance={distance:.2f}m"
             )
             self._finish_copwaving_phase()
@@ -1413,11 +1599,38 @@ class Scenario03Runner:
                     if self.ltruck_active and not self.ltruck_finished:
                         config = None
                         if TEST_INSTANT_TRIGGER_LTRUCK:
-                            config = LTRUCK_SPAWN_CONFIGS[ltruck_spawn_idx] if LTRUCK_SPAWN_CONFIGS else None
+                            # For instant-test mode, pick the first LTRUCK config that hasn't fired yet
+                            config = None
+                            if LTRUCK_SPAWN_CONFIGS:
+                                for c in LTRUCK_SPAWN_CONFIGS:
+                                    name = c.get("name")
+                                    if name in self._ltruck_triggered_keys:
+                                        continue
+                                    config = c
+                                    break
                         elif ego_location:
                             config = self._get_ltruck_config(ego_location, ego_velocity)
 
                         if config:
+                            # L-truck trigger detected -> start hold timer once and immediately set pinned TLs to Red
+                            try:
+                                if self._ltruck_tl_hold_start is None:
+                                    self._ltruck_tl_hold_start = time.time()
+                                    try:
+                                        max_dur = max(self._pinned_traffic_light_durations.values()) if self._pinned_traffic_light_durations else 0.0
+                                    except Exception:
+                                        max_dur = 0.0
+                                    print(f"[Scenario03] LTruck trigger detected - holding pinned traffic lights red for {max_dur}s")
+                                    # immediately set pinned TL actors to Red
+                                    for tl in self._all_traffic_lights:
+                                        try:
+                                            if getattr(tl, 'id', None) in self._pinned_traffic_light_ids:
+                                                tl.set_state(carla.TrafficLightState.Red)
+                                        except Exception:
+                                            pass
+                            except Exception:
+                                pass
+
                             if self._start_ltruck_manual_control_from_config(config):
                                 self.ltruck_finished = True
 

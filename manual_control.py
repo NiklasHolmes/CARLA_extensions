@@ -685,8 +685,8 @@ def _get_spawn_point_for_town(map_obj, rolename='hero'):
         },
         'Town07': {
             'hero': carla.Transform(
-                carla.Location(x=-11.674381,y=-108.930371,z=0.40),
-                carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                carla.Location(x=-2.40423843, y=50.8074, z=0.30),
+                carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
             ),
         },
         'Town10': {
