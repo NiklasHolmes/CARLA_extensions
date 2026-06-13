@@ -108,9 +108,7 @@ CARAWAY = (
     },
 )
 
-# Traffic lights that should be held Red when triggered.
-# Each entry defines a name, a location to pin the closest traffic light,
-# a search radius (meters) and the red hold duration (seconds).
+# Traffic lights that should be held Red when ltruck triggered.
 TARGET_TL_RED = [
     {
         "name": "tl_1",

@@ -322,7 +322,7 @@ class Scenario03Runner:
             for tl in self._all_traffic_lights:
                 try:
                     tl_id = getattr(tl, 'id', None)
-                    # If hold is active for this pinned TL, keep it red (per-TL duration)
+                    # If hold is active for this pinned TL, keep it red
                     if tl_id in self._pinned_traffic_light_ids and hold_elapsed is not None:
                         try:
                             dur = float(self._pinned_traffic_light_durations.get(tl_id, 0.0))
@@ -636,7 +636,7 @@ class Scenario03Runner:
 
         for config in LTRUCK_SPAWN_CONFIGS:
             trigger_name = config.get("name")
-            # skip triggers that already fired once
+            # skip triggers that already fired once                 # not necessary?!
             if trigger_name in self._ltruck_triggered_keys:
                 continue
 
@@ -711,9 +711,7 @@ class Scenario03Runner:
         except Exception:
             pass
 
-        # Start a background thread to wait for the user's 'J' confirmation so
-        # the main simulation loop is not blocked and timers (like the 20s hold)
-        # can run concurrently.
+        # Start a background thread to wait for 'J' confirmation so the main simulation loop with hold tl red etc. is not blocked
         def _wait_for_confirm():
             try:
                 while True:
@@ -733,7 +731,7 @@ class Scenario03Runner:
         t = threading.Thread(target=_wait_for_confirm, daemon=True)
         t.start()
 
-        # Return False to indicate manual-control confirmation will happen asynchronously.
+        # Return False to indicate manual-control confirmation will happen asynchronously
         return False
 
     def start_ltruck(self):
@@ -1013,7 +1011,6 @@ class Scenario03Runner:
 
     def _spawn_copwaving_walker_controller(self, trigger_config, spawn_transform=None):
         spawn_location = trigger_config.get("spawn_location")
-        # support either single target_location or sequential target_location1/target_location2
         target_location = trigger_config.get("target_location")
         target_location1 = trigger_config.get("target_location1")
         target_location2 = trigger_config.get("target_location2")
@@ -1383,28 +1380,23 @@ class Scenario03Runner:
         for trigger_config in COPWAVING_TRIGGER_CONFIGS:
             trigger_name = trigger_config.get("name")
             
-            # Überspringe den Trigger, wenn er bereits ausgelöst wurde
+            # skip triggers that already fired once
             if trigger_name in self._copwaving_triggered_keys:
                 continue
             
             trigger_location = trigger_config["trigger_location"]
             
-            # Überprüfe X Position
             if abs(hero_location.x - trigger_location.x) > trigger_config["trigger_x_tolerance"]:
                 continue
-            
-            # Überprüfe Y Position
             if abs(hero_location.y - trigger_location.y) > trigger_config["trigger_y_tolerance"]:
                 continue
-            
-            # Überprüfe Fahrtrichtung wenn vorhanden
+
             required_axis = trigger_config.get("trigger_direction_axis")
             required_sign = trigger_config.get("trigger_direction_sign")
             if required_axis is not None and required_sign is not None:
                 if hero_velocity is None:
                     continue
                 
-                # Prüfe ob Hero in die richtige Richtung fährt
                 if required_axis == "x":
                     axis_velocity = hero_velocity.x
                 elif required_axis == "y":
@@ -1412,7 +1404,6 @@ class Scenario03Runner:
                 else:
                     continue
                 
-                # Muss in die richtige Richtung fahren (Vorzeichen passt)
                 if axis_velocity * required_sign <= 0.0:
                     continue
             
@@ -1432,22 +1423,18 @@ class Scenario03Runner:
         if spawn_location is None:
             print(f"[Scenario03] WARNUNG: Keine spawn_location für {trigger_name}")
             return False
-        
-        # Erstelle Blueprint
+
         walker_bp = self.world.get_blueprint_library().find(blueprint_id)
         if walker_bp is None:
             print(f"[Scenario03] WARNUNG: Blueprint {blueprint_id} nicht gefunden für {trigger_name}")
             return False
         
-        # Setze is_invincible auf false
         if walker_bp.has_attribute("is_invincible"):
             walker_bp.set_attribute("is_invincible", "false")
-        
-        # Erstelle Transform
+  
         rotation = carla.Rotation(pitch=0.0, yaw=spawn_yaw if spawn_yaw is not None else 0.0, roll=0.0)
         transform = carla.Transform(spawn_location, rotation)
-        
-        # Spawne Actor
+
         actor = self.world.try_spawn_actor(walker_bp, transform)
         if actor is None:
             print(
@@ -1456,7 +1443,6 @@ class Scenario03Runner:
             )
             return False
         
-        # Tracking
         self._copwaving_triggered_keys.add(trigger_name)
         self._copwaving_actor_ids[trigger_name] = actor.id
         self._static_actor_ids.append(actor.id)
@@ -1621,7 +1607,7 @@ class Scenario03Runner:
                                     except Exception:
                                         max_dur = 0.0
                                     print(f"[Scenario03] LTruck trigger detected - holding pinned traffic lights red for {max_dur}s")
-                                    # immediately set pinned TL actors to Red
+                                    # immediately set pinned TL actors to Red:
                                     for tl in self._all_traffic_lights:
                                         try:
                                             if getattr(tl, 'id', None) in self._pinned_traffic_light_ids:
