@@ -360,3 +360,169 @@ def force_green_light(ego, sim_time, request_time, tl_hold_originalLight_seconds
         pass
 
     return request_time
+
+
+def spawn_pedestrians(world, client, rng, count=10, ego_transform=None, target_location=None,
+                      max_speed=2.5, nav_samples=96, min_hidden_distance=90.0, max_hidden_distance=260.0,
+                      min_route_distance=5.0, arrive_thresh=1.0, wait_timeout=120.0, max_numeric_id=50):
+    """Spawn pedestrians and their controllers. Returns a group dict.
+
+    Group keys: routes (list), walker_ids, controller_ids, spawn_time, arrive_thresh, wait_timeout
+    """
+    walker_controller_bp = world.get_blueprint_library().find('controller.ai.walker')
+    walker_batch = []
+    pedestrian_routes = []
+    used_locations = []
+
+    for index in range(count):
+        walker_bp = get_random_pedestrian_blueprint(world, rng, excluded_ids=None, max_numeric_id=max_numeric_id)
+
+        spawn_location = pick_hidden_navigation_location(
+            world, ego_transform, used_locations,
+            min_distance=min_hidden_distance,
+            max_distance=max_hidden_distance,
+            min_route_distance=min_route_distance,
+            sample_count=nav_samples,
+        )
+        if spawn_location is None:
+            spawn_location = pick_navigation_location(world, used_locations, min_route_distance, sample_count=nav_samples)
+            if spawn_location is None:
+                continue
+
+        if target_location is not None:
+            tgt = carla.Location(x=target_location.x, y=target_location.y, z=target_location.z)
+        else:
+            tgt = pick_navigation_location(world, used_locations, min_route_distance, sample_count=nav_samples)
+            if tgt is None:
+                tgt = spawn_location
+
+        # Align blueprint animation speed (blueprint attribute) with controller speed to avoid "moonwalk"   # not really working
+        if walker_bp.has_attribute('speed'):
+            try:
+                rec = list(walker_bp.get_attribute('speed').recommended_values)
+                # convert to floats when possible
+                rec_f = []
+                for v in rec:
+                    try:
+                        rec_f.append(float(v))
+                    except Exception:
+                        rec_f.append(None)
+                # pick nearest recommended speed to desired max_speed
+                best_val = None
+                best_diff = None
+                for idx, vf in enumerate(rec_f):
+                    if vf is None:
+                        continue
+                    diff = abs(vf - float(max_speed))
+                    if best_diff is None or diff < best_diff:
+                        best_diff = diff
+                        best_val = rec[idx]
+                if best_val is not None:
+                    walker_bp.set_attribute('speed', str(best_val))
+            except Exception:
+                pass
+
+        used_locations.append(spawn_location)
+        walker_batch.append(carla.command.SpawnActor(walker_bp, carla.Transform(spawn_location)))
+        pedestrian_routes.append({
+            'spawn_location': spawn_location,
+            'target_location': tgt,
+            'current_target_location': tgt,
+            'heading_to_target': True,
+            'done': False,
+            'max_speed': float(max_speed),
+        })
+
+    results = client.apply_batch_sync(walker_batch, False)
+    spawned_walkers = []
+    for index, result in enumerate(results):
+        if result.error:
+            continue
+        spawned_walkers.append((result.actor_id, pedestrian_routes[index]))
+
+    controller_batch = []
+    for walker_id, _ in spawned_walkers:
+        controller_batch.append(carla.command.SpawnActor(walker_controller_bp, carla.Transform(), walker_id))
+
+    controller_results = client.apply_batch_sync(controller_batch, False)
+
+    successful_routes = []
+    walker_ids = []
+    controller_ids = []
+    ci = 0
+    for walker_id, route in spawned_walkers:
+        if ci >= len(controller_results):
+            break
+        cres = controller_results[ci]
+        ci += 1
+        if cres.error:
+            continue
+        route['walker_id'] = walker_id
+        route['controller_id'] = cres.actor_id
+        successful_routes.append(route)
+        walker_ids.append(walker_id)
+        controller_ids.append(cres.actor_id)
+
+    group = {
+        'routes': successful_routes,
+        'walker_ids': walker_ids,
+        'controller_ids': controller_ids,
+        'spawn_time': world.get_snapshot().timestamp.elapsed_seconds if world.get_snapshot() is not None else None,
+        'arrive_thresh': arrive_thresh,
+        'wait_timeout': wait_timeout,
+    }
+    return group
+
+
+def start_pedestrians(world, group):
+    """Start controllers for the pedestrian group and set targets/speeds."""
+    if not group or not group.get('routes'):
+        return
+    for route in group.get('routes'):
+        walker = world.get_actor(route.get('walker_id'))
+        controller = world.get_actor(route.get('controller_id'))
+        if walker is None or controller is None:
+            route['done'] = True
+            continue
+        controller.start()
+        route['heading_to_target'] = True
+        route['current_target_location'] = route.get('target_location')
+        try:
+            controller.go_to_location(route['current_target_location'])
+            controller.set_max_speed(route.get('max_speed', 2.5))
+        except Exception:
+            pass
+
+
+def update_pedestrians(world, group, sim_time):
+    """Update group; flip targets when arrived. Returns True when all done."""
+    if not group or not group.get('routes'):
+        return True
+    any_not_done = False
+    for route in group.get('routes'):
+        if route.get('done'):
+            continue
+        walker = world.get_actor(route.get('walker_id'))
+        if walker is None:
+            route['done'] = True
+            continue
+        loc = walker.get_location()
+        target_location = route.get('current_target_location', route.get('target_location'))
+        distance = loc.distance(target_location)
+        if distance <= group.get('arrive_thresh', 1.0):
+            if route.get('heading_to_target', True):
+                next_target = route.get('spawn_location')
+                route['heading_to_target'] = False
+            else:
+                next_target = route.get('target_location')
+                route['heading_to_target'] = True
+            route['current_target_location'] = next_target
+            controller = world.get_actor(route.get('controller_id'))
+            if controller is not None:
+                try:
+                    controller.go_to_location(next_target)
+                except Exception:
+                    pass
+        else:
+            any_not_done = True
+    return not any_not_done

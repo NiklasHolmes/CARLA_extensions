@@ -27,9 +27,9 @@ except ModuleNotFoundError:
 	from generate_audio import SongAudio
 
 try:
-	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians
 except ModuleNotFoundError:
-	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes
+	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians
 
 def get_actor_blueprints(world, filter_pattern):
 	bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -53,32 +53,36 @@ run_in_singleFile_mode = False
 if DEBUG_MODE:
 	START_TO_REDLIGHT_DELAY = 1.0
 	REDLIGHT_TO_TRAFFICJAM_DELAY = 2.0
-	TRAFFICJAM_TO_BADGUY_DELAY = 2.0
-	BADGUY_TO_SONG_DELAY = 2.0
-	SONG_TO_CROSSPED_DELAY = 1.0
+	TRAFFICJAM_TO_SONG_DELAY = 2.0
+	SONG_TO_BADGUY_DELAY = 2.0
+	BADGUY_TO_CROSSPED_DELAY = 1.0
 	CROSSPED_TO_OCCUPY_DELAY = 1.0
 	OCCUPY_TO_END_DELAY = 1.0
+
+	REDLIGHT_PHASE_MAX_SECONDS = 5.0
 else:
 	START_TO_REDLIGHT_DELAY = 10.0
 	REDLIGHT_TO_TRAFFICJAM_DELAY = 30.0
-	TRAFFICJAM_TO_BADGUY_DELAY = 20.0
-	BADGUY_TO_SONG_DELAY = 20.0
-	SONG_TO_CROSSPED_DELAY = 10.0
+	TRAFFICJAM_TO_SONG_DELAY = 20.0
+	SONG_TO_BADGUY_DELAY = 20.0
+	BADGUY_TO_CROSSPED_DELAY = 10.0
 	CROSSPED_TO_OCCUPY_DELAY = 10.0
 	OCCUPY_TO_END_DELAY = 1.0
+
+	REDLIGHT_PHASE_MAX_SECONDS = 20.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 20.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
-REDLIGHT_PHASE_MAX_SECONDS = 2.0
+
 REDLIGHT_YELLOW_SECONDS = 2.0
 HERO_GREEN_LIGHT_HOLD_SECONDS = 3.0
 HERO_RED_LIGHT_HOLD_SECONDS = 8.0
 REDLIGHT_MIN_RED_SECONDS = 8.0
 REDLIGHT_MAX_RED_SECONDS = 12.0
 REDLIGHT_GREEN_RELEASE_SECONDS = 8.0
-REDLIGHT_MAX_TRAFFIC_LIGHTS = 4
+REDLIGHT_MAX_TRAFFIC_LIGHTS = 3
 TRAFFICJAM_PRUNE_DISTANCE_METERS = 150.0
 
 TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 10.0
@@ -86,6 +90,8 @@ TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 10.0
 trafficJam_carWaitingTime = 20.0
 
 SIM_STEP_S = 0.05
+
+PEDESTRIAN_NUMBER = 20
 
 TRIGGER_REDLIGHT = True
 TRIGGER_TRAFFICJAM = True
@@ -201,18 +207,18 @@ class Scenario01Runner:
 				"started_at": None,
 				"finished": False,
 			},
-			"trafficjam_to_badguy": {
-				"delay": TRAFFICJAM_TO_BADGUY_DELAY,
+			"trafficjam_to_song": {
+				"delay": TRAFFICJAM_TO_SONG_DELAY,
 				"started_at": None,
 				"finished": False,
 			},
-			"badguy_to_song": {
-				"delay": BADGUY_TO_SONG_DELAY,
+			"song_to_badguy": {
+				"delay": SONG_TO_BADGUY_DELAY,
 				"started_at": None,
 				"finished": False,
 			},
-			"song_to_crossped": {
-				"delay": SONG_TO_CROSSPED_DELAY,
+			"badguy_to_crossped": {
+				"delay": BADGUY_TO_CROSSPED_DELAY,
 				"started_at": None,
 				"finished": False,
 			},
@@ -236,6 +242,12 @@ class Scenario01Runner:
 			fade_out_ms=SONG_FADE_OUT_MS,
 			volume=0.85,
 			channel_index=6,)
+		# pedestrian group state
+		self._ped_group = None
+		self._pedestrian_spawn_time = None
+		self._pedestrians_spawned = False
+		self._pedestrians_started = False
+		self._pedestrians_done = False
 		
 	def _get_traffic_manager(self):
 		try:
@@ -502,6 +514,7 @@ class Scenario01Runner:
 			color=(255, 0, 0, 255),
 			thickness=0.1,
 		)
+
 		draw_trigger_boxes(self.world, box_configs, life_time=life_time)
 		
 	def _find_trafficjam_traffic_light(self, first_vehicle=None):
@@ -799,7 +812,7 @@ class Scenario01Runner:
 		return spawned_count > 0
 
 	def _prune_far_trafficjam_vehicles(self, ego_location):
-		delay_state = self._delay_states.get("trafficjam_to_badguy")
+		delay_state = self._delay_states.get("trafficjam_to_song")
 		if not self._prune_tj_cars or ego_location is None or not self._vehicle_actor_ids:
 			return
 		if delay_state is None or not delay_state["finished"]:
@@ -1119,6 +1132,39 @@ class Scenario01Runner:
 		print("start crossped now")
 		self.crossped_finished = True
 
+	def start_pedestrian_spawn(self):
+		ego = self.find_hero()
+		ego_transform = ego.get_transform() if ego is not None else None
+		try:
+			group = spawn_pedestrians(
+				self.world,
+				self.client,
+				self._rng,
+				count=PEDESTRIAN_NUMBER,
+				ego_transform=ego_transform,
+				max_speed=1.5,
+			)
+		except Exception as exc:
+			print(f"[Scenario01] WARNUNG: Pedestrian spawn failed: {exc}")
+			self.crossped_finished = True
+			return
+
+		self._ped_group = group
+		self._pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+		self._pedestrians_spawned = bool(group and group.get("routes"))
+		if self._pedestrians_spawned:
+			try:
+				start_pedestrians(self.world, self._ped_group)
+				self._pedestrians_started = True
+				self.crossped_finished = False
+				print(f"[Scenario01] spawned {len(self._ped_group.get('routes', []))} pedestrians")
+			except Exception as exc:
+				print(f"[Scenario01] WARNUNG: could not start pedestrians: {exc}")
+				self.crossped_finished = True
+		else:
+			print("[Scenario01] No pedestrians spawned")
+			self.crossped_finished = True
+
 	def start_occupy(self):
 		print("start occupy now")
 		self.occupy_started = True
@@ -1145,7 +1191,7 @@ class Scenario01Runner:
 		if self.badguy_finished:
 			return
 		
-		self._finish_delay_timer("trafficjam_to_badguy", sim_time)
+		self._finish_delay_timer("song_to_badguy", sim_time)
 		self.badguy_finished = True
 		print("[Scenario01] Badguy trigger skipped (no badguy started).")
 
@@ -1154,7 +1200,7 @@ class Scenario01Runner:
 			return
 
 		print("[Scenario01] Song trigger skipped.")
-		self._finish_delay_timer("song_to_crossped", sim_time)
+		self._finish_delay_timer("trafficjam_to_song", sim_time)
 		self.start_song()
 		print("[Scenario01] Song trigger skipped.")
 
@@ -1162,8 +1208,7 @@ class Scenario01Runner:
 		if self.crossped_finished:
 			return
 
-		self._finish_delay_timer("song_to_crossped", sim_time)
-		self.start_crossped()
+		self._finish_delay_timer("badguy_to_crossped", sim_time)
 		print("[Scenario01] Crossped trigger skipped.")
 
 	def _skip_occupy_trigger(self, sim_time):
@@ -1183,15 +1228,15 @@ class Scenario01Runner:
 		return delay_state is not None and delay_state["finished"]
 
 	def _update_badguy_trigger(self):
-		delay_state = self._delay_states.get("trafficjam_to_badguy")
+		delay_state = self._delay_states.get("song_to_badguy")
 		return delay_state is not None and delay_state["finished"]
 
 	def _update_song_trigger(self):
-		delay_state = self._delay_states.get("badguy_to_song")
+		delay_state = self._delay_states.get("trafficjam_to_song")
 		return delay_state is not None and delay_state["finished"]
 
 	def _update_crossped_trigger(self):
-		delay_state = self._delay_states.get("song_to_crossped")
+		delay_state = self._delay_states.get("badguy_to_crossped")
 		return delay_state is not None and delay_state["finished"]
 
 	def _update_occupy_trigger(self):
@@ -1238,6 +1283,7 @@ class Scenario01Runner:
 				if self._start_sim_time is None:
 					self._start_sim_time = sim_time
 					self._spawn_start_static_props()
+					self.start_pedestrian_spawn()
 
 				if self._start_sim_time is not None:
 					start_to_redlight_state = self._delay_states["start_to_redlight"]
@@ -1290,56 +1336,67 @@ class Scenario01Runner:
 
 				self._update_barrier_manual_prompt()
 
-				trafficjam_to_badguy_state = self._delay_states["trafficjam_to_badguy"]
+				# After trafficjam -> start SONG
+				trafficjam_to_song_state = self._delay_states["trafficjam_to_song"]
 				if self.trafficjam_finished:
-					# Only start the trafficjam_to_badguy delay after the trafficjam traffic light
-					# was released (i.e. not force-held red). This ensures the red hold
-					# runs its full duration before the next delay begins.
-					can_start_tj_to_badguy = True
+					# start the trafficjam_to_song delay after the trafficjam traffic light
+					can_start_tj_to_song = True
 					if self._trafficjam_waiting_barrier_confirmation:
-						can_start_tj_to_badguy = False
+						can_start_tj_to_song = False
 					# if we forced the traffic light to hold red, don't start the timer yet
 					if getattr(self, "_trafficjam_force_hold_red", False):
-						can_start_tj_to_badguy = False
+						can_start_tj_to_song = False
 					# if there's a traffic light selected and it's not in released state, wait
 					if self._trafficjam_traffic_light is not None and self._trafficjam_traffic_light_state != "released":
-						can_start_tj_to_badguy = False
+						can_start_tj_to_song = False
 
-					if can_start_tj_to_badguy:
-						if trafficjam_to_badguy_state["started_at"] is None:
-							self._start_delay_timer("trafficjam_to_badguy", sim_time)
-						self._update_delay_timer("trafficjam_to_badguy", sim_time)
+					if can_start_tj_to_song:
+						if trafficjam_to_song_state["started_at"] is None:
+							self._start_delay_timer("trafficjam_to_song", sim_time)
+						self._update_delay_timer("trafficjam_to_song", sim_time)
 
-				if self.trafficjam_finished and trafficjam_to_badguy_state["finished"] and not self.badguy_finished:
-					if not self._trigger_badguy:
-						self._skip_badguy_trigger(sim_time)
-					else:
-						self.start_badguy()
-
-				badguy_to_song_state = self._delay_states["badguy_to_song"]
-				if self.badguy_finished:
-					if badguy_to_song_state["started_at"] is None:
-						self._start_delay_timer("badguy_to_song", sim_time)
-					self._update_delay_timer("badguy_to_song", sim_time)
-
-				if self.badguy_finished and badguy_to_song_state["finished"] and not self.song_finished:
+				if self.trafficjam_finished and trafficjam_to_song_state["finished"] and not self.song_finished:
 					if not self._trigger_song:
 						self._skip_song_trigger(sim_time)
 					else:
 						self.start_song()
 
 				self._update_song(sim_time)
-				song_to_crossped_state = self._delay_states["song_to_crossped"]
-				if self.song_finished:
-					if song_to_crossped_state["started_at"] is None:
-						self._start_delay_timer("song_to_crossped", sim_time)
-					self._update_delay_timer("song_to_crossped", sim_time)
 
-				if self.song_finished and song_to_crossped_state["finished"] and not self.crossped_finished:
+				# After SONG -> start BADGUY
+				song_to_badguy_state = self._delay_states["song_to_badguy"]
+				if self.song_finished:
+					if song_to_badguy_state["started_at"] is None:
+						self._start_delay_timer("song_to_badguy", sim_time)
+					self._update_delay_timer("song_to_badguy", sim_time)
+
+				if self.song_finished and song_to_badguy_state["finished"] and not self.badguy_finished:
+					if not self._trigger_badguy:
+						self._skip_badguy_trigger(sim_time)
+					else:
+						self.start_badguy()
+
+				# After BADGUY -> start CROSSPED
+				badguy_to_crossped_state = self._delay_states["badguy_to_crossped"]
+				if self.badguy_finished:
+					if badguy_to_crossped_state["started_at"] is None:
+						self._start_delay_timer("badguy_to_crossped", sim_time)
+					self._update_delay_timer("badguy_to_crossped", sim_time)
+
+				if self.badguy_finished and badguy_to_crossped_state["finished"] and not self.crossped_finished:
 					if not self._trigger_crossped:
 						self._skip_crossped_trigger(sim_time)
 					else:
 						self.start_crossped()
+
+				# If pedestrians were spawned, update their movement each tick so controllers receive new targets
+				if getattr(self, "_ped_group", None) and not self.crossped_finished:
+					try:
+						all_done = update_pedestrians(self.world, self._ped_group, sim_time)
+						if all_done:
+							self.crossped_finished = True
+					except Exception:
+						pass
 
 				crossped_to_occupy_state = self._delay_states["crossped_to_occupy"]
 				if self.crossped_finished:
@@ -1403,6 +1460,17 @@ class Scenario01Runner:
 			self._badguy_process = None
 		if self._vehicle_actor_ids:
 			self.client.apply_batch([carla.command.DestroyActor(actor_id) for actor_id in self._vehicle_actor_ids])
+
+		# destroy any spawned pedestrians/controllers
+		try:
+			if getattr(self, "_ped_group", None):
+				all_ids = []
+				all_ids.extend(self._ped_group.get("walker_ids", []))
+				all_ids.extend(self._ped_group.get("controller_ids", []))
+				if all_ids:
+					self.client.apply_batch([carla.command.DestroyActor(actor_id) for actor_id in all_ids])
+		except Exception:
+			pass
 		self._held_trafficjam_vehicle_release_times.clear()
 
 	def _signal_done(self):
