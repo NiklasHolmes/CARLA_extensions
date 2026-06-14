@@ -59,6 +59,8 @@ if DEBUG_MODE:
 	CROSSPED_TO_OCCUPY_DELAY = 1.0
 	OCCUPY_TO_END_DELAY = 1.0
 
+	SONG_PLAY_DURATION_SECONDS = 1.0
+
 	REDLIGHT_PHASE_MAX_SECONDS = 1.0
 
 	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 5.0
@@ -72,6 +74,8 @@ else:
 	BADGUY_TO_CROSSPED_DELAY = 10.0
 	CROSSPED_TO_OCCUPY_DELAY = 10.0
 	OCCUPY_TO_END_DELAY = 1.0
+
+	SONG_PLAY_DURATION_SECONDS = 20.0
 
 	REDLIGHT_PHASE_MAX_SECONDS = 20.0
 
@@ -88,7 +92,6 @@ TRAFFICJAM_USE_REAL_TIME = True
 PRUNE_TJ_CARS = True
 
 SONG_START_OFFSET_SECONDS = 0.0
-SONG_PLAY_DURATION_SECONDS = 20.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 
@@ -107,8 +110,8 @@ SIM_STEP_S = 0.05
 
 PEDESTRIAN_NUMBER = 20
 
-TRIGGER_REDLIGHT = True
-TRIGGER_TRAFFICJAM = True
+TRIGGER_REDLIGHT = False
+TRIGGER_TRAFFICJAM = False
 TRIGGER_SONG = True
 TRIGGER_BADGUY = True
 TRIGGER_CROSSPED = True
@@ -1345,6 +1348,20 @@ class Scenario01Runner:
 	def _start_badguy_manual_control(self):
 		if self._badguy_process is not None and self._badguy_process.poll() is None:
 			return
+		
+		hero_actor = self.find_hero()
+		if hero_actor is None:
+			print("[Scenario01] ERROR: hero not found")
+			return
+		hero_transform = hero_actor.get_transform()
+		hero_loc = hero_transform.location
+		hero_rot = hero_transform.rotation
+		yaw_rad = math.radians(hero_rot.yaw)
+		offset_dist = 3.5
+		spawn_x = hero_loc.x + offset_dist * math.sin(yaw_rad)
+		spawn_y = hero_loc.y - offset_dist * math.cos(yaw_rad)
+		spawn_z = hero_loc.z + 0.2
+		spawn_point_str = f"{spawn_x:.2f},{spawn_y:.2f},{spawn_z:.2f},{hero_rot.yaw:.2f}"
 
 		script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'manual_control.py'))
 		script_dir = os.path.dirname(script_path)
@@ -1354,7 +1371,10 @@ class Scenario01Runner:
 			script_path,
 			'--host', self.host,
 			'--port', str(self.port),
-			'--profile', 'supervisor',
+			'--profile', 'supervisor4home',
+			'--vehicleID', 'vehicle.dodge.charger_2020',
+			'--vehicleColor', '255,0,0',
+			'--spawnPoint', str(spawn_point_str),
 		]
 		if self._done_file:
 			cmd.extend(['--scenario-stop-file', self._done_file])
@@ -1369,18 +1389,24 @@ class Scenario01Runner:
 			print(f"[Scenario01] WARNING: could not open second manual_control.py: {exc}")
 
 	def start_badguy(self):
-		print("Join the simualtion!")
-		print("1. lane cutting")
-		print("2. sudden stops in front")
-		print("3. maliciously driving (slalom)")
-		print("4. run a red light")
 		self._start_badguy_manual_control()
-		
-		# Wait for user confirmation with 'J'
-		while True:
-			user_input = input("\nPress 'J' to continue: ").strip().upper()
+		# try multiple times to get proper spawn coordinates
+		while True: 
+			print("Join the simualtion!")
+			print("1. lane cutting")
+			print("2. sudden stops in front")
+			print("3. maliciously driving (slalom)")
+			print("4. run a red light")
+			
+			user_input = input("\nPress 'J' to continue or 'N' to restart supervisor: ").strip().upper()
 			if user_input == 'J':
+				print("[Scenario01] got 'J' => continuing scenario")
 				break
+			elif user_input == 'N':
+				print("[Scenario01] got 'N' => restarting supervisor")
+				self._start_badguy_manual_control()
+			else:
+				print("[Scenario01] got invalid input! Please press 'J' or 'N'.")
 		
 		self.badguy_finished = True
 
