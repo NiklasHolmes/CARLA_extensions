@@ -1,0 +1,94 @@
+{
+  "current_session": {
+    "participant_id": "P_01_20260615_1435",
+    "scenario_order": [
+      "scenario00",
+      "scenario04",
+      "scenario05",
+      "scenario06",
+      "scenario01",
+      "scenario03",
+      "scenario02"
+    ],
+    "current_state": {
+      "next_scenario_index": 7,
+      "current_scenario_name": null,
+      "current_run_number": null,
+      "current_status": "COMPLETED",
+      "comment": "Index des nächsten zu startenden Szenarios aus der Liste"
+    },
+    "scenarios_log": [
+      {
+        "scenario_name": "events_scenario00.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 14:35:10",
+        "duration_seconds": 171.27948713302612,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 14:38:01",
+        "scenario_index": 0
+      },
+      {
+        "scenario_name": "events_scenario04.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 14:41:24",
+        "duration_seconds": 422.12049531936646,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 14:48:26",
+        "scenario_index": 1
+      },
+      {
+        "scenario_name": "events_scenario05.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 14:52:22",
+        "duration_seconds": 542.7601518630981,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 15:01:24",
+        "scenario_index": 2
+      },
+      {
+        "scenario_name": "events_scenario06.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 15:06:46",
+        "duration_seconds": 381.3619363307953,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 15:13:07",
+        "scenario_index": 3
+      },
+      {
+        "scenario_name": "events_scenario01.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 15:18:39",
+        "duration_seconds": 505.3931748867035,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 15:27:04",
+        "scenario_index": 4
+      },
+      {
+        "scenario_name": "events_scenario03.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 15:31:30",
+        "duration_seconds": 500.23553252220154,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 15:39:50",
+        "scenario_index": 5
+      },
+      {
+        "scenario_name": "events_scenario02.py",
+        "run_number": 1,
+        "started_at": "2026-06-15 15:46:12",
+        "duration_seconds": 736.8003280162811,
+        "status": "COMPLETED",
+        "error_message": null,
+        "ended_at": "2026-06-15 15:58:28",
+        "scenario_index": 6
+      }
+    ]
+  },
+  "session_history": []
+}
