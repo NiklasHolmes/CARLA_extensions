@@ -71,7 +71,7 @@ SCENARIO_CONFIGS = {
 }
 
 class SessionRunner:
-    def __init__(self, host='127.0.0.1', port=2000, participant_id=None, state_file=None, start_index=None, fresh_session=False):
+    def __init__(self, host='127.0.0.1', port=2000, participant_id=None, state_file=None, start_index=None, fresh_session=False, target_scenario=None):
         self.host = host
         self.port = port
         self.state_root = os.path.join(os.path.dirname(__file__), '_out')
@@ -79,6 +79,7 @@ class SessionRunner:
         self.participant_id = participant_id
         self.start_index_override = start_index
         self.fresh_session = fresh_session
+        self.target_scenario = target_scenario
         self.client = None
         self.world = None
         self.original_settings = None
@@ -711,9 +712,10 @@ if __name__ == '__main__':
     parser.add_argument('--state-file', default=None, help='path to the JSON session state file')
     parser.add_argument('--start-index', default=None, type=int, help='override next_scenario_index for repeat/continue (0-based; 2 starts at the 3rd scenario)')
     parser.add_argument('--fresh-session', '--new-session', '--new', dest='fresh_session', action='store_true', help='force a new participant/session even if an existing state file is present')
-    
+    parser.add_argument('--scenario', default=None, help='NEW => "scenario01')
+
     args = parser.parse_args()
     
-    runner = SessionRunner(args.host, args.port, args.participant_id, args.state_file, args.start_index, args.fresh_session)
+    runner = SessionRunner(args.host, args.port, args.participant_id, args.state_file, args.start_index, args.fresh_session, args.scenario)
     runner.run_session()
 
