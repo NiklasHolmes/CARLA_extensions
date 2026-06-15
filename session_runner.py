@@ -12,7 +12,7 @@ from datetime import datetime
 import carla
 from common.window_positioning import get_pygame_window_hwnd, apply_borderless_style_windows
 
-use_profile = "simulator4home"
+use_profile = "simulator"
 # --- Scenario Configurations ---
 SCENARIO_CONFIGS = {
     "scenario00": {
@@ -649,8 +649,9 @@ class SessionRunner:
             # scenario00 must always come first
             if "scenario00" in all_scenarios:
                 all_scenarios.remove("scenario00")
+                all_scenarios.remove("scenario02")
                 random.shuffle(all_scenarios)
-                scenario_order = ["scenario00"] + all_scenarios
+                scenario_order = ["scenario00"] + all_scenarios + ["scenario02"]
             else:
                 random.shuffle(all_scenarios)
                 scenario_order = all_scenarios
