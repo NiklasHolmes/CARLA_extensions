@@ -66,6 +66,13 @@ if DEBUG_MODE:
 	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 5.0
 	TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 1.0
 
+	TRIGGER_REDLIGHT = False
+	TRIGGER_TRAFFICJAM = False
+	TRIGGER_SONG = True
+	TRIGGER_BADGUY = True
+	TRIGGER_CROSSPED = True
+	TRIGGER_OCCUPY = True
+
 else:
 	START_TO_REDLIGHT_DELAY = 10.0
 	REDLIGHT_TO_TRAFFICJAM_DELAY = 30.0
@@ -81,6 +88,13 @@ else:
 
 	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 12.0
 	TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 2.0
+
+	TRIGGER_REDLIGHT = True
+	TRIGGER_TRAFFICJAM = True
+	TRIGGER_SONG = True
+	TRIGGER_BADGUY = True
+	TRIGGER_CROSSPED = True
+	TRIGGER_OCCUPY = True
 
 # For testing: when set to an integer index, the corresponding trafficjam trigger
 # will be considered triggered instantly. Use `None` to disable this override.
@@ -109,13 +123,6 @@ trafficJam_carWaitingTime = 5.0
 SIM_STEP_S = 0.05
 
 PEDESTRIAN_NUMBER = 20
-
-TRIGGER_REDLIGHT = False
-TRIGGER_TRAFFICJAM = False
-TRIGGER_SONG = True
-TRIGGER_BADGUY = True
-TRIGGER_CROSSPED = True
-TRIGGER_OCCUPY = True
 
 BLOCKED_VEHICLE_KEYWORDS = (
 	"firetruck",
@@ -1354,13 +1361,15 @@ class Scenario01Runner:
 			print("[Scenario01] ERROR: hero not found")
 			return
 		hero_transform = hero_actor.get_transform()
+
 		hero_loc = hero_transform.location
 		hero_rot = hero_transform.rotation
 		yaw_rad = math.radians(hero_rot.yaw)
 		offset_dist = 3.5
 		spawn_x = hero_loc.x + offset_dist * math.sin(yaw_rad)
 		spawn_y = hero_loc.y - offset_dist * math.cos(yaw_rad)
-		spawn_z = hero_loc.z + 0.2
+		spawn_z = hero_loc.z + 0.5
+
 		spawn_point_str = f"{spawn_x:.2f},{spawn_y:.2f},{spawn_z:.2f},{hero_rot.yaw:.2f}"
 
 		script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'manual_control.py'))
@@ -1374,15 +1383,20 @@ class Scenario01Runner:
 			'--profile', 'supervisor4home',
 			'--vehicleID', 'vehicle.dodge.charger_2020',
 			'--vehicleColor', '255,0,0',
-			'--spawnPoint', str(spawn_point_str),
+			f'--spawnPoint={spawn_point_str}',
 		]
 		if self._done_file:
 			cmd.extend(['--scenario-stop-file', self._done_file])
+
+		# log_file = open(os.path.join(script_dir, "badguy_error.log"), "w")
 
 		try:
 			self._badguy_process = subprocess.Popen(
 				cmd,
 				cwd=script_dir,
+				# stdout=log_file,
+				# stderr=subprocess.STDOUT,
+				# text=True,
 				creationflags=subprocess.CREATE_NEW_CONSOLE
 			)
 		except Exception as exc:
