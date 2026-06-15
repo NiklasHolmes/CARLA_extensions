@@ -561,6 +561,55 @@ class SessionRunner:
         self._mark_scenario_completed(scenario_name, run_number, scenario_index, started_at_text)
         return True
 
+    def _monitor_scenario_processes_no_logging(self, scenario_name, manual_control_process, events_process, done_file, stop_file):
+        """Monitor processes without writing session state or logs. Returns True if completed normally."""
+        while True:
+            manual_code = manual_control_process.poll()
+            events_code = events_process.poll()
+            if os.path.exists(done_file):
+                try:
+                    with open(stop_file, 'w', encoding='utf-8') as handle:
+                        handle.write('stop\n')
+                except Exception:
+                    pass
+                break
+            if manual_code is not None:
+                print(f"[SessionRunner] manual_control exited prematurely with code {manual_code}")
+                try:
+                    if events_process.poll() is None:
+                        events_process.terminate()
+                except Exception:
+                    pass
+                try:
+                    manual_control_process.wait(timeout=5)
+                except Exception:
+                    pass
+                try:
+                    if events_process.poll() is None:
+                        events_process.wait(timeout=5)
+                except Exception:
+                    pass
+                return False
+            if events_code is not None:
+                print(f"[SessionRunner] events process exited prematurely with code {events_code}")
+                try:
+                    if manual_control_process.poll() is None:
+                        manual_control_process.terminate()
+                except Exception:
+                    pass
+                try:
+                    if manual_control_process.poll() is None:
+                        manual_control_process.wait(timeout=5)
+                except Exception:
+                    pass
+                return False
+            time.sleep(0.25)
+
+        self._wait_for_process(manual_control_process, 'manual_control.py')
+        self._wait_for_process(events_process, f"events_{scenario_name}.py")
+        print(f"[SessionRunner] Scenario '{scenario_name}' completed (no-logging mode).")
+        return True
+
     def _run_scenario_pair(self, scenario_name):
         done_file, stop_file = self._scenario_signal_paths(scenario_name)
         script_path = os.path.join(os.path.dirname(__file__), 'scenario_events', f'events_{scenario_name}.py')
@@ -638,9 +687,80 @@ class SessionRunner:
             except Exception:
                 pass
 
+    def _run_single_scenario(self, scenario_name):
+        """Run a single scenario once without modifying session state or logs."""
+        done_file, stop_file = self._scenario_signal_paths(scenario_name)
+        script_path = os.path.join(os.path.dirname(__file__), 'scenario_events', f'events_{scenario_name}.py')
+        if not os.path.exists(script_path):
+            print(f"[SessionRunner] events file not found for single-run scenario '{scenario_name}': {script_path}")
+            return
+
+        rear_view_process = self._run_rear_view()
+
+        manual_control_process = self._run_manual_control(scenario_name, stop_file)
+        if self._black_screen_active:
+            self._destroy_black_screen()
+        events_process = self._run_events_scenario(scenario_name, done_file)
+
+        if events_process is None:
+            try:
+                if rear_view_process and rear_view_process.poll() is None:
+                    rear_view_process.terminate()
+            except Exception:
+                pass
+            try:
+                if manual_control_process and manual_control_process.poll() is None:
+                    manual_control_process.terminate()
+                    manual_control_process.wait(timeout=5)
+            except Exception:
+                pass
+            return
+
+        completed = self._monitor_scenario_processes_no_logging(
+            scenario_name,
+            manual_control_process,
+            events_process,
+            done_file,
+            stop_file,
+        )
+
+        try:
+            if rear_view_process and rear_view_process.poll() is None:
+                rear_view_process.terminate()
+                rear_view_process.wait(timeout=3)
+        except Exception:
+            pass
+
+        for path in (done_file, stop_file):
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+
+        if completed:
+            print(f"[SessionRunner] Single scenario '{scenario_name}' completed.")
+
     def run_session(self):
         print("Starting CARLA session runner...")
-        
+
+        if self.target_scenario:
+            print(f"Running single scenario: {self.target_scenario}")
+            try:
+                self._connect_to_carla()
+                self._load_scenario_map_and_weather(self.target_scenario)
+                self._run_single_scenario(self.target_scenario)
+            except Exception as e:
+                print(f"[CRITICAL ERROR] Single scenario run failed: {e}")
+            finally:
+                self._destroy_black_screen()
+                if self.world:
+                    self._reset_carla_world()
+                if self.background_window_process and self.background_window_process.poll() is None:
+                    self.background_window_process.terminate()
+                    self.background_window_process.wait(2)
+            return
+
         try:
             self._connect_to_carla()
             
