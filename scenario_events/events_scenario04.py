@@ -35,7 +35,7 @@ except ModuleNotFoundError:
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_ANIMCAT_DELAY_SECONDS = 2.0

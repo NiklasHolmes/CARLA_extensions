@@ -19,8 +19,7 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
-DEBUG_MODE = True
-run_in_singleFile_mode = False
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_TRAFFIC_DELAY = 2.0
@@ -30,26 +29,35 @@ if DEBUG_MODE:
     SMELL_TO_POORROAD_DELAY = 2.0
     POORROAD_TO_DRIVERTRASH_DELAY = 2.0
     DRIVERTRASH_TO_END_DELAY = 2.0
+    run_in_singleFile_mode = False
+
+    TRIGGER_TRAFFIC = True
+    TRIGGER_TRASH = True
+    TRIGGER_SNAKE = True
+    TRIGGER_SMELL = True
+    TRIGGER_POORROAD = True
+    TRIGGER_DRIVERTRASH = True
 else:
     START_TO_TRAFFIC_DELAY = 10.0
     TRAFFIC_TO_TRASH_DELAY = 20.0
     TRASH_TO_SNAKE_DELAY = 30.0
     SNAKE_TO_SMELL_DELAY = 20.0
     SMELL_TO_POORROAD_DELAY = 30.0
-    POORROAD_TO_DRIVERTRASH_DELAY = 30.0
+    POORROAD_TO_DRIVERTRASH_DELAY = 20.0
     DRIVERTRASH_TO_END_DELAY = 10.0
+    run_in_singleFile_mode = False
+
+    TRIGGER_TRAFFIC = True
+    TRIGGER_TRASH = True
+    TRIGGER_SNAKE = True
+    TRIGGER_SMELL = True
+    TRIGGER_POORROAD = True
+    TRIGGER_DRIVERTRASH = True
 
 SIM_STEP_S = 0.05
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
-
-TRIGGER_TRAFFIC = True
-TRIGGER_TRASH = True
-TRIGGER_SNAKE = True
-TRIGGER_SMELL = True
-TRIGGER_POORROAD = True
-TRIGGER_DRIVERTRASH = True
 
 # if set to an integer index (0-based) that snake config will be spawned immediately
 # None (default) = normal hero-triggering is used

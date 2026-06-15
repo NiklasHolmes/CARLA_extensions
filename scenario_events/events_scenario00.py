@@ -15,7 +15,7 @@ from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
 from generate_audio import SongAudio
 
 # Constants
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 VEHICLE_ACTIVE_SECONDS = 0.0                    # if > 0 => vehicles will be removed; if = 0 => stay infinitely
 
@@ -38,7 +38,7 @@ else:
     SONG_TO_END_DELAY_SECONDS = 10.0
 
     SONG_START_OFFSET_SECONDS = 3.0
-    SONG_PLAY_DURATION_SECONDS = 4.0
+    SONG_PLAY_DURATION_SECONDS = 20.0
 
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000

@@ -32,7 +32,7 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
-DEBUG_MODE = True                    # attention! single file mode!
+DEBUG_MODE = False                    # attention! single file mode!
 
 if DEBUG_MODE:
     RAIN_TO_HIGHPED_DELAY = 0.0
@@ -62,11 +62,11 @@ if DEBUG_MODE:
     HIGHPED_LIFETIME_S = 20.0
 else:
     RAIN_TO_HIGHPED_DELAY = 20.0
-    HIGHPED_TO_BUS_DELAY = 30.0
-    BUS_TO_SONG_DELAY = 30.0
+    HIGHPED_TO_BUS_DELAY = 20.0
+    BUS_TO_SONG_DELAY = 10.0
     SONG_TO_SANIMAL_DELAY = 10.0
     SANIMAL_TO_COW_DELAY = 5.0
-    COW_TO_FUEL_DELAY = 30.0
+    COW_TO_FUEL_DELAY = 5.0                 # TODO: implement cow?
     FUEL_TO_END_DELAY = 10.0
 
     run_in_singleFile_mode = False  

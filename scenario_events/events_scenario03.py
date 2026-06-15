@@ -61,8 +61,7 @@ except ModuleNotFoundError:
         TARGET_TL_RED,
     )
 
-DEBUG_MODE = True
-run_in_singleFile_mode = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_CARAWAY_DELAY = 2.0
@@ -77,11 +76,14 @@ if DEBUG_MODE:
     TRIGGER_SONG = False
     TRIGGER_POLICE = False
     TRIGGER_BRAKE = True
+
+    run_in_singleFile_mode = True
+    SUPERVISOR_PROFILE = 'supervisor4home'
 else:
-    START_TO_CARAWAY_DELAY = 20.0
-    CARAWAY_TO_LTRUCK_DELAY = 30.0
+    START_TO_CARAWAY_DELAY = 10.0
+    CARAWAY_TO_LTRUCK_DELAY = 20.0
     LTRUCK_TO_SONG_DELAY = 30.0
-    SONG_TO_POLICE_DELAY = 20.0
+    SONG_TO_POLICE_DELAY = 10.0
     POLICE_TO_BRAKE_DELAY = 30.0
     BRAKE_TO_END_DELAY = 5.0
 
@@ -90,6 +92,9 @@ else:
     TRIGGER_SONG = True
     TRIGGER_POLICE = True
     TRIGGER_BRAKE = True
+
+    run_in_singleFile_mode = False
+    SUPERVISOR_PROFILE = 'supervisor'
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 20.0
@@ -684,7 +689,7 @@ class Scenario03Runner:
         self._ltruck_process = start_manual_control_process(
             host=self.host,
             port=self.port,
-            profile='supervisor',
+            profile=SUPERVISOR_PROFILE,
             done_file=None,
             vehicle_id=vehicle_id,
             vehicle_color=vehicle_color,

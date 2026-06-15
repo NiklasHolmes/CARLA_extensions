@@ -47,8 +47,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 		result.append(bp)
 	return result
 
-DEBUG_MODE = True
-run_in_singleFile_mode = False
+DEBUG_MODE = False
 
 if DEBUG_MODE:
 	START_TO_REDLIGHT_DELAY = 1.0
@@ -73,9 +72,12 @@ if DEBUG_MODE:
 	TRIGGER_CROSSPED = True
 	TRIGGER_OCCUPY = True
 
+	SUPERVISOR_PROFILE = 'supervisor4home'
+	run_in_singleFile_mode = False
+
 else:
 	START_TO_REDLIGHT_DELAY = 10.0
-	REDLIGHT_TO_TRAFFICJAM_DELAY = 30.0
+	REDLIGHT_TO_TRAFFICJAM_DELAY = 20.0
 	TRAFFICJAM_TO_SONG_DELAY = 20.0
 	SONG_TO_BADGUY_DELAY = 20.0
 	BADGUY_TO_CROSSPED_DELAY = 10.0
@@ -95,6 +97,9 @@ else:
 	TRIGGER_BADGUY = True
 	TRIGGER_CROSSPED = True
 	TRIGGER_OCCUPY = True
+
+	SUPERVISOR_PROFILE = 'supervisor'
+	run_in_singleFile_mode = False
 
 # For testing: when set to an integer index, the corresponding trafficjam trigger
 # will be considered triggered instantly. Use `None` to disable this override.
@@ -1380,7 +1385,7 @@ class Scenario01Runner:
 			script_path,
 			'--host', self.host,
 			'--port', str(self.port),
-			'--profile', 'supervisor4home',
+			'--profile', SUPERVISOR_PROFILE,
 			'--vehicleID', 'vehicle.dodge.charger_2020',
 			'--vehicleColor', '255,0,0',
 			f'--spawnPoint={spawn_point_str}',

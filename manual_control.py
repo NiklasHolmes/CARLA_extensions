@@ -274,7 +274,7 @@ PROFILE_CONFIG = {
             'AUDIO_MODE': 'horn_only',
             'ENABLE_HUD': False,
             'WINDOW_START_LEFT': False,
-            'WINDOW_BORDERLESS': True,
+            'WINDOW_BORDERLESS': False,
             'chosen_vehicle': 'vehicle.dodge.charger_2020',
         },
     },
@@ -288,7 +288,7 @@ PROFILE_CONFIG = {
         },
         'code_overrides': {
             'USE_SCENE_FINAL': True,
-            'DASHBOARD_MODE': 'overlapping',
+            'DASHBOARD_MODE': 'none',
             'AUDIO_MODE': 'full',
             'ENABLE_HUD': True,
             'WINDOW_START_LEFT': True,

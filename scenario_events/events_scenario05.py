@@ -43,7 +43,7 @@ from common.audio_paths import (
 )
 from generate_audio import SongAudio, RepeatingAudio
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_CARPED_DELAY_SECONDS = 1.0
@@ -53,6 +53,10 @@ if DEBUG_MODE:
     RADIO_TO_END_DELAY_SECONDS = 1.0
     ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
     SONG_PLAY_DURATION_SECONDS = 2.0
+
+    TRIGGER_CARPED = False
+    TRIGGER_ACCIDENT = True
+    TRIGGER_RADIO = True
 else:
     START_TO_CARPED_DELAY_SECONDS = 10.0
     CAR_TO_PED_DELAY_SECONDS = 20.0
@@ -65,9 +69,9 @@ else:
     # Additional short delay to allow accident-related messages to finish
     ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
 
-TRIGGER_CARPED = False
-TRIGGER_ACCIDENT = True
-TRIGGER_RADIO = True
+    TRIGGER_CARPED = True
+    TRIGGER_ACCIDENT = True
+    TRIGGER_RADIO = True
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
 TL_HOLD_ORIGINALLIGHT_SECONDS = 8.0
