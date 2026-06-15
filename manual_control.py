@@ -1431,7 +1431,7 @@ class GamepadControl(object):
     # - Triangle (/\) :   toggle camera
     # - L1            :   blinker left
     # - R1            :   blinker right
-    # - L3            :   export performance data + toggle HUD
+    # - L3            :   export performance data + toggle HUD + throw garbage
     # - R3            :   respawn vehicle
     # - Option        :   quit
     # - Touchpad      :   toggle camera
