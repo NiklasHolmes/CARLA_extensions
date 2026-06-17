@@ -33,6 +33,13 @@ import carla
 # Keep global references to attached sensor actors so they are not GC'd
 _attached_sensors = []
 
+# Track the last global intervals applied via set_all_traffic_light_intervals()
+# Stored as dict: {'green': float, 'yellow': float, 'red': float}
+_global_traffic_light_intervals = {'green': None, 'yellow': None, 'red': None}
+
+# Map of traffic light id -> {'actor': TrafficLight, 'saved': (green,yellow,red)}
+_forced_traffic_lights = {}
+
 
 def start_manual_control_process(
     host,
@@ -340,9 +347,25 @@ def force_green_light(ego, sim_time, request_time, tl_hold_originalLight_seconds
     - `hero_green_hold_seconds` is the green-time to set when forcing green.
     """
     try:
+        # When hero is at a traffic light, potentially force green and extend green duration.
         if ego and ego.is_at_traffic_light():
+            # print("Is at traffic light!")
             tl = ego.get_traffic_light()
             if tl:
+                try:
+                    tl_id = getattr(tl, 'id', None)
+                except Exception:
+                    tl_id = None
+
+                # Save the original/global intervals for this traffic light so we can restore later.
+                if tl_id is not None and tl_id not in _forced_traffic_lights:
+                    saved = (
+                        _global_traffic_light_intervals.get('green'),
+                        _global_traffic_light_intervals.get('yellow'),
+                        _global_traffic_light_intervals.get('red'),
+                    )
+                    _forced_traffic_lights[tl_id] = {'actor': tl, 'saved': saved}
+
                 if request_time is None:
                     request_time = sim_time
                 elif (sim_time - request_time) >= tl_hold_originalLight_seconds:
@@ -351,13 +374,34 @@ def force_green_light(ego, sim_time, request_time, tl_hold_originalLight_seconds
                     if current_state == carla.TrafficLightState.Red:
                         # print("Now Red!")
                         tl.set_state(carla.TrafficLightState.Green)
-                        tl.set_green_time(hero_green_hold_seconds)
+                        if hasattr(tl, 'set_green_time'):
+                            tl.set_green_time(hero_green_hold_seconds)
                     elif current_state == carla.TrafficLightState.Yellow:
                         tl.set_state(carla.TrafficLightState.Red)
                         request_time = sim_time
                     elif current_state == carla.TrafficLightState.Green:
-                        tl.set_green_time(hero_green_hold_seconds)
+                        if hasattr(tl, 'set_green_time'):
+                            tl.set_green_time(hero_green_hold_seconds)
         else:
+            # Hero not at a traffic light: restore any traffic lights we previously forced.
+            if _forced_traffic_lights:
+                for tl_id, info in list(_forced_traffic_lights.items()):
+                    tl_actor = info.get('actor')
+                    saved = info.get('saved', (None, None, None))
+                    try:
+                        if saved[0] is not None and hasattr(tl_actor, 'set_green_time'):
+                            tl_actor.set_green_time(float(saved[0]))
+                        if saved[1] is not None and hasattr(tl_actor, 'set_yellow_time'):
+                            tl_actor.set_yellow_time(float(saved[1]))
+                        if saved[2] is not None and hasattr(tl_actor, 'set_red_time'):
+                            tl_actor.set_red_time(float(saved[2]))
+                    except Exception:
+                        pass
+                    try:
+                        del _forced_traffic_lights[tl_id]
+                    except Exception:
+                        pass
+
             request_time = None
     except Exception:
         pass
@@ -391,6 +435,14 @@ def set_all_traffic_light_intervals(green=5.0, yellow=2.0, red=5.0, host='127.0.
                 traffic_lights = []
 
         print(f"[scenario_helper] Found {len(traffic_lights)} traffic lights. Setting intervals: green={green}, yellow={yellow}, red={red}")
+
+        # Remember these intervals as the global/default intervals so forced lights can be restored.
+        try:
+            _global_traffic_light_intervals['green'] = float(green) if green is not None else None
+            _global_traffic_light_intervals['yellow'] = float(yellow) if yellow is not None else None
+            _global_traffic_light_intervals['red'] = float(red) if red is not None else None
+        except Exception:
+            pass
 
         for tl in traffic_lights:
             try:
