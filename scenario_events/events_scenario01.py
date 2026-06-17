@@ -27,9 +27,9 @@ except ModuleNotFoundError:
 	from generate_audio import SongAudio
 
 try:
-	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians
+	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals
 except ModuleNotFoundError:
-	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians
+	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals
 
 def get_actor_blueprints(world, filter_pattern):
 	bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -76,8 +76,8 @@ if DEBUG_MODE:
 	run_in_singleFile_mode = False
 
 else:
-	START_TO_REDLIGHT_DELAY = 10.0
-	REDLIGHT_TO_TRAFFICJAM_DELAY = 5.0
+	START_TO_REDLIGHT_DELAY = 5.0
+	REDLIGHT_TO_TRAFFICJAM_DELAY = 2.0
 	TRAFFICJAM_TO_SONG_DELAY = 10.0
 	SONG_TO_BADGUY_DELAY = 10.0
 	BADGUY_TO_CROSSPED_DELAY = 5.0
@@ -88,7 +88,7 @@ else:
 
 	REDLIGHT_PHASE_MAX_SECONDS = 20.0
 
-	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 12.0
+	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 8.0
 	TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 2.0
 
 	TRIGGER_REDLIGHT = True
@@ -117,8 +117,8 @@ SONG_FADE_OUT_MS = 3000
 REDLIGHT_YELLOW_SECONDS = 2.0
 HERO_GREEN_LIGHT_HOLD_SECONDS = 3.0
 HERO_RED_LIGHT_HOLD_SECONDS = 8.0
-REDLIGHT_MIN_RED_SECONDS = 8.0
-REDLIGHT_MAX_RED_SECONDS = 12.0
+REDLIGHT_MIN_RED_SECONDS = 7.0
+REDLIGHT_MAX_RED_SECONDS = 11.0
 REDLIGHT_GREEN_RELEASE_SECONDS = 8.0
 REDLIGHT_MAX_TRAFFIC_LIGHTS = 3
 TRAFFICJAM_PRUNE_DISTANCE_METERS = 150.0
@@ -1568,6 +1568,12 @@ class Scenario01Runner:
 		if run_in_singleFile_mode:
 			self.world.set_weather(carla.WeatherParameters.CloudySunset)
 			print("[Scenario01] Weather set to CloudySunset for single-file mode")
+		
+		set_all_traffic_light_intervals(
+            green=2.0, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world)
 
 		try:
 			while True:

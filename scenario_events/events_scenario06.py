@@ -28,9 +28,9 @@ except ModuleNotFoundError:
     from scenario_events.events_scenario06_static_props import HIGHPED_ROUTE_CONFIGS, SANIMAL_ROUTE_CONFIGS, CAR_START_LOCATIONS, BUS_DISP_CONFIG, get_highped_barrier_spawns, get_start_fence_spawns, START_TEMP_BARRIER_CONFIGS, TEMP_BARRIER_AVOID_HIGHWAY_TRIGGER, TEMP_BARRIER_AVOID_HIGHWAY
 
 try:
-    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
+    from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
+    from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 
 DEBUG_MODE = True                    # attention! single file mode!
 
@@ -87,8 +87,8 @@ else:
     SOFT_RAIN_DURATION_S = 5.0
     HIGHPED_LIFETIME_S = 20.0
 
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
+HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 1.0
 
 SONG_START_OFFSET_SECONDS = 0.0
 SONG_PLAY_DURATION_SECONDS = 30.0
@@ -280,6 +280,7 @@ class Scenario06Runner:
         self._barrier_actor_ids = []
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
+        self._sensor_actors = []
 
     def _get_traffic_manager(self):
         try:
@@ -340,6 +341,23 @@ class Scenario06Runner:
         self._cars_phase_done = True
         print(f"[Scenario06] Start cars spawned: {len(spawned_vehicle_ids)}/{len(spawn_points)}")
         print(f"[Scenario06] First delay START_TO_RAIN_DELAY={START_TO_RAIN_DELAY:.1f}s startet jetzt.")
+        # Attach collision sensors to spawned vehicles for automatic deletion on crash
+        try:
+            for vid in spawned_vehicle_ids:
+                try:
+                    vehicle = self.world.get_actor(vid)
+                    if vehicle is None:
+                        continue
+                    sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+                    if sensor is not None:
+                        try:
+                            self._sensor_actors.append(sensor)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
         return len(spawned_vehicle_ids) > 0
 
     def find_hero(self):
@@ -1539,6 +1557,13 @@ class Scenario06Runner:
             self.world.set_weather(carla.WeatherParameters.CloudyNoon)
             print("[Scenario06] Weather set to CloudyNoon for single-file mode")
 
+        set_all_traffic_light_intervals(
+            green=2.5, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world
+        )
+        
         try:
             while True:
                 self.world.wait_for_tick()

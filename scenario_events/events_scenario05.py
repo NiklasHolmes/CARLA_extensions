@@ -18,6 +18,8 @@ try:
         pick_hidden_navigation_location_near,
         pick_navigation_location,
         force_green_light,
+        set_all_traffic_light_intervals,
+        attach_collision_sensor,
     )
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import (
@@ -28,6 +30,8 @@ except ModuleNotFoundError:
         pick_hidden_navigation_location_near,
         pick_navigation_location,
         force_green_light,
+        set_all_traffic_light_intervals,
+        attach_collision_sensor,
     )
 
 try:
@@ -73,14 +77,14 @@ else:
     TRIGGER_ACCIDENT = True
     TRIGGER_RADIO = True
 
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-TL_HOLD_ORIGINALLIGHT_SECONDS = 8.0
+HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 3.0
 
 SONG_START_OFFSET_SECONDS = 30.0
 
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
+
 SPAWN_CARS = 5
 PEDESTRIAN_COUNT = 1
 ENABLE_ROUTE_PEDESTRIANS = True
@@ -724,6 +728,23 @@ class Scenario05Runner:
                 self._vehicle_actor_ids.append(r.actor_id)
                 spawned_ids.append(r.actor_id)
         print(f"[Scenario05] Vehicles spawned: {len(spawned_ids)}/{len(points)}")
+        # Attach collision sensors to spawned vehicles for automatic deletion on crash
+        try:
+            for vid in spawned_ids:
+                try:
+                    vehicle = self.world.get_actor(vid)
+                    if vehicle is None:
+                        continue
+                    sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+                    if sensor is not None:
+                        try:
+                            self._sensor_actors.append(sensor)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _get_actor_locations(self, excluded_ids=None):
         excluded_ids = set(excluded_ids or [])
@@ -1501,6 +1522,12 @@ class Scenario05Runner:
 
     def run(self):
         print("[Scenario05] Running...")
+        set_all_traffic_light_intervals(
+            green=2.5, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world
+        )
         try:
             while True:
                 self.world.wait_for_tick()
