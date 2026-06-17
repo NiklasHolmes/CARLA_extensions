@@ -1680,7 +1680,7 @@ class WheelControl(object):
     - 3             :   Triangle    :
     - 4             :   Shift Up    :   blinker right
     - 5             :   Shift Down  :   blinker left
-    - 6             :   R2          :
+    - 6             :   R2          :   restart car
     - 7             :   L2          :
     - 8             :   Share       :
     - 9             :   Options     :   Quit
