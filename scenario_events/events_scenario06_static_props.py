@@ -982,6 +982,16 @@ BUS_DISP_CONFIG = (
         "spawn_yaw": 180.0,
     },
     {
+        "name": "bus_trigger23",
+        "trigger_location": carla.Location(x=-130.80, y=103.26, z=0.0000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-91.20, y=144.30, z=0.10000),
+        "spawn_yaw": 180.0,
+    },
+    {
         "name": "bus_trigger8",
         "trigger_location": carla.Location(x=87.5000, y=72.4000, z=0.0000),
         "trigger_x_tolerance": 2.0,
