@@ -47,7 +47,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 		result.append(bp)
 	return result
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
 	START_TO_REDLIGHT_DELAY = 1.0

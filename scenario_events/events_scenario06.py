@@ -32,7 +32,7 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
-DEBUG_MODE = False                    # attention! single file mode!
+DEBUG_MODE = True                    # attention! single file mode!
 
 if DEBUG_MODE:
     RAIN_TO_HIGHPED_DELAY = 0.0
@@ -1577,6 +1577,10 @@ class Scenario06Runner:
 
                 if not self._trigger_highped and rain_to_highped_state["finished"]:
                     self._skip_highped_trigger(sim_time)
+                    # if skipped => wait for ego to spawn avoid highway barriers
+                    hero_velocity = ego.get_velocity() if ego else None                 
+                    hero_location = ego_transform.location if ego_transform else None
+                    self._update_highway_avoid_trigger(hero_location, hero_velocity)
 
                 if ego and rain_to_highped_state["finished"] and not self._highped_route_done and not self._highped_route_active:
                     barrier_config = self._get_highped_barrier_config(ego_transform.location)

@@ -1071,7 +1071,38 @@ START_BARRIER_AVOID_HIGHWAY = [                 # same as surprise
             carla.Location(x=40.10, y=-156.80, z=1.0),
             carla.Rotation(pitch=90.0, yaw=-45.0, roll=0.0),
         ),
-        "scale": None,
+    },
+	{
+        "name": "temp_avoidHighway_barrier_20",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=35.10, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+	{
+		"name": "temp_avoidHighway_barrier_21",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=31.60, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+	{
+        "name": "temp_avoidHighway_barrier_22",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=28.10, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+	{
+        "name": "temp_avoidHighway_barrier_23",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=24.60, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
     },
 ]
 
