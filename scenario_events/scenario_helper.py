@@ -30,6 +30,9 @@ if __package__ in (None, ""):
 
 import carla
 
+# Keep global references to attached sensor actors so they are not GC'd
+_attached_sensors = []
+
 
 def start_manual_control_process(
     host,
@@ -362,6 +365,52 @@ def force_green_light(ego, sim_time, request_time, tl_hold_originalLight_seconds
     return request_time
 
 
+def set_all_traffic_light_intervals(green=5.0, yellow=2.0, red=5.0, host='127.0.0.1', port=2000, timeout=10.0, world=None):
+    """Set the timing intervals for all traffic lights in the world.
+
+    - If `world` is provided it is used; otherwise a temporary client is created
+      to connect to CARLA at `host:port`.
+    - This function only sets timing values and does not modify any higher-level
+      traffic logic (it intentionally avoids touching groups/resets).
+    """
+    local_client = None
+    try:
+        if world is None:
+            local_client = carla.Client(host, port)
+            local_client.set_timeout(timeout)
+            world = local_client.get_world()
+
+        traffic_lights = []
+        try:
+            traffic_lights = world.get_actors().filter('traffic.traffic_light')
+        except Exception:
+            # fallback: try iterating all actors
+            try:
+                traffic_lights = [a for a in world.get_actors() if 'traffic_light' in a.type_id]
+            except Exception:
+                traffic_lights = []
+
+        print(f"[scenario_helper] Found {len(traffic_lights)} traffic lights. Setting intervals: green={green}, yellow={yellow}, red={red}")
+
+        for tl in traffic_lights:
+            try:
+                if green is not None and hasattr(tl, 'set_green_time'):
+                    tl.set_green_time(float(green))
+                if yellow is not None and hasattr(tl, 'set_yellow_time'):
+                    tl.set_yellow_time(float(yellow))
+                if red is not None and hasattr(tl, 'set_red_time'):
+                    tl.set_red_time(float(red))
+            except Exception as exc:
+                print(f"[scenario_helper] WARNING: could not set intervals for traffic light id={getattr(tl, 'id', None)}: {exc}")
+
+        print("[scenario_helper] Done setting traffic light intervals.")
+    except Exception as exc:
+        print(f"[scenario_helper] WARNING: could not set traffic light intervals: {exc}")
+    finally:
+        # nothing to explicitly close on carla.Client
+        return
+
+
 def spawn_pedestrians(world, client, rng, count=10, ego_transform=None, target_location=None,
                       max_speed=2.5, nav_samples=96, min_hidden_distance=90.0, max_hidden_distance=260.0,
                       min_route_distance=5.0, arrive_thresh=1.0, wait_timeout=120.0, max_numeric_id=50):
@@ -526,3 +575,117 @@ def update_pedestrians(world, group, sim_time):
         else:
             any_not_done = True
     return not any_not_done
+
+
+def attach_collision_sensor(world, vehicle, on_collision=None, ignore_ego_radius=None):
+    """Attach a collision sensor to `vehicle` and register a listener.
+
+    - `world`: carla.World
+    - `vehicle`: the vehicle actor to attach the sensor to
+    - `on_collision`: optional callback receiving the collision `event`
+
+    Returns the spawned sensor actor or None.
+    """
+    try:
+        bp = world.get_blueprint_library().find('sensor.other.collision')
+    except Exception:
+        bp = None
+    if bp is None:
+        print('[scenario_helper] WARNUNG: collision blueprint nicht gefunden')
+        return None
+
+    try:
+        sensor = world.try_spawn_actor(bp, carla.Transform(), attach_to=vehicle)
+    except Exception as exc:
+        print(f"[scenario_helper] WARNUNG: collision sensor konnte nicht gespawnt werden: {exc}")
+        return None
+
+    if sensor is None:
+        print(f"[scenario_helper] WARNUNG: collision sensor spawn failed for vehicle id={getattr(vehicle, 'id', None)}")
+        return None
+
+    def _handle(event):
+        try:
+            actor = getattr(event, 'actor', None)
+            other = getattr(event, 'other_actor', None)
+            aid = getattr(actor, 'id', None)
+            oid = getattr(other, 'id', None)
+            print(f"[scenario_helper] Kollision registriert: actor={aid} other={oid}")
+            # If user supplied a callback, call it first
+            if on_collision:
+                try:
+                    on_collision(event)
+                except Exception:
+                    pass
+                return
+
+            # Default behavior: destroy the actor unless it's close to the hero
+            try:
+                # attempt to find hero in the world
+                hero = None
+                for a in world.get_actors():
+                    try:
+                        if a.attributes.get('role_name') in ['hero', 'default_player', 'supervisor']:
+                            hero = a
+                            break
+                    except Exception:
+                        continue
+
+                # if hero within ignore radius (if provided via closure), skip destroy
+                ignore_radius = getattr(sensor, '_ignore_ego_radius', None)
+                if ignore_radius is not None and hero is not None and actor is not None:
+                    try:
+                        if actor.get_location().distance(hero.get_location()) <= float(ignore_radius):
+                            print(f"[scenario_helper] Collision near hero (<= {ignore_radius}m); not destroying actor={aid}")
+                            return
+                    except Exception:
+                        pass
+
+                if actor is not None:
+                    try:
+                        actor.destroy()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    try:
+        sensor.listen(_handle)
+    except Exception:
+        pass
+
+    # store a marker on the sensor for optional ignore radius
+    sensor._ignore_ego_radius = ignore_ego_radius
+
+    # remember sensor globally so python object stays alive while CARLA actor exists
+    try:
+        _attached_sensors.append(sensor)
+    except Exception:
+        pass
+
+    return sensor
+
+
+def detach_all_sensors():
+    """Stop and destroy all sensors created via attach_collision_sensor()."""
+    global _attached_sensors
+    try:
+        for s in list(_attached_sensors):
+            try:
+                if s is None:
+                    continue
+                try:
+                    s.stop()
+                except Exception:
+                    pass
+                try:
+                    s.destroy()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+    _attached_sensors = []
