@@ -27,9 +27,9 @@ except ModuleNotFoundError:
 	from generate_audio import SongAudio
 
 try:
-	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals
+	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals, attach_collision_sensor
 except ModuleNotFoundError:
-	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals
+	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals, attach_collision_sensor
 
 def get_actor_blueprints(world, filter_pattern):
 	bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -213,6 +213,7 @@ class Scenario01Runner:
 		self.occupy_started = False
 		self.occupy_finished = False
 		self._vehicle_actor_ids = []
+		self._sensor_actors = []
 		self._held_trafficjam_vehicle_release_times = {}
 		self._persistent_static_actor_ids = []
 		self._static_barriers_destroyed = False
@@ -456,6 +457,23 @@ class Scenario01Runner:
 			self._start_cars_spawned = True
 			self._start_cars_spawn_time = sim_time
 		print(f"[Scenario01] Start cars spawned: {len(spawned_ids)}/{len(spawn_points)}")
+		# Attach collision sensors to spawned vehicles for automatic deletion on crash
+		try:
+			for vid in spawned_ids:
+				try:
+					vehicle = self.world.get_actor(vid)
+					if vehicle is None:
+						continue
+					sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+					if sensor is not None:
+						try:
+							self._sensor_actors.append(sensor)
+						except Exception:
+							pass
+				except Exception:
+					pass
+		except Exception:
+			pass
 		return len(spawned_ids) > 0
 
 	def _spawn_tj_trigger6_barriers(self, trigger_config):
@@ -1040,6 +1058,23 @@ class Scenario01Runner:
 				f"[Scenario01] TrafficJam vehicle spawned: id={actor.id}, sim_time={sim_time:.2f}s, "
 				f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
 			)
+			
+		# Attach collision sensor to this trafficjam vehicle for automatic deletion on crash
+		try:
+			vehicle = self.world.get_actor(actor.id)
+		except Exception:
+			vehicle = None
+		if vehicle is not None:
+			sensor = None
+			try:
+				sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+			except Exception:
+				sensor = None
+			if sensor is not None:
+				try:
+					self._sensor_actors.append(sensor)
+				except Exception:
+					pass
 		return True
 
 	def _release_held_trafficjam_vehicles(self, sim_time):
