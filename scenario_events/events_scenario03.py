@@ -46,10 +46,12 @@ try:
     from events_scenario03_static_props import (
         get_barrier_spawn,
         TEMP_BARRIER_FIRETRUCK,
+        SPAWN_TEMP_BARRIER_FIRETRUCK,
         LTRUCK_SPAWN_CONFIGS,
         COPWAVING_TRIGGER_CONFIGS,
         CARAWAY,
         TARGET_TL_RED,
+        LTRUCK_NAVIGATION_BARRIER_CONFIGS,
     )
 except ModuleNotFoundError:
     from scenario_events.events_scenario03_static_props import (
@@ -59,9 +61,10 @@ except ModuleNotFoundError:
         COPWAVING_TRIGGER_CONFIGS,
         CARAWAY,
         TARGET_TL_RED,
+        LTRUCK_NAVIGATION_BARRIER_CONFIGS,
     )
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
     START_TO_CARAWAY_DELAY = 2.0
@@ -72,9 +75,9 @@ if DEBUG_MODE:
     BRAKE_TO_END_DELAY = 5.0
 
     TRIGGER_CARAWAY = False
-    TRIGGER_LTRUCK = False
-    TRIGGER_SONG = False
-    TRIGGER_POLICE = False
+    TRIGGER_LTRUCK = True
+    TRIGGER_SONG = True
+    TRIGGER_POLICE = True
     TRIGGER_BRAKE = True
 
     run_in_singleFile_mode = True
@@ -172,6 +175,17 @@ class Scenario03Runner:
         self._temp_firetruck_trigger_config = TEMP_BARRIER_FIRETRUCK[0].get("trigger_1") if TEMP_BARRIER_FIRETRUCK else None
         self._temp_firetruck_trigger_active = False
         self._temp_firetruck_trigger_triggered = False
+
+        # SPAWN_TEMP_BARRIER_FIRETRUCK triggers (activated when ltruck spawns)
+        self._spawn_temp_firetruck_trigger_configs = SPAWN_TEMP_BARRIER_FIRETRUCK if 'SPAWN_TEMP_BARRIER_FIRETRUCK' in globals() else None
+        self._spawn_temp_firetruck_active = False
+        self._spawn_temp_firetruck_triggered = False
+
+        # L-truck navigation barrier triggers (activated after temp firetruck barriers destroyed)
+        self._ltruck_nav_barrier_configs = LTRUCK_NAVIGATION_BARRIER_CONFIGS if 'LTRUCK_NAVIGATION_BARRIER_CONFIGS' in globals() else None
+        self._ltruck_nav_barriers_active = False
+        self._ltruck_nav_barriers_triggered_keys = set()
+        self._ltruck_nav_barrier_actor_ids = []
 
         self._ltruck_triggered_keys = set()
         self._caraway_triggered_keys = set()
@@ -716,6 +730,12 @@ class Scenario03Runner:
         except Exception:
             pass
 
+        # Activate SPAWN_TEMP_BARRIER_FIRETRUCK triggers now that the ltruck manual-control process started
+        try:
+            self._start_spawn_temp_firetruck_triggers()
+        except Exception:
+            pass
+
         # Start a background thread to wait for 'J' confirmation so the main simulation loop with hold tl red etc. is not blocked
         def _wait_for_confirm():
             try:
@@ -840,6 +860,135 @@ class Scenario03Runner:
         )
         draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
 
+    def _start_spawn_temp_firetruck_triggers(self):
+        if self._spawn_temp_firetruck_active or self._spawn_temp_firetruck_triggered:
+            return
+
+        if not self._spawn_temp_firetruck_trigger_configs:
+            return
+
+        self._spawn_temp_firetruck_active = True
+        print("[Scenario03] SPAWN_TEMP_BARRIER_FIRETRUCK triggers activated!")
+
+    def _draw_spawn_temp_firetruck_boxes(self):
+        if not DEBUG_MODE or not self._spawn_temp_firetruck_active or self._spawn_temp_firetruck_triggered:
+            return
+
+        configs = []
+        for cfg in (self._spawn_temp_firetruck_trigger_configs or []):
+            if not isinstance(cfg, dict):
+                continue
+            # collect any trigger_* entries (trigger_1, trigger_2, ...)
+            for k, v in cfg.items():
+                if isinstance(k, str) and k.startswith("trigger") and isinstance(v, dict):
+                    configs.append(v)
+
+        if not configs:
+            return
+
+        box_configs = build_trigger_box_configs(
+            configs,
+            z_extra=2.0,
+            color=(0, 255, 0, 255),
+            thickness=0.1,
+        )
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
+    def _spawn_from_spawn_temp_firetruck(self, trigger_entry):
+        if not trigger_entry or not isinstance(trigger_entry, dict):
+            return False
+
+        bp_lib = self.world.get_blueprint_library()
+        spawned_count = 0
+
+        for prop_config in trigger_entry.get("spawn_configs", []):
+            blueprint_ids = prop_config.get("blueprints", [])
+            transform = prop_config.get("transform")
+            if transform is None or not blueprint_ids:
+                continue
+
+            vehicle_bp = None
+            for blueprint_id in blueprint_ids:
+                try:
+                    vehicle_bp = bp_lib.find(blueprint_id)
+                    break
+                except Exception:
+                    vehicle_bp = None
+
+            if vehicle_bp is None:
+                print(f"[Scenario03] WARNUNG: Kein Blueprint für SPAWN_TEMP_BARRIER_FIRETRUCK gefunden: {blueprint_ids}")
+                continue
+
+            actor = self.world.try_spawn_actor(vehicle_bp, transform)
+            if actor is None:
+                print(
+                    f"[Scenario03] WARNUNG: SPAWN_TEMP_BARRIER_FIRETRUCK spawn fehlgeschlagen | "
+                    f"blueprint={vehicle_bp.id}, spawn=({transform.location.x:.2f}, {transform.location.y:.2f}, {transform.location.z:.2f})"
+                )
+                continue
+
+            try:
+                if hasattr(actor, "set_target_velocity"):
+                    actor.set_target_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+                if hasattr(actor, "set_target_angular_velocity"):
+                    actor.set_target_angular_velocity(carla.Vector3D(0.0, 0.0, 0.0))
+                if hasattr(actor, "set_simulate_physics"):
+                    actor.set_simulate_physics(False)
+            except Exception:
+                pass
+
+            self._temp_firetruck_actor_ids.append(actor.id)
+            spawned_count += 1
+            print(f"[Scenario03] SPAWN_TEMP_BARRIER_FIRETRUCK gespawnt: id={actor.id}, blueprint={vehicle_bp.id}")
+
+        return spawned_count > 0
+
+    def _spawn_temp_firetruck_reached(self, hero_location, hero_velocity=None):
+        if hero_location is None or not self._spawn_temp_firetruck_active or self._spawn_temp_firetruck_triggered:
+            return False
+        for cfg in (self._spawn_temp_firetruck_trigger_configs or []):
+            if not isinstance(cfg, dict):
+                continue
+
+            # check all trigger_* entries inside this config
+            for k, trigger_point in cfg.items():
+                if not (isinstance(k, str) and k.startswith("trigger") and isinstance(trigger_point, dict)):
+                    continue
+
+                trigger_location = trigger_point.get("trigger_location")
+                if trigger_location is None:
+                    continue
+
+                if abs(hero_location.x - trigger_location.x) > float(trigger_point.get("trigger_x_tolerance", 0.0)):
+                    continue
+                if abs(hero_location.y - trigger_location.y) > float(trigger_point.get("trigger_y_tolerance", 0.0)):
+                    continue
+
+                required_axis = trigger_point.get("trigger_direction_axis")
+                required_sign = trigger_point.get("trigger_direction_sign")
+                if required_axis is not None and required_sign is not None:
+                    if hero_velocity is None:
+                        continue
+                    axis_velocity = hero_velocity.x if required_axis == "x" else hero_velocity.y if required_axis == "y" else None
+                    if axis_velocity is None:
+                        continue
+                    if axis_velocity * required_sign <= 0.0:
+                        continue
+
+                # reached -> spawn this trigger's spawn_configs and deactivate all spawn triggers
+                time.sleep(3.0)
+                try:
+                    self._spawn_from_spawn_temp_firetruck(cfg)
+                except Exception:
+                    pass
+
+                self._spawn_temp_firetruck_triggered = True
+                self._spawn_temp_firetruck_active = False
+                print("[Scenario03] SPAWN_TEMP_BARRIER_FIRETRUCK trigger reached and spawned.")
+                return True
+
+        return False
+
     def _destroy_temp_firetruck_barriers(self):
         if not self._temp_firetruck_actor_ids:
             self._temp_firetruck_trigger_triggered = True
@@ -855,6 +1004,125 @@ class Scenario03Runner:
         self._temp_firetruck_trigger_triggered = True
         self._temp_firetruck_trigger_active = False
         print("[Scenario03] TEMP_BARRIER_FIRETRUCK destroyed.")
+        # After destroying temp firetruck barriers, activate L-truck navigation barrier triggers
+        try:
+            self._start_ltruck_navigation_barriers()
+        except Exception:
+            pass
+
+    def _start_ltruck_navigation_barriers(self):
+        if self._ltruck_nav_barriers_active or not self._ltruck_nav_barrier_configs:
+            return
+        self._ltruck_nav_barriers_active = True
+        print("[Scenario03] LTRUCK_NAVIGATION_BARRIER_CONFIGS triggers activated!")
+
+    def _draw_ltruck_navigation_barrier_boxes(self):
+        if not DEBUG_MODE or not self._ltruck_nav_barriers_active:
+            return
+        if not self._ltruck_nav_barrier_configs:
+            return
+        box_configs = build_trigger_box_configs(
+            self._ltruck_nav_barrier_configs,
+            z_extra=2.0,
+            color=(255, 255, 0, 255),
+            thickness=0.1,
+        )
+        # print("Draw trigger box!")
+        draw_trigger_boxes(self.world, box_configs, life_time=self._debug_trigger_box_lifetime)
+
+    def _check_and_spawn_ltruck_nav_barrier(self, hero_location, hero_velocity=None):
+        if not self._ltruck_nav_barriers_active or not self._ltruck_nav_barrier_configs:
+            return False
+
+        for cfg in self._ltruck_nav_barrier_configs:
+            if not isinstance(cfg, dict):
+                continue
+            name = cfg.get("name")
+            if name in self._ltruck_nav_barriers_triggered_keys:
+                continue
+
+            trigger_location = cfg.get("trigger_location")
+            if trigger_location is None:
+                continue
+
+            if abs(hero_location.x - trigger_location.x) > cfg.get("trigger_x_tolerance", 0.0):
+                continue
+            if abs(hero_location.y - trigger_location.y) > cfg.get("trigger_y_tolerance", 0.0):
+                continue
+
+            required_axis = cfg.get("trigger_direction_axis")
+            required_sign = cfg.get("trigger_direction_sign")
+            if required_axis is not None and required_sign is not None:
+                if hero_velocity is None:
+                    continue
+                axis_velocity = hero_velocity.x if required_axis == "x" else hero_velocity.y if required_axis == "y" else None
+                if axis_velocity is None:
+                    continue
+                if axis_velocity * required_sign <= 0.0:
+                    continue
+
+            # Spawn spawn_configs for this barrier
+            spawned_ids = []
+            bp_lib = self.world.get_blueprint_library()
+            for prop in cfg.get("spawn_configs", []):
+                blueprint_ids = prop.get("blueprints", [])
+                transform = prop.get("transform")
+                if transform is None or not blueprint_ids:
+                    continue
+                bp = None
+                for bid in blueprint_ids:
+                    try:
+                        bp = bp_lib.find(bid)
+                        break
+                    except Exception:
+                        bp = None
+                if bp is None:
+                    print(f"[Scenario03] WARNUNG: Kein Blueprint für LTRUCK_NAVIGATION_BARRIER gefunden: {blueprint_ids}")
+                    continue
+                actor = self.world.try_spawn_actor(bp, transform)
+                if actor is None:
+                    print(f"[Scenario03] WARNUNG: LTRUCK_NAVIGATION_BARRIER spawn fehlgeschlagen | blueprint={bp.id}")
+                    continue
+                self._ltruck_nav_barrier_actor_ids.append(actor.id)
+                spawned_ids.append(actor.id)
+                print(f"[Scenario03] LTRUCK_NAVIGATION_BARRIER gespawnt: id={actor.id}, blueprint={bp.id}")
+
+            # mark triggered and deactivate listening for further triggers if desired
+            try:
+                if name:
+                    self._ltruck_nav_barriers_triggered_keys.add(name)
+            except Exception:
+                pass
+
+            # schedule destruction after 30s
+            if spawned_ids:
+                try:
+                    t = threading.Timer(30.0, lambda ids=spawned_ids: self._destroy_ltruck_navigation_barrier_actors(ids))
+                    t.daemon = True
+                    t.start()
+                except Exception:
+                    pass
+
+            # stop listening after first trigger (per requirement)
+            self._ltruck_nav_barriers_active = False
+            return True
+
+        return False
+
+    def _destroy_ltruck_navigation_barrier_actors(self, actor_ids):
+        if not actor_ids:
+            return
+        try:
+            self.client.apply_batch([carla.command.DestroyActor(aid) for aid in list(actor_ids)])
+        except Exception:
+            pass
+        for aid in actor_ids:
+            try:
+                if aid in self._ltruck_nav_barrier_actor_ids:
+                    self._ltruck_nav_barrier_actor_ids.remove(aid)
+            except Exception:
+                pass
+        print(f"[Scenario03] LTRUCK_NAVIGATION_BARRIER actors destroyed: {actor_ids}")
 
     def _temp_firetruck_trigger_reached(self, hero_location, hero_velocity=None):
         trigger_point = self._temp_firetruck_trigger_config
@@ -1579,6 +1847,13 @@ class Scenario03Runner:
                         if ego_location is not None and self._temp_firetruck_trigger_reached(ego_location, ego_velocity):
                             self._destroy_temp_firetruck_barriers()
 
+                    # Draw and check SPAWN_TEMP_BARRIER_FIRETRUCK triggers (activated when ltruck spawns)
+                    if self._spawn_temp_firetruck_active and not self._spawn_temp_firetruck_triggered:
+                        self._draw_spawn_temp_firetruck_boxes()
+                        if ego_location is not None and self._spawn_temp_firetruck_reached(ego_location, ego_velocity):
+                            # spawning handled inside _spawn_temp_firetruck_reached
+                            pass
+
                     if caraway_to_ltruck["finished"] and self._temp_firetruck_trigger_triggered and not self.ltruck_active and not self.ltruck_finished:
                         if not self._trigger_ltruck:
                             self._skip_ltruck_trigger(sim_time)
@@ -1624,7 +1899,12 @@ class Scenario03Runner:
 
                             if self._start_ltruck_manual_control_from_config(config):
                                 self.ltruck_finished = True
-
+                # Draw and check LTRUCK navigation barrier triggers (activated after temp firetruck barriers destroyed)
+                if self._ltruck_nav_barriers_active:
+                    self._draw_ltruck_navigation_barrier_boxes()
+                    if ego_location is not None and self._check_and_spawn_ltruck_nav_barrier(ego_location, ego_velocity):
+                        # handled inside method (spawns and schedules destruction)
+                        pass
                 if self.ltruck_finished:
                     ltruck_to_song = self._delay_states["ltruck_to_song"]
                     if ltruck_to_song["started_at"] is None:

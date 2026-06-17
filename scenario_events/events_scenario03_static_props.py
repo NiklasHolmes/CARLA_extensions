@@ -120,7 +120,7 @@ TARGET_TL_RED = [
         "name": "tl_2",     # lake
         "location": carla.Location(x=62.72, y=-9.22, z=0.07),
         "search_radius": 2.0,
-        "red_hold_duration": 20.0,
+        "red_hold_duration": 25.0,
     },
 ]
 
@@ -574,19 +574,17 @@ START_BARRIER_SPAWNS = (
         "name": "bush_wall",
         "blueprints": ["static.prop.sm_t03_wall_27"],
         "transform": carla.Transform(
-            carla.Location(x=-6.8, y=-232.90, z=0.00),
-            carla.Rotation(pitch=0.0, yaw=150.0, roll=0.0),
+            carla.Location(x=6.3, y=-231.4, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
         ),
-        "scale": None,
     },
 	{
         "name": "bush_wall2",
         "blueprints": ["static.prop.sm_t03_wall_27"],
         "transform": carla.Transform(
-            carla.Location(x=-9, y=-223.00, z=0.00),
-            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+            carla.Location(x=-9, y=-231.30, z=1.60),
+            carla.Rotation(pitch=0.0, yaw=180.0, roll=180.0),
         ),
-        "scale": None,
     },
 	{
         "name": "bush_wall3",
@@ -595,7 +593,6 @@ START_BARRIER_SPAWNS = (
             carla.Location(x=1, y=-163.20, z=0.00),
             carla.Rotation(pitch=0.0, yaw=-10.0, roll=0.0),
         ),
-        "scale": None,
     },
 	{
         "name": "wooden_fence1",
@@ -678,7 +675,7 @@ START_BARRIER_SPAWNS = (
         ),
         "scale": None,
     },
-    	{
+    {
         "name": "cypress_bush5",
         "blueprints": ["static.prop.sm_cypress_bush"],
         "transform": carla.Transform(
@@ -739,9 +736,48 @@ TEMP_BARRIER_FIRETRUCK = (
     {
         "name": "trigger_destroy_firetruck",  
         "trigger_1": {
-            "trigger_location": carla.Location(x=-102.5, y=-34.7, z=0.3),
-            "trigger_x_tolerance": 70.0,
-            "trigger_y_tolerance": 70.0,
+            "trigger_location": carla.Location(x=-102.5, y=20, z=0.3),
+            "trigger_x_tolerance": 70.0, # 70
+            "trigger_y_tolerance": 120.0,
+        },
+        "spawn_configs": [
+            {
+                "name": "firetruck_01",
+                "blueprints": ["vehicle.carlamotors.firetruck"],
+                "transform": carla.Transform(
+                    carla.Location(x=0.4, y=59.8, z=0.1),
+                    carla.Rotation(pitch=0.0, yaw=120.0, roll=0.0),
+                ),
+                "scale": None,
+                "immobilize_vehicle": True,
+            },
+            {
+                "name": "firetruck_02",         # Windrad
+                "blueprints": ["vehicle.carlamotors.firetruck"],
+                "transform": carla.Transform(
+                    carla.Location(x=-198.8, y=-165.8, z=0.05),
+                    carla.Rotation(pitch=0.0, yaw=-20.0, roll=0.0),
+                ),
+                "scale": None,
+                "immobilize_vehicle": True,
+            },
+        ],
+    },
+)
+
+SPAWN_TEMP_BARRIER_FIRETRUCK = (
+    {
+		"name": "trigger_spawn_firetruck1",  
+        "trigger_1": {
+            "trigger_location": carla.Location(x=-8.70, y=54.00, z=0.3),
+            "trigger_x_tolerance": 8.0,
+            "trigger_y_tolerance": 8.0,
+        },
+		"name": "trigger_spawn_firetruck2",  
+        "trigger_2": {
+            "trigger_location": carla.Location(x=-194.10, y=-156.30, z=0.3),
+            "trigger_x_tolerance": 8.0,
+            "trigger_y_tolerance": 8.0,
         },
         "spawn_configs": [
             {
@@ -911,6 +947,239 @@ COPWAVING_TRIGGER_CONFIGS = (
         "spawn_yaw": 90.0,
         "blueprint_id": "walker.pedestrian.0053",
         "blueprint_id_walk": "walker.pedestrian.0030"
+    },
+	{
+        "name": "copWaving_Trigger8", 
+        "trigger_location": carla.Location(x=-202.53, y=58.54, z=0.2000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-204.60, y=102.40, z=0.1000),
+        "target_location1": carla.Location(x=-197.80, y=102.40, z=0.1000),
+		"target_location2": carla.Location(x=-197.80, y=91.80, z=0.1000),
+        "spawn_yaw": -90.0,
+        "blueprint_id": "walker.pedestrian.0053",
+        "blueprint_id_walk": "walker.pedestrian.0030"
+    },
+	{
+        "name": "copWaving_Trigger9", 
+        "trigger_location": carla.Location(x=-75.30, y=58.00, z=0.2000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-9.90, y=62.70, z=0.2000),
+        "target_location1": carla.Location(x=-9.90, y=56.20, z=0.1000),
+		"target_location2": carla.Location(x=-32.40, y=56.20, z=0.1000),
+        "spawn_yaw": 200.0,
+        "blueprint_id": "walker.pedestrian.0053",
+        "blueprint_id_walk": "walker.pedestrian.0030"
+    },
+	{
+        "name": "copWaving_Trigger10", 
+        "trigger_location": carla.Location(x=-104.16, y=62.85, z=0.2000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-112.50, y=109.60, z=0.3000),
+        "target_location1": carla.Location(x=-104.90, y=109.60, z=0.1000),
+		"target_location2": carla.Location(x=-102.10, y=91.10, z=0.1000),
+        "spawn_yaw": -90.0,
+        "blueprint_id": "walker.pedestrian.0053",
+        "blueprint_id_walk": "walker.pedestrian.0030"
+    },
+	{
+        "name": "copWaving_Trigger11", 
+        "trigger_location": carla.Location(x=-110.69, y=48.69, z=0.3000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_location": carla.Location(x=-145.70, y=46.90, z=0.1000),
+        "target_location1": carla.Location(x=-145.70, y=53.60, z=0.1000),
+		"target_location2": carla.Location(x=-126.00, y=53.60, z=0.1000),
+        "spawn_yaw": 0.0,
+        "blueprint_id": "walker.pedestrian.0053",
+        "blueprint_id_walk": "walker.pedestrian.0030"
+    },
+	{
+        "name": "copWaving_Trigger12", 
+        "trigger_location": carla.Location(x=-199.80, y=100.40, z=0.2000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_location": carla.Location(x=-198.30, y=55.60, z=0.3000),
+        "target_location1": carla.Location(x=-203.90, y=58.60, z=0.2000),
+		"target_location2": carla.Location(x=-203.90, y=78.60, z=0.2000),
+        "spawn_yaw": 90.0,
+        "blueprint_id": "walker.pedestrian.0053",
+        "blueprint_id_walk": "walker.pedestrian.0030"
+    },
+)
+
+LTRUCK_NAVIGATION_BARRIER_CONFIGS = (
+    {
+        "name": "ltruck_navi_barrier_1",
+        "trigger_location": carla.Location(x=-90.35, y=57.03, z=0.50),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "walnut_01",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-9.10, y=50.50, z=-3.4),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+			{
+                "name": "walnut_02",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-5.70, y=50.50, z=-3.4),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+						{
+                "name": "walnut_03",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-2.30, y=50.50, z=-3.4),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+						{
+                "name": "walnut_04",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=0.60, y=50.50, z=-3.4),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+        ],
+    },
+	{
+        "name": "ltruck_navi_barrier_2",
+        "trigger_location": carla.Location(x=-5.17, y=-36.10, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "walnut_01",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-13.70, y=62.70, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_02",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-13.70, y=60.30, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_03",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-13.70, y=57.00, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_04",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-13.70, y=54.10, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            }
+        ],
+    },
+	{
+        "name": "ltruck_navi_barrier_3",
+        "trigger_location": carla.Location(x=-131.82, y=-162.41, z=0.50),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "walnut_01",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-203.10, y=-153.60, z=-3.40),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_02",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-199.70, y=-153.60, z=-3.40),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_03",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-196.30, y=-153.60, z=-3.40),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+            },
+        ],
+    },
+	{
+        "name": "ltruck_navi_barrier_4",
+        "trigger_location": carla.Location(x=-198.47, y=-44.83, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "walnut_01",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-192.50, y=-165.00, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_02",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-192.50, y=-162.10, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_03",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-192.50, y=-158.80, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            },
+            {
+                "name": "walnut_04",
+                "blueprints": ["static.prop.sm_walnut_01"],
+                "transform": carla.Transform(
+                    carla.Location(x=-192.50, y=-156.40, z=-3.70),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+                ),
+            }
+        ],
     },
 )
 
