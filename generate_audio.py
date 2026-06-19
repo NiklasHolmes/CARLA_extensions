@@ -56,6 +56,11 @@ class ChannelPool:
         # Try to get idle channels
         for channel in self.channels:
             if not channel.get_busy():
+                try:
+                    # Reset channel volume to neutral so previous users don't affect new sounds
+                    channel.set_volume(1.0)
+                except Exception:
+                    pass
                 return channel
         
         # If all busy => return None
@@ -220,54 +225,43 @@ class EngineAudio(BaseAudioGenerator):
             return
         
         now = time.time()
-        
+
+        if not self.playing:
+            self._start_all_loops()
+            self.playing = True
+
+        # Calculate target volumes based on throttle
         if throttle_value > 0:
             self.last_throttle_time = now
-            
-            if not self.playing:
-                self._start_all_loops()
-                self.playing = True
-            
-            # Calculate target volumes based on throttle
-            if throttle_value < 0.33:
-                progress = throttle_value / 0.33
-                target_idle = 1.0
-                target_mid = progress * 0.5
-                target_high = 0.0
-            elif throttle_value < 0.66:
-                progress = (throttle_value - 0.33) / 0.33
-                target_idle = 1.0 - progress * 0.5
-                target_mid = 0.5 + progress * 0.5
-                target_high = progress * 0.3
-            else:
-                progress = (throttle_value - 0.66) / 0.34
-                target_idle = 0.5 * (1.0 - progress)
-                target_mid = 1.0 - progress * 0.7
-                target_high = 0.3 + progress * 0.7
-            
-            # Smooth volume transitions
-            smoothing = 0.15
-            self.idle_volume = self.idle_volume * smoothing + target_idle * (1.0 - smoothing)
-            self.mid_volume = self.mid_volume * smoothing + target_mid * (1.0 - smoothing)
-            self.high_volume = self.high_volume * smoothing + target_high * (1.0 - smoothing)
-            
-            # Scale by throttle for dynamics
-            overall_volume = 0.5 + (throttle_value ** 1.5) * 0.5
-            
-            self.idle_channel.set_volume(self.idle_volume * overall_volume * self.base_volume)
-            self.mid_channel.set_volume(self.mid_volume * overall_volume * self.base_volume)
-            self.high_channel.set_volume(self.high_volume * overall_volume * self.base_volume)
-        
+
+        if throttle_value < 0.33:
+            progress = throttle_value / 0.33 if throttle_value > 0 else 0.0
+            target_idle = 1.0
+            target_mid = progress * 0.5
+            target_high = 0.0
+        elif throttle_value < 0.66:
+            progress = (throttle_value - 0.33) / 0.33
+            target_idle = 1.0 - progress * 0.5
+            target_mid = 0.5 + progress * 0.5
+            target_high = progress * 0.3
         else:
-            # Fadeout if no throttle for stop_delay seconds
-            if self.playing and (now - self.last_throttle_time > self.stop_delay):
-                self.idle_channel.fadeout(self.fadeout_ms)
-                self.mid_channel.fadeout(self.fadeout_ms)
-                self.high_channel.fadeout(self.fadeout_ms)
-                self.playing = False
-                self.idle_volume = 0.0
-                self.mid_volume = 0.0
-                self.high_volume = 0.0
+            progress = (throttle_value - 0.66) / 0.34
+            target_idle = 0.5 * (1.0 - progress)
+            target_mid = 1.0 - progress * 0.7
+            target_high = 0.3 + progress * 0.7
+
+        # Smooth volume transitions
+        smoothing = 0.15
+        self.idle_volume = self.idle_volume * smoothing + target_idle * (1.0 - smoothing)
+        self.mid_volume = self.mid_volume * smoothing + target_mid * (1.0 - smoothing)
+        self.high_volume = self.high_volume * smoothing + target_high * (1.0 - smoothing)
+
+        # Scale by throttle for dynamics (keeps idle audible even at 0 throttle)
+        overall_volume = 0.5 + (throttle_value ** 1.5) * 0.5
+
+        self.idle_channel.set_volume(self.idle_volume * overall_volume * self.base_volume)
+        self.mid_channel.set_volume(self.mid_volume * overall_volume * self.base_volume)
+        self.high_channel.set_volume(self.high_volume * overall_volume * self.base_volume)
 
 
 class HornAudio(BaseAudioGenerator):
@@ -504,7 +498,13 @@ class BrakeAudio(BaseAudioGenerator):
             self.current_channel = self.channel_pool.get_channel()
 
         if self.current_channel is not None:
-            self.current_channel.set_volume(self.base_volume * volume_scale)
+            # Avoid changing channel global volume (affects other sounds).
+            # Set the volume on the Sound object instead so only this sound instance is affected.
+            try:
+                self.brake_sound.set_volume(self.base_volume * volume_scale)
+            except Exception:
+                # Fallback: if setting sound volume fails, set channel volume as last resort
+                self.current_channel.set_volume(self.base_volume * volume_scale)
             if maxtime_ms == 0:
                 self.current_channel.play(self.brake_sound, loops=0)
             else:
