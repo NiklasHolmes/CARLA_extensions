@@ -27,9 +27,9 @@ except ModuleNotFoundError:
 	from generate_audio import SongAudio
 
 try:
-	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians
+	from scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals, attach_collision_sensor
 except ModuleNotFoundError:
-	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians
+	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals, attach_collision_sensor
 
 def get_actor_blueprints(world, filter_pattern):
 	bps = list(world.get_blueprint_library().filter(filter_pattern))
@@ -47,7 +47,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 		result.append(bp)
 	return result
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
 	START_TO_REDLIGHT_DELAY = 1.0
@@ -76,8 +76,8 @@ if DEBUG_MODE:
 	run_in_singleFile_mode = False
 
 else:
-	START_TO_REDLIGHT_DELAY = 10.0
-	REDLIGHT_TO_TRAFFICJAM_DELAY = 5.0
+	START_TO_REDLIGHT_DELAY = 5.0
+	REDLIGHT_TO_TRAFFICJAM_DELAY = 2.0
 	TRAFFICJAM_TO_SONG_DELAY = 10.0
 	SONG_TO_BADGUY_DELAY = 10.0
 	BADGUY_TO_CROSSPED_DELAY = 5.0
@@ -88,7 +88,7 @@ else:
 
 	REDLIGHT_PHASE_MAX_SECONDS = 20.0
 
-	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 12.0
+	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 8.0
 	TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 2.0
 
 	TRIGGER_REDLIGHT = True
@@ -117,8 +117,8 @@ SONG_FADE_OUT_MS = 3000
 REDLIGHT_YELLOW_SECONDS = 2.0
 HERO_GREEN_LIGHT_HOLD_SECONDS = 3.0
 HERO_RED_LIGHT_HOLD_SECONDS = 8.0
-REDLIGHT_MIN_RED_SECONDS = 8.0
-REDLIGHT_MAX_RED_SECONDS = 12.0
+REDLIGHT_MIN_RED_SECONDS = 7.0
+REDLIGHT_MAX_RED_SECONDS = 11.0
 REDLIGHT_GREEN_RELEASE_SECONDS = 8.0
 REDLIGHT_MAX_TRAFFIC_LIGHTS = 3
 TRAFFICJAM_PRUNE_DISTANCE_METERS = 150.0
@@ -213,6 +213,7 @@ class Scenario01Runner:
 		self.occupy_started = False
 		self.occupy_finished = False
 		self._vehicle_actor_ids = []
+		self._sensor_actors = []
 		self._held_trafficjam_vehicle_release_times = {}
 		self._persistent_static_actor_ids = []
 		self._static_barriers_destroyed = False
@@ -456,6 +457,23 @@ class Scenario01Runner:
 			self._start_cars_spawned = True
 			self._start_cars_spawn_time = sim_time
 		print(f"[Scenario01] Start cars spawned: {len(spawned_ids)}/{len(spawn_points)}")
+		# Attach collision sensors to spawned vehicles for automatic deletion on crash
+		try:
+			for vid in spawned_ids:
+				try:
+					vehicle = self.world.get_actor(vid)
+					if vehicle is None:
+						continue
+					sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+					if sensor is not None:
+						try:
+							self._sensor_actors.append(sensor)
+						except Exception:
+							pass
+				except Exception:
+					pass
+		except Exception:
+			pass
 		return len(spawned_ids) > 0
 
 	def _spawn_tj_trigger6_barriers(self, trigger_config):
@@ -1040,6 +1058,23 @@ class Scenario01Runner:
 				f"[Scenario01] TrafficJam vehicle spawned: id={actor.id}, sim_time={sim_time:.2f}s, "
 				f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
 			)
+			
+		# Attach collision sensor to this trafficjam vehicle for automatic deletion on crash
+		try:
+			vehicle = self.world.get_actor(actor.id)
+		except Exception:
+			vehicle = None
+		if vehicle is not None:
+			sensor = None
+			try:
+				sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+			except Exception:
+				sensor = None
+			if sensor is not None:
+				try:
+					self._sensor_actors.append(sensor)
+				except Exception:
+					pass
 		return True
 
 	def _release_held_trafficjam_vehicles(self, sim_time):
@@ -1568,6 +1603,12 @@ class Scenario01Runner:
 		if run_in_singleFile_mode:
 			self.world.set_weather(carla.WeatherParameters.CloudySunset)
 			print("[Scenario01] Weather set to CloudySunset for single-file mode")
+		
+		set_all_traffic_light_intervals(
+            green=2.0, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world)
 
 		try:
 			while True:

@@ -8,9 +8,9 @@ import argparse
 import carla
 import threading
 try:
-    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint, force_green_light
+    from scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint, force_green_light, set_all_traffic_light_intervals
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint, force_green_light
+    from scenario_events.scenario_helper import is_transform_hidden_from_hero, pick_hidden_navigation_location, pick_hidden_navigation_location_near, get_random_pedestrian_blueprint, force_green_light, set_all_traffic_light_intervals
 from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
 from generate_audio import SongAudio
 
@@ -43,8 +43,8 @@ else:
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
+HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 1.0
 
 SPAWN_CARS = 15
 ENABLE_ROUTE_PEDESTRIANS = True
@@ -564,6 +564,12 @@ class Scenario00Runner:
     def run(self):
         print("[Scenario00] Running...")
         self._spawn_static_prop_once()
+        set_all_traffic_light_intervals(
+            green=2.0, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world
+        )
         try:
             while True:
                 self.world.wait_for_tick()

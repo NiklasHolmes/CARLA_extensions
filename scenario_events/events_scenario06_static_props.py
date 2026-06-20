@@ -846,15 +846,38 @@ TEMP_BARRIER_AVOID_HIGHWAY = [
         ),
         "scale": None,
     },
-    # {
-    #     "name": "temp_avoidHighway_barrier_08",
-    #     "blueprints": ["vehicle.carlamotors.firetruck"],
-    #     "transform": carla.Transform(
-    #         carla.Location(x=30.90, y=156.30, z=0.00),
-    #         carla.Rotation(pitch=0.0, yaw=135.0, roll=0.0),
-    #     ),
-    #     "scale": None,
-    # },
+	{
+        "name": "temp_avoidHighway_barrier_20",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=35.10, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+	{
+		"name": "temp_avoidHighway_barrier_21",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=31.60, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+	{
+        "name": "temp_avoidHighway_barrier_22",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=28.10, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+	{
+        "name": "temp_avoidHighway_barrier_23",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=24.60, y=151.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
 ]
 
 BUS_DISP_CONFIG = (
@@ -956,6 +979,16 @@ BUS_DISP_CONFIG = (
         "trigger_direction_axis": "y",
         "trigger_direction_sign": 1,
         "spawn_location": carla.Location(x=-95.4000, y=-94.9000, z=0.10000),
+        "spawn_yaw": 180.0,
+    },
+    {
+        "name": "bus_trigger23",
+        "trigger_location": carla.Location(x=-130.80, y=103.26, z=0.0000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_location": carla.Location(x=-91.20, y=144.30, z=0.10000),
         "spawn_yaw": 180.0,
     },
     {

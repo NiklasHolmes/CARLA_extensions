@@ -16,6 +16,9 @@ try:
         build_trigger_box_configs,
         draw_trigger_boxes,
         force_green_light,
+        attach_collision_sensor,
+        detach_all_sensors,
+        set_all_traffic_light_intervals,
     )
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import (
@@ -26,6 +29,9 @@ except ModuleNotFoundError:
         build_trigger_box_configs,
         draw_trigger_boxes,
         force_green_light,
+        attach_collision_sensor,
+        detach_all_sensors,
+        set_all_traffic_light_intervals,
     )
     
 try:
@@ -54,8 +60,8 @@ SONG_START_OFFSET_SECONDS = 30.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-TL_HOLD_ORIGINALLIGHT_SECONDS = 2.0
+HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 1.0
 
 SPAWN_CARS = 15                              # 15?
 ENABLE_ROUTE_PEDESTRIANS = True
@@ -164,6 +170,8 @@ class Scenario04Runner:
         self._vehicle_actor_ids = []
         self._walker_actor_ids = []
         self._walker_controller_ids = []
+
+        self._sensor_actors = []
 
     def _get_traffic_manager(self):
         try:
@@ -399,8 +407,19 @@ class Scenario04Runner:
 
     def _spawn_dynamic_traffic(self, ego_transform, sim_time):
         tm = self._get_traffic_manager()
-            
+        
         spawn_points = list(self.world.get_map().get_spawn_points())
+        # Restrict spawn points to the user-provided rectangle defined by two corners
+        try:
+            x1, y1 = 343.00, -368.20
+            x2, y2 = 4.24, -176.36
+            min_x, max_x = min(x1, x2), max(x1, x2)
+            min_y, max_y = min(y1, y2), max(y1, y2)
+            spawn_points = [p for p in spawn_points if p.location.x >= min_x and p.location.x <= max_x and p.location.y >= min_y and p.location.y <= max_y]
+        except Exception:
+            # If anything goes wrong, fall back to all spawn points
+            spawn_points = list(self.world.get_map().get_spawn_points())
+
         self._rng.shuffle(spawn_points)
         all_bps = get_actor_blueprints(self.world, "vehicle.*")
         vehicle_bps = filter_blocked_vehicle_blueprints(all_bps, BLOCKED_VEHICLE_KEYWORDS)
@@ -844,6 +863,23 @@ class Scenario04Runner:
         print(
             f"[Scenario04] Vehicles spawned: {len(spawned_ids)}/{len(points)}"
         )
+        # Attach collision sensors to spawned vehicles for automatic deletion on crash
+        try:
+            for vid in spawned_ids:
+                try:
+                    vehicle = self.world.get_actor(vid)
+                    if vehicle is None:
+                        continue
+                    sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+                    if sensor is not None:
+                        try:
+                            self._sensor_actors.append(sensor)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _force_green_light(self, ego, sim_time):
         # Special-case for dancing-m confirmation: hold red on the targeted traffic light
@@ -1107,6 +1143,11 @@ class Scenario04Runner:
     def run(self):
         print("[Scenario04] Running...")
         self._spawn_static_prop_once()
+        set_all_traffic_light_intervals(
+            green=2.0, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world)
         try:
             while True:
                 self.world.wait_for_tick()
@@ -1170,8 +1211,43 @@ class Scenario04Runner:
     def destroy(self):
         print("[Scenario04] Cleanup...")
         self._update_dancingm_traffic_light_experiment(0.0, force_restore=True)
+        # Also detach/destroy any sensors that scenario_helper tracked globally
+        try:
+            detach_all_sensors()
+        except Exception:
+            pass
+        try:
+            for s in list(self._sensor_actors):
+                try:
+                    if s is None:
+                        continue
+                    try:
+                        s.stop()
+                    except Exception:
+                        pass
+                    try:
+                        s.destroy()
+                    except Exception:
+                        # if direct destroy fails, try via client batch later
+                        pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Now destroy remaining actors (vehicles, walkers, controllers, statics)
         all_ids = self._static_actor_ids + self._vehicle_actor_ids + self._walker_actor_ids + self._walker_controller_ids
-        self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])
+        try:
+            if all_ids:
+                self.client.apply_batch([carla.command.DestroyActor(x) for x in all_ids])
+        except Exception:
+            pass
+
+        # Clear local sensor references
+        try:
+            self._sensor_actors = []
+        except Exception:
+            pass
 
     def _signal_done(self):
         if not self._done_file:

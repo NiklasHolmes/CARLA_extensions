@@ -662,8 +662,12 @@ def _get_spawn_point_for_town(map_obj, rolename='hero'):
             ),
         },
         'Town04': {
+            # 'hero': carla.Transform(
+            #     carla.Location(x=150.60, y=-173.30, z=0.70),
+            #     carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+            # ),
             'hero': carla.Transform(
-                carla.Location(x=150.60, y=-173.30, z=0.70),
+                carla.Location(x=48.50, y=-173.84, z=0.60),
                 carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
             ),
             'supervisor': carla.Transform(
@@ -1360,7 +1364,7 @@ class KeyboardControl(object):
                 next_brake = min(self._control.brake + 0.2, 1)
                 current_braking = next_brake > 0.1
                 if audio_manager is not None and not self._prev_brake and current_braking:
-                    print(f"Playing brake sound with strength {current_braking} at speed {speed_kmh} km/h")
+                    # print(f"Playing brake sound with strength {current_braking} at speed {speed_kmh} km/h")
                     audio_manager.play_brake(brake_strength=next_brake, speed_kmh=speed_kmh)
                 self._prev_brake = current_braking
                 brake_factor = _get_brake_warning_brake_factor()

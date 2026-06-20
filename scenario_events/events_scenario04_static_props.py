@@ -337,6 +337,200 @@ STATIC_PROP_SPAWNS = [
         ),
         "scale": None,
     },
+    # new BLOCK highway: 
+    {
+        "name": "city_highway_block01",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=357.30, y=-168.70, z=0.20),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "city_highway_block01",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=53.50, y=-174.00, z=0.20),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "city_highway_block01",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=205.40, y=-316.20, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "city_highway_block01",
+        "blueprints": ["static.prop.streetbarrier"],
+        "transform": carla.Transform(
+            carla.Location(x=310.20, y=-113.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        ),
+    },
+    #secfance on highway to lead back to city
+    {
+        "name": "Secfence_yellow01",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=397.00, y=-230.80, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow02",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=396.40, y=-227.50, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow03",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=395.80, y=-224.20, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow04",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=395.20, y=-220.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow05",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=394.60, y=-217.60, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow06",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=394.00, y=-214.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow07",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=393.40, y=-211.00, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow08",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=392.80, y=-207.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow09",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=392.20, y=-204.40, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow10",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=391.60, y=-201.10, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow11",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=391.00, y=-197.80, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow12",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=390.40, y=-194.50, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow13",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=389.80, y=-191.20, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow14",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=389.20, y=-187.90, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow15",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=388.60, y=-184.60, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow16",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=388.00, y=-181.30, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow17",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=387.40, y=-178.00, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow18",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=386.80, y=-174.70, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow19",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=386.20, y=-171.40, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=10.0, roll=0.0),
+        ),
+    },
+    {
+        "name": "Secfence_yellow20",
+        "blueprints": ["static.prop.secfence_yellow"],
+        "transform": carla.Transform(
+            carla.Location(x=383.50, y=-170.60, z=0.00),
+            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+        ),
+    },
 ]
 
 PEDESTRIAN_START_LOCATIONS = [

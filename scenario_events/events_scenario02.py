@@ -15,9 +15,9 @@ except ModuleNotFoundError:
     from scenario_events.events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config, POORROAD_SPAWNBOX_CONFIG
 
 try:
-    from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light
+    from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 except ModuleNotFoundError:
-    from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light
+    from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 
 DEBUG_MODE = False
 
@@ -56,8 +56,8 @@ else:
 
 SIM_STEP_S = 0.05
 
-HERO_GREEN_LIGHT_HOLD_SECONDS = 10.0
-TL_HOLD_ORIGINALLIGHT_SECONDS = 5.0
+HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
+TL_HOLD_ORIGINALLIGHT_SECONDS = 1.0
 
 # if set to an integer index (0-based) that snake config will be spawned immediately
 # None (default) = normal hero-triggering is used
@@ -176,6 +176,7 @@ class Scenario02Runner:
         self._start_static_props_spawned = False
         self._persistent_static_actor_ids = []
         self._walker_actor_ids = []
+        self._sensor_actors = []
         self._forced_hero_tl = {}
         self._snake_triggered = set()
         self._snake_routes = {}
@@ -480,22 +481,6 @@ class Scenario02Runner:
         waypoint = map_.get_waypoint(location, project_to_road=True, lane_type=carla.LaneType.Driving)
         return waypoint.transform.location if waypoint is not None else location
 
-    def _update_forced_hero_lights(self, sim_time):
-        # release any traffic lights forced for hero after hold seconds
-        removed = []
-        for tl_id, started in list(self._forced_hero_tl.items()):
-            try:
-                if (sim_time - started) >= HERO_GREEN_LIGHT_HOLD_SECONDS:
-                    tl = self.world.get_actor(tl_id)
-                    if tl is not None:
-                        # release: allow normal logic to resume by not touching state further
-                        print(f"[Scenario02] HERO releasing traffic light id={tl_id} after {HERO_GREEN_LIGHT_HOLD_SECONDS}s")
-                    removed.append(tl_id)
-            except Exception:
-                removed.append(tl_id)
-        for r in removed:
-            self._forced_hero_tl.pop(r, None)
-
     def _build_spawn_locations_from_waypoints(self, waypoints):
         spawn_locations = []
         for waypoint in waypoints:
@@ -684,6 +669,23 @@ class Scenario02Runner:
                 spawned_ids.append(r.actor_id)
 
         print(f"[Scenario02] Traffic: spawned {len(spawned_ids)}/{len(selected_points)} vehicles (requested={traffic_count})")
+        # Attach collision sensors to spawned vehicles for automatic deletion on crash
+        try:
+            for vid in spawned_ids:
+                try:
+                    vehicle = self.world.get_actor(vid)
+                    if vehicle is None:
+                        continue
+                    sensor = attach_collision_sensor(self.world, vehicle, ignore_ego_radius=10.0)
+                    if sensor is not None:
+                        try:
+                            self._sensor_actors.append(sensor)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self.traffic_finished = True
 
     def start_uncivbehav(self):
@@ -1239,7 +1241,12 @@ class Scenario02Runner:
         if run_in_singleFile_mode:
             self.world.set_weather(carla.WeatherParameters.WetCloudyNoon)
             print("[Scenario02] Weather set to WetCloudyNoon for single-file mode")
-
+        set_all_traffic_light_intervals(
+            green=2.0, 
+            yellow=0.5, 
+            red=0.5, 
+            world=self.world
+        )
         try:
             while True:
                 self.world.wait_for_tick()
@@ -1257,7 +1264,6 @@ class Scenario02Runner:
                 if ego:
                     self._force_green_light(ego, sim_time)
 
-                self._update_forced_hero_lights(sim_time)
                 # update snake route state if active
                 try:
                     self._update_snake(sim_time)
