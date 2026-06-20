@@ -263,22 +263,22 @@ TRASH_OBJECTS_CONFIG = [
             carla.Rotation(pitch=0.0, yaw=273.7, roll=0.0)
         )
     },
-    {
-        'name': 'trash_obj_016',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=4.28, y=148.15, z=0.6),
-            carla.Rotation(pitch=0.0, yaw=311.7, roll=0.0)
-        )
-    },
-    {
-        'name': 'trash_obj_017',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=273.17, y=50.64, z=1.18),
-            carla.Rotation(pitch=0.0, yaw=190.1, roll=0.0)
-        )
-    },
+    # {
+    #     'name': 'trash_obj_016',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=4.28, y=148.15, z=0.6),
+    #         carla.Rotation(pitch=0.0, yaw=311.7, roll=0.0)
+    #     )
+    # },
+    # {
+    #     'name': 'trash_obj_017',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=273.17, y=50.64, z=1.18),
+    #         carla.Rotation(pitch=0.0, yaw=190.1, roll=0.0)
+    #     )
+    # },
     {
         'name': 'trash_obj_018',
         'blueprints': ['static.prop.box03'],
@@ -439,22 +439,22 @@ TRASH_OBJECTS_CONFIG = [
             carla.Rotation(pitch=0.0, yaw=141.2, roll=0.0)
         )
     },
-    {
-        'name': 'trash_obj_038',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=86.71, y=56.01, z=1.08),
-            carla.Rotation(pitch=0.0, yaw=312.3, roll=0.0)
-        )
-    },
-    {
-        'name': 'trash_obj_039',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=330.98, y=203.83, z=1.19),
-            carla.Rotation(pitch=0.0, yaw=57.8, roll=0.0)
-        )
-    },
+    # {
+    #     'name': 'trash_obj_038',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=86.71, y=56.01, z=1.08),
+    #         carla.Rotation(pitch=0.0, yaw=312.3, roll=0.0)
+    #     )
+    # },
+    # {
+    #     'name': 'trash_obj_039',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=330.98, y=203.83, z=1.19),
+    #         carla.Rotation(pitch=0.0, yaw=57.8, roll=0.0)
+    #     )
+    # },
     {
         'name': 'trash_obj_040',
         'blueprints': ['static.prop.trashbag'],
@@ -479,22 +479,22 @@ TRASH_OBJECTS_CONFIG = [
             carla.Rotation(pitch=0.0, yaw=85.7, roll=0.0)
         )
     },
-    {
-        'name': 'trash_obj_043',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=166.08, y=-7.25, z=1.18),
-            carla.Rotation(pitch=0.0, yaw=280.1, roll=0.0)
-        )
-    },
-    {
-        'name': 'trash_obj_044',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=328.23, y=7.41, z=1.18),
-            carla.Rotation(pitch=0.0, yaw=230.5, roll=0.0)
-        )
-    },
+    # {
+    #     'name': 'trash_obj_043',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=166.08, y=-7.25, z=1.18),
+    #         carla.Rotation(pitch=0.0, yaw=280.1, roll=0.0)
+    #     )
+    # },
+    # {
+    #     'name': 'trash_obj_044',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=328.23, y=7.41, z=1.18),
+    #         carla.Rotation(pitch=0.0, yaw=230.5, roll=0.0)
+    #     )
+    # },
     {
         'name': 'trash_obj_045',
         'blueprints': ['static.prop.trashcan03'],
@@ -1151,14 +1151,14 @@ TRASH_OBJECTS_CONFIG = [
             carla.Rotation(pitch=0.0, yaw=135.9, roll=0.0)
         )
     },
-    {
-        'name': 'trash_obj_127',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=313.42, y=190.02, z=1.18),
-            carla.Rotation(pitch=0.0, yaw=82.2, roll=0.0)
-        )
-    },
+    # {
+    #     'name': 'trash_obj_127',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=313.42, y=190.02, z=1.18),
+    #         carla.Rotation(pitch=0.0, yaw=82.2, roll=0.0)
+    #     )
+    # },
     {
         'name': 'trash_obj_128',
         'blueprints': ['static.prop.trashcan03'],
@@ -1167,14 +1167,14 @@ TRASH_OBJECTS_CONFIG = [
             carla.Rotation(pitch=0.0, yaw=46.7, roll=0.0)
         )
     },
-    {
-        'name': 'trash_obj_129',
-        'blueprints': ['static.prop.shoppingcart'],
-        'transform': carla.Transform(
-            carla.Location(x=4.61, y=161.19, z=0.6),
-            carla.Rotation(pitch=0.0, yaw=325.5, roll=0.0)
-        )
-    },
+    # {
+    #     'name': 'trash_obj_129',
+    #     'blueprints': ['static.prop.shoppingcart'],
+    #     'transform': carla.Transform(
+    #         carla.Location(x=4.61, y=161.19, z=0.6),
+    #         carla.Rotation(pitch=0.0, yaw=325.5, roll=0.0)
+    #     )
+    # },
     {
         'name': 'trash_obj_130',
         'blueprints': ['static.prop.trashbag'],
@@ -2498,11 +2498,12 @@ SNAKE_CONFIGS = tuple(
     for index, trigger_location in enumerate(SNAKE_AND_DRIVERTRASH_TRIGGER_LOCATIONS)
 )
 
+
 SNAKE_TRIGGER_SPAWN_CONFIGS = (
     # Trigger 1 (Richtung -x)
     {
         "name": "snakeTrigger1",
-        "trigger_location": carla.Location(x=322.790000, y=-2.110000, z=0.300000),
+        "trigger_location": carla.Location(x=322.790918, y=-2.114089, z=0.300000),
         "trigger_x_tolerance": 5.0,
         "trigger_y_tolerance": 2.0,
         "trigger_direction_axis": "x",
@@ -2511,20 +2512,1510 @@ SNAKE_TRIGGER_SPAWN_CONFIGS = (
             {
                 "name": "snake_start_01",
                 "transform": carla.Transform(
-                    carla.Location(x=372.590000, y=8.990000, z=2.100000),
+                    carla.Location(x=272.790918, y=-6.100000, z=0.000000),
                     carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
                 ),
+                "scale": None
             },
             {
                 "name": "snake_end_01",
                 "transform": carla.Transform(
-                    carla.Location(x=372.590000, y=-19.500000, z=2.100000),
+                    carla.Location(x=272.790918, y=2.700000, z=0.000000),
                     carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
                 ),
+                "scale": None
             }
         ]
     },
+
+    # Trigger 2 (Richtung -x)
+    {
+        "name": "snakeTrigger2",
+        "trigger_location": carla.Location(x=229.090918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_02",
+                "transform": carla.Transform(
+                    carla.Location(x=179.090918, y=-6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_02",
+                "transform": carla.Transform(
+                    carla.Location(x=179.090918, y=2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 3 (Richtung -x)
+    {
+        "name": "snakeTrigger3",
+        "trigger_location": carla.Location(x=135.390918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_03",
+                "transform": carla.Transform(
+                    carla.Location(x=85.390918, y=-6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_03",
+                "transform": carla.Transform(
+                    carla.Location(x=85.390918, y=2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 4 (Richtung -x)
+    {
+        "name": "snakeTrigger4",
+        "trigger_location": carla.Location(x=41.690918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_04",
+                "transform": carla.Transform(
+                    carla.Location(x=-8.309082, y=-6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_04",
+                "transform": carla.Transform(
+                    carla.Location(x=-8.309082, y=2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 5 (Richtung -x)
+    {
+        "name": "snakeTrigger5",
+        "trigger_location": carla.Location(x=-52.009082, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_05",
+                "transform": carla.Transform(
+                    carla.Location(x=-102.009082, y=-6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_05",
+                "transform": carla.Transform(
+                    carla.Location(x=-102.009082, y=2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 6 (Richtung +x)
+    {
+        "name": "snakeTrigger6",
+        "trigger_location": carla.Location(x=13.568643, y=2.461965, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_06",
+                "transform": carla.Transform(
+                    carla.Location(x=57.669561, y=6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_06",
+                "transform": carla.Transform(
+                    carla.Location(x=57.669561, y=-2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 7 (Richtung +x)
+    {
+        "name": "snakeTrigger7",
+        "trigger_location": carla.Location(x=47.940000, y=2.020015, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_07",
+                "transform": carla.Transform(
+                    carla.Location(x=92.040918, y=6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_07",
+                "transform": carla.Transform(
+                    carla.Location(x=92.040918, y=-2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 8 (Richtung +x)
+    {
+        "name": "snakeTrigger8",
+        "trigger_location": carla.Location(x=82.311357, y=1.578064, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_08",
+                "transform": carla.Transform(
+                    carla.Location(x=126.412275, y=6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_08",
+                "transform": carla.Transform(
+                    carla.Location(x=126.412275, y=-2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 9 (Richtung +x)
+    {
+        "name": "snakeTrigger9",
+        "trigger_location": carla.Location(x=116.682715, y=1.136113, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_09",
+                "transform": carla.Transform(
+                    carla.Location(x=160.783633, y=6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_09",
+                "transform": carla.Transform(
+                    carla.Location(x=160.783633, y=-2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 10 (Richtung +x)
+    {
+        "name": "snakeTrigger10",
+        "trigger_location": carla.Location(x=151.054072, y=0.694163, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_10",
+                "transform": carla.Transform(
+                    carla.Location(x=195.154990, y=6.100000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_10",
+                "transform": carla.Transform(
+                    carla.Location(x=195.154990, y=-2.700000, z=0.000000),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    }
 )
+
+SNAKE_TRIGGER_SPAWN_CONFIGS = (
+    # Trigger 1 (Hauptstraße, Richtung -x)
+    {
+        "name": "snakeTrigger1",
+        "trigger_location": carla.Location(x=322.790918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_01",
+                "transform": carla.Transform(
+                    carla.Location(x=272.790918, y=-6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_01",
+                "transform": carla.Transform(
+                    carla.Location(x=272.790918, y=2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 2 (Hauptstraße, Richtung -x)
+    {
+        "name": "snakeTrigger2",
+        "trigger_location": carla.Location(x=232.790918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_02",
+                "transform": carla.Transform(
+                    carla.Location(x=182.790918, y=-6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_02",
+                "transform": carla.Transform(
+                    carla.Location(x=182.790918, y=2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 3 (Hauptstraße, Richtung -x)
+    {
+        "name": "snakeTrigger3",
+        "trigger_location": carla.Location(x=142.790918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_03",
+                "transform": carla.Transform(
+                    carla.Location(x=92.790918, y=-6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_03",
+                "transform": carla.Transform(
+                    carla.Location(x=92.790918, y=2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 4 (Hauptstraße, Richtung -x)
+    {
+        "name": "snakeTrigger4",
+        "trigger_location": carla.Location(x=52.790918, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_04",
+                "transform": carla.Transform(
+                    carla.Location(x=2.790918, y=-6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_04",
+                "transform": carla.Transform(
+                    carla.Location(x=2.790918, y=2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 5 (Hauptstraße, Richtung -x)
+    {
+        "name": "snakeTrigger5",
+        "trigger_location": carla.Location(x=-37.209082, y=-2.114089, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_05",
+                "transform": carla.Transform(
+                    carla.Location(x=-87.209082, y=-6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_05",
+                "transform": carla.Transform(
+                    carla.Location(x=-87.209082, y=2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 6 (Hauptstraße, Richtung +x)
+    {
+        "name": "snakeTrigger6",
+        "trigger_location": carla.Location(x=13.568643, y=2.461965, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_06",
+                "transform": carla.Transform(
+                    carla.Location(x=63.568643, y=6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_06",
+                "transform": carla.Transform(
+                    carla.Location(x=63.568643, y=-2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 7 (Hauptstraße, Richtung +x)
+    {
+        "name": "snakeTrigger7",
+        "trigger_location": carla.Location(x=103.568643, y=2.020015, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_07",
+                "transform": carla.Transform(
+                    carla.Location(x=153.568643, y=6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_07",
+                "transform": carla.Transform(
+                    carla.Location(x=153.568643, y=-2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 8 (Hauptstraße, Richtung +x)
+    {
+        "name": "snakeTrigger8",
+        "trigger_location": carla.Location(x=193.568643, y=1.578064, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_08",
+                "transform": carla.Transform(
+                    carla.Location(x=243.568643, y=6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_08",
+                "transform": carla.Transform(
+                    carla.Location(x=243.568643, y=-2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 9 (Hauptstraße, Richtung +x)
+    {
+        "name": "snakeTrigger9",
+        "trigger_location": carla.Location(x=283.568643, y=1.136113, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_09",
+                "transform": carla.Transform(
+                    carla.Location(x=333.568643, y=6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_09",
+                "transform": carla.Transform(
+                    carla.Location(x=333.568643, y=-2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 10 (Hauptstraße, Richtung +x)
+    {
+        "name": "snakeTrigger10",
+        "trigger_location": carla.Location(x=373.568643, y=0.694163, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_10",
+                "transform": carla.Transform(
+                    carla.Location(x=423.568643, y=6.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_10",
+                "transform": carla.Transform(
+                    carla.Location(x=423.568643, y=-2.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 11 (Parallelstraße, Richtung -x)
+    {
+        "name": "snakeTrigger11",
+        "trigger_location": carla.Location(x=322.790918, y=325.885911, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_11",
+                "transform": carla.Transform(
+                    carla.Location(x=272.790918, y=321.900000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_11",
+                "transform": carla.Transform(
+                    carla.Location(x=272.790918, y=330.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 12 (Parallelstraße, Richtung -x)
+    {
+        "name": "snakeTrigger12",
+        "trigger_location": carla.Location(x=232.790918, y=325.885911, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_12",
+                "transform": carla.Transform(
+                    carla.Location(x=182.790918, y=321.900000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_12",
+                "transform": carla.Transform(
+                    carla.Location(x=182.790918, y=330.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 13 (Parallelstraße, Richtung -x)
+    {
+        "name": "snakeTrigger13",
+        "trigger_location": carla.Location(x=142.790918, y=325.885911, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_13",
+                "transform": carla.Transform(
+                    carla.Location(x=92.790918, y=321.900000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_13",
+                "transform": carla.Transform(
+                    carla.Location(x=92.790918, y=330.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 14 (Parallelstraße, Richtung -x)
+    {
+        "name": "snakeTrigger14",
+        "trigger_location": carla.Location(x=52.790918, y=325.885911, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_14",
+                "transform": carla.Transform(
+                    carla.Location(x=2.790918, y=321.900000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_14",
+                "transform": carla.Transform(
+                    carla.Location(x=2.790918, y=330.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 15 (Parallelstraße, Richtung -x)
+    {
+        "name": "snakeTrigger15",
+        "trigger_location": carla.Location(x=-37.209082, y=325.885911, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_15",
+                "transform": carla.Transform(
+                    carla.Location(x=-87.209082, y=321.900000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_15",
+                "transform": carla.Transform(
+                    carla.Location(x=-87.209082, y=330.700000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 16 (Parallelstraße, Richtung +x)
+    {
+        "name": "snakeTrigger16",
+        "trigger_location": carla.Location(x=13.568643, y=330.461965, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_16",
+                "transform": carla.Transform(
+                    carla.Location(x=63.568643, y=334.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_16",
+                "transform": carla.Transform(
+                    carla.Location(x=63.568643, y=325.300000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 17 (Parallelstraße, Richtung +x)
+    {
+        "name": "snakeTrigger17",
+        "trigger_location": carla.Location(x=103.568643, y=330.020015, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_17",
+                "transform": carla.Transform(
+                    carla.Location(x=153.568643, y=334.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_17",
+                "transform": carla.Transform(
+                    carla.Location(x=153.568643, y=325.300000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 18 (Parallelstraße, Richtung +x)
+    {
+        "name": "snakeTrigger18",
+        "trigger_location": carla.Location(x=193.568643, y=329.578064, z=0.300000),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_18",
+                "transform": carla.Transform(
+                    carla.Location(x=243.568643, y=334.100000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_18",
+                "transform": carla.Transform(
+                    carla.Location(x=243.568643, y=325.300000, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # # Trigger 19 (Parallelstraße, Richtung +x)
+    # {
+    #     "name": "snakeTrigger19",
+    #     "trigger_location": carla.Location(x=283.568643, y=329.136113, z=0.300000),
+    #     "trigger_x_tolerance": 5.0,
+    #     "trigger_y_tolerance": 2.0,
+    #     "trigger_direction_axis": "x",
+    #     "trigger_direction_sign": 1,
+    #     "spawn_configs": [
+    #         {
+    #             "name": "snake_start_19",
+    #             "transform": carla.Transform(
+    #                 carla.Location(x=333.568643, y=334.100000, z=0.0),
+    #                 carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+    #             ),
+    #             "scale": None
+    #         },
+    #         {
+    #             "name": "snake_end_19",
+    #             "transform": carla.Transform(
+    #                 carla.Location(x=333.568643, y=325.300000, z=0.0),
+    #                 carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+    #             ),
+    #             "scale": None
+    #         }
+    #     ]
+    # },
+
+    # # Trigger 20 (Parallelstraße, Richtung +x)
+    # {
+    #     "name": "snakeTrigger20",
+    #     "trigger_location": carla.Location(x=373.568643, y=328.694163, z=0.300000),
+    #     "trigger_x_tolerance": 5.0,
+    #     "trigger_y_tolerance": 2.0,
+    #     "trigger_direction_axis": "x",
+    #     "trigger_direction_sign": 1,
+    #     "spawn_configs": [
+    #         {
+    #             "name": "snake_start_20",
+    #             "transform": carla.Transform(
+    #                 carla.Location(x=423.568643, y=334.100000, z=0.0),
+    #                 carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+    #             ),
+    #             "scale": None
+    #         },
+    #         {
+    #             "name": "snake_end_20",
+    #             "transform": carla.Transform(
+    #                 carla.Location(x=423.568643, y=325.300000, z=0.0),
+    #                 carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0)
+    #             ),
+    #             "scale": None
+    #         }
+    #     ]
+    # }
+    # Trigger 21 (Hauptstraße, Richtung -y)
+    # Trigger 21 (Hauptstraße, Richtung -y)
+    # Trigger 21 (Hauptstraße, Richtung -y)
+    {
+        "name": "snakeTrigger21",
+        "trigger_location": carla.Location(x=339.009141, y=314.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_21",
+                "transform": carla.Transform(
+                    carla.Location(x=345.109141, y=264.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_21",
+                "transform": carla.Transform(
+                    carla.Location(x=336.309141, y=264.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 22 (Hauptstraße, Richtung -y)
+    {
+        "name": "snakeTrigger22",
+        "trigger_location": carla.Location(x=339.009141, y=224.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_22",
+                "transform": carla.Transform(
+                    carla.Location(x=345.109141, y=174.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_22",
+                "transform": carla.Transform(
+                    carla.Location(x=336.309141, y=174.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 23 (Hauptstraße, Richtung -y)
+    {
+        "name": "snakeTrigger23",
+        "trigger_location": carla.Location(x=339.009141, y=134.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_23",
+                "transform": carla.Transform(
+                    carla.Location(x=345.109141, y=84.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_23",
+                "transform": carla.Transform(
+                    carla.Location(x=336.309141, y=84.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 24 (Hauptstraße, Richtung -y)
+    {
+        "name": "snakeTrigger24",
+        "trigger_location": carla.Location(x=339.009141, y=44.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_24",
+                "transform": carla.Transform(
+                    carla.Location(x=345.109141, y=-5.113691, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_24",
+                "transform": carla.Transform(
+                    carla.Location(x=336.309141, y=-5.113691, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 25 (Hauptstraße, Richtung +y)
+    {
+        "name": "snakeTrigger25",
+        "trigger_location": carla.Location(x=334.835039, y=14.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_25",
+                "transform": carla.Transform(
+                    carla.Location(x=328.735039, y=64.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_25",
+                "transform": carla.Transform(
+                    carla.Location(x=337.535039, y=64.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 26 (Hauptstraße, Richtung +y)
+    {
+        "name": "snakeTrigger26",
+        "trigger_location": carla.Location(x=334.835039, y=104.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_26",
+                "transform": carla.Transform(
+                    carla.Location(x=328.735039, y=154.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_26",
+                "transform": carla.Transform(
+                    carla.Location(x=337.535039, y=154.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 27 (Hauptstraße, Richtung +y)
+    {
+        "name": "snakeTrigger27",
+        "trigger_location": carla.Location(x=334.835039, y=194.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_27",
+                "transform": carla.Transform(
+                    carla.Location(x=328.735039, y=244.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_27",
+                "transform": carla.Transform(
+                    carla.Location(x=337.535039, y=244.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 28 (Hauptstraße, Richtung +y)
+    {
+        "name": "snakeTrigger28",
+        "trigger_location": carla.Location(x=334.835039, y=284.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_28",
+                "transform": carla.Transform(
+                    carla.Location(x=328.735039, y=334.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_28",
+                "transform": carla.Transform(
+                    carla.Location(x=337.535039, y=334.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 29 (Parallelstraße 1, Richtung -y)
+    {
+        "name": "snakeTrigger29",
+        "trigger_location": carla.Location(x=91.887989, y=314.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_29",
+                "transform": carla.Transform(
+                    carla.Location(x=97.987989, y=264.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_29",
+                "transform": carla.Transform(
+                    carla.Location(x=89.187989, y=264.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 30 (Parallelstraße 1, Richtung -y)
+    {
+        "name": "snakeTrigger30",
+        "trigger_location": carla.Location(x=91.887989, y=224.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_30",
+                "transform": carla.Transform(
+                    carla.Location(x=97.987989, y=174.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_30",
+                "transform": carla.Transform(
+                    carla.Location(x=89.187989, y=174.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 31 (Parallelstraße 1, Richtung -y)
+    {
+        "name": "snakeTrigger31",
+        "trigger_location": carla.Location(x=91.887989, y=134.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_31",
+                "transform": carla.Transform(
+                    carla.Location(x=97.987989, y=84.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_31",
+                "transform": carla.Transform(
+                    carla.Location(x=89.187989, y=84.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 32 (Parallelstraße 1, Richtung -y)
+    {
+        "name": "snakeTrigger32",
+        "trigger_location": carla.Location(x=91.887989, y=44.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_32",
+                "transform": carla.Transform(
+                    carla.Location(x=97.987989, y=-5.113691, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_32",
+                "transform": carla.Transform(
+                    carla.Location(x=89.187989, y=-5.113691, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 33 (Parallelstraße 1, Richtung +y)
+    {
+        "name": "snakeTrigger33",
+        "trigger_location": carla.Location(x=87.713887, y=14.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_33",
+                "transform": carla.Transform(
+                    carla.Location(x=81.613887, y=64.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_33",
+                "transform": carla.Transform(
+                    carla.Location(x=90.413887, y=64.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 34 (Parallelstraße 1, Richtung +y)
+    {
+        "name": "snakeTrigger34",
+        "trigger_location": carla.Location(x=87.713887, y=104.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_34",
+                "transform": carla.Transform(
+                    carla.Location(x=81.613887, y=154.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_34",
+                "transform": carla.Transform(
+                    carla.Location(x=90.413887, y=154.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 35 (Parallelstraße 1, Richtung +y)
+    {
+        "name": "snakeTrigger35",
+        "trigger_location": carla.Location(x=87.713887, y=194.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_35",
+                "transform": carla.Transform(
+                    carla.Location(x=81.613887, y=244.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_35",
+                "transform": carla.Transform(
+                    carla.Location(x=90.413887, y=244.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 36 (Parallelstraße 1, Richtung +y)
+    {
+        "name": "snakeTrigger36",
+        "trigger_location": carla.Location(x=87.713887, y=284.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_36",
+                "transform": carla.Transform(
+                    carla.Location(x=81.613887, y=334.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_36",
+                "transform": carla.Transform(
+                    carla.Location(x=90.413887, y=334.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 37 (Parallelstraße 2, Richtung -y)
+    {
+        "name": "snakeTrigger37",
+        "trigger_location": carla.Location(x=2.411274, y=314.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_37",
+                "transform": carla.Transform(
+                    carla.Location(x=8.511274, y=264.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_37",
+                "transform": carla.Transform(
+                    carla.Location(x=-0.288726, y=264.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 38 (Parallelstraße 2, Richtung -y)
+    {
+        "name": "snakeTrigger38",
+        "trigger_location": carla.Location(x=2.411274, y=224.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_38",
+                "transform": carla.Transform(
+                    carla.Location(x=8.511274, y=174.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_38",
+                "transform": carla.Transform(
+                    carla.Location(x=-0.288726, y=174.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 39 (Parallelstraße 2, Richtung -y)
+    {
+        "name": "snakeTrigger39",
+        "trigger_location": carla.Location(x=2.411274, y=134.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_39",
+                "transform": carla.Transform(
+                    carla.Location(x=8.511274, y=84.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_39",
+                "transform": carla.Transform(
+                    carla.Location(x=-0.288726, y=84.886309, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 40 (Parallelstraße 2, Richtung -y)
+    {
+        "name": "snakeTrigger40",
+        "trigger_location": carla.Location(x=2.411274, y=44.886309, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_40",
+                "transform": carla.Transform(
+                    carla.Location(x=8.511274, y=-5.113691, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)  # Kriecht quer rüber
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_40",
+                "transform": carla.Transform(
+                    carla.Location(x=-0.288726, y=-5.113691, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 41 (Parallelstraße 2, Richtung +y)
+    {
+        "name": "snakeTrigger41",
+        "trigger_location": carla.Location(x=-1.762828, y=14.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_41",
+                "transform": carla.Transform(
+                    carla.Location(x=-7.862828, y=64.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_41",
+                "transform": carla.Transform(
+                    carla.Location(x=0.937172, y=64.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 42 (Parallelstraße 2, Richtung +y)
+    {
+        "name": "snakeTrigger42",
+        "trigger_location": carla.Location(x=-1.762828, y=104.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_42",
+                "transform": carla.Transform(
+                    carla.Location(x=-7.862828, y=154.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_42",
+                "transform": carla.Transform(
+                    carla.Location(x=0.937172, y=154.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 43 (Parallelstraße 2, Richtung +y)
+    {
+        "name": "snakeTrigger43",
+        "trigger_location": carla.Location(x=-1.762828, y=194.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_43",
+                "transform": carla.Transform(
+                    carla.Location(x=-7.862828, y=244.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_43",
+                "transform": carla.Transform(
+                    carla.Location(x=0.937172, y=244.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    },
+
+    # Trigger 44 (Parallelstraße 2, Richtung +y)
+    {
+        "name": "snakeTrigger44",
+        "trigger_location": carla.Location(x=-1.762828, y=284.213335, z=0.300000),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "name": "snake_start_44",
+                "transform": carla.Transform(
+                    carla.Location(x=-7.862828, y=334.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            },
+            {
+                "name": "snake_end_44",
+                "transform": carla.Transform(
+                    carla.Location(x=0.937172, y=334.213335, z=0.0),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0)
+                ),
+                "scale": None
+            }
+        ]
+    }
+)
+# Trigger 19 not working + Trigger 20 out of reach
 
 def _build_drivertrash_config(index, trigger_location):
     spawn_location = carla.Location(
