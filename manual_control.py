@@ -2737,6 +2737,7 @@ def game_loop(args):
     original_settings = None
     event_sync = None
     stop_signal_seen = False
+    stop_time = None
     draw_hero_markers = str(getattr(args, 'rolename', '')) == 'hero'
     
     try:
@@ -2872,14 +2873,19 @@ def game_loop(args):
             if not stop_signal_seen and getattr(args, 'scenario_stop_file', None):
                 if os.path.exists(args.scenario_stop_file):
                     stop_signal_seen = True
-                    if world.player is not None and isinstance(world.player, carla.Vehicle):
-                        brake_control = carla.VehicleControl()
-                        brake_control.brake = 1.0
-                        brake_control.hand_brake = True
-                        brake_control.throttle = 0.0
-                        brake_control.reverse = False
-                        world.player.apply_control(brake_control)
-                    print('[Scenario00] Stop signal received from session_runner. Braking hero and exiting manual_control.')
+                    stop_time = time.time()
+                    print("[Scenario00] Stop signal received. Braking car, waiting 5 seconds before exit...")
+
+            if stop_signal_seen:
+                if world.player is not None and isinstance(world.player, carla.Vehicle):
+                    brake_control = carla.VehicleControl()
+                    #brake_control.brake = 0.5
+                    #brake_control.hand_brake = True
+                    brake_control.throttle = 0.0
+                    world.player.apply_control(brake_control)
+
+                if time.time() - stop_time >= 5.0:
+                    print("[Scenario00] Stop signal wait time exceeded. Exiting...")
                     return
 
             world.render(display)
