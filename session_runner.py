@@ -28,7 +28,7 @@ SCENARIO_CONFIGS = {
         "description": "anger",
     },
     "scenario02": {
-        "map": "Town06_Opt",
+        "map": "Town01_Opt",
         "weather": carla.WeatherParameters.WetCloudyNoon,
         "description": "disgust",
         # Later replace with a dust storm scenario.
