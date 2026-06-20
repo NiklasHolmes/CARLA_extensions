@@ -47,7 +47,7 @@ from common.audio_paths import (
 )
 from generate_audio import SongAudio, RepeatingAudio
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
     START_TO_CARPED_DELAY_SECONDS = 1.0
@@ -62,8 +62,8 @@ if DEBUG_MODE:
     TRIGGER_ACCIDENT = True
     TRIGGER_RADIO = True
 else:
-    START_TO_CARPED_DELAY_SECONDS = 10.0
-    CAR_TO_PED_DELAY_SECONDS = 20.0
+    START_TO_CARPED_DELAY_SECONDS = 1.0
+    CAR_TO_PED_DELAY_SECONDS = 10.0
     SONG_TO_ACCIDENT_DELAY_SECONDS = 5.0
     ACCIDENT_TO_RADIO_DELAY_SECONDS = 2.0
     RADIO_TO_END_DELAY_SECONDS = 10.0
@@ -239,8 +239,15 @@ class Scenario05Runner:
         self._bottom_loop_walker_actor_id = None
         self._bottom_loop_walker_controller_id = None
         self._bottom_loop_walker_route = None
+        self._bottom_loop_walker_trigger_key = None
+        # top-corner loop walker state
+        self._top_loop_walker_spawned = False
+        self._top_loop_walker_actor_id = None
+        self._top_loop_walker_route = None
+        self._top_loop_walker_last_update_time = None
+        self._top_loop_walker_arrival_time = None
+        self._top_loop_walker_spawn_time = None
         self._pending_vehicle_immobilizations = {}
-
 
     def _get_traffic_manager(self):
         try:
@@ -349,8 +356,41 @@ class Scenario05Runner:
                 print(f"[Scenario05] ERROR beim Spawnen von '{name}': {e}")
 
     def _spawn_bottom_loop_walker(self, trigger_key=None):
+        try:
+            print(f"[Scenario05] _spawn_bottom_loop_walker called with trigger_key={trigger_key}")
+        except Exception:
+            pass
+
         if self._bottom_loop_walker_spawned:
-            return True
+            # If already spawned, log if a different trigger tries to spawn it      => TODO: solve differently?
+            try:
+                if trigger_key is not None and trigger_key != self._bottom_loop_walker_trigger_key:
+                    print(f"[Scenario05] _spawn_bottom_loop_walker: already spawned by trigger='{self._bottom_loop_walker_trigger_key}'; replacing with new trigger='{trigger_key}'")
+                    # Try to remove existing walker so the new trigger can take over
+                    try:
+                        prev_walker = self.world.get_actor(self._bottom_loop_walker_actor_id) if self._bottom_loop_walker_actor_id is not None else None
+                        if prev_walker is not None:
+                            try:
+                                prev_walker.destroy()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    # reset internal state and continue to spawn new
+                    try:
+                        if self._bottom_loop_walker_actor_id in self._walker_actor_ids:
+                            self._walker_actor_ids.remove(self._bottom_loop_walker_actor_id)
+                    except Exception:
+                        pass
+                    self._bottom_loop_walker_spawned = False
+                    self._bottom_loop_walker_actor_id = None
+                    self._bottom_loop_walker_controller_id = None
+                    self._bottom_loop_walker_route = None
+                    self._bottom_loop_walker_trigger_key = None
+            except Exception:
+                pass
+            if self._bottom_loop_walker_spawned:
+                return True
 
         spawns = get_static_prop_spawns(trigger_key)
         bp_lib = self.world.get_blueprint_library()
@@ -382,59 +422,235 @@ class Scenario05Runner:
                 print(f"[Scenario05] WARNUNG: AI-Walker '{prop_config.get('name')}' konnte nicht gespawnt werden.")
                 continue
 
-            controller_bp = bp_lib.find("controller.ai.walker")
-            controller_actor = self.world.try_spawn_actor(controller_bp, carla.Transform(), walker_actor)
-            if controller_actor is None:
-                try:
-                    walker_actor.destroy()
-                except Exception:
-                    pass
-                print(f"[Scenario05] WARNUNG: Walker-Controller für '{prop_config.get('name')}' konnte nicht gespawnt werden.")
-                continue
-
+            # Track actor and route info; move manually like SANIMAL to avoid navigation-controller constraints
             self._walker_actor_ids.append(walker_actor.id)
-            self._walker_controller_ids.append(controller_actor.id)
             self._bottom_loop_walker_spawned = True
             self._bottom_loop_walker_actor_id = walker_actor.id
-            self._bottom_loop_walker_controller_id = controller_actor.id
+            self._bottom_loop_walker_trigger_key = trigger_key
+            try:
+                max_speed_val = float(prop_config.get("max_speed", 1.4))
+            except Exception:
+                max_speed_val = 1.4
             self._bottom_loop_walker_route = {
                 "spawn_location": spawn_transform.location,
                 "target_location": target_location,
                 "current_target_location": target_location,
                 "heading_to_target": True,
                 "walker_id": walker_actor.id,
-                "controller_id": controller_actor.id,
-                "max_speed": prop_config.get("max_speed", 1.4),
+                "max_speed": max_speed_val,
                 "arrive_threshold": PEDESTRIAN_ARRIVE_THRESH,
-                "name": prop_config.get("name", "bottom_loop_walker"),
+                "name": prop_config.get("name", "loop_walker"),
             }
+            # timing state for manual movement
+            try:
+                self._bottom_loop_walker_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+            except Exception:
+                self._bottom_loop_walker_spawn_time = None
+            self._bottom_loop_walker_last_update_time = self._bottom_loop_walker_spawn_time
 
             try:
-                controller_actor.start()
-                controller_actor.go_to_location(target_location)
-                controller_actor.set_max_speed(self._bottom_loop_walker_route["max_speed"])
                 print(
-                    f"[Scenario05] AI-Walker gespawnt: id={walker_actor.id}, blueprint={walker_bp_id}, "
+                    f"[Scenario05] AI-Walker gespawnt (manual): id={walker_actor.id}, blueprint={walker_bp_id}, "
                     f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f}), "
-                    f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f})"
+                    f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f}), "
+                    f"max_speed={self._bottom_loop_walker_route.get('max_speed'):.3f}"
                 )
-            except Exception as e:
-                print(f"[Scenario05] WARNUNG: AI-Walker '{prop_config.get('name')}' konnte nicht gestartet werden: {e}")
+            except Exception:
+                pass
             return True
 
         return False
+
+    def _spawn_top_loop_walker(self, trigger_key=None):
+        """Spawn a top-corner loop walker and set up a simple route moved via apply_control.
+        This avoids using navigation controller so target can be off-road if needed.
+        """
+        try:
+            print(f"[Scenario05] _spawn_top_loop_walker called with trigger_key={trigger_key}")
+        except Exception:
+            pass
+
+        if self._bottom_loop_walker_spawned and self._bottom_loop_walker_trigger_key == trigger_key:
+            # already spawned by same trigger (shouldn't happen for top), but return
+            return True
+
+        spawns = get_static_prop_spawns(trigger_key)
+        bp_lib = self.world.get_blueprint_library()
+
+        for prop_config in spawns:
+            walker_bp_id = prop_config.get("walker_blueprint")
+            if not walker_bp_id:
+                continue
+
+            # Only consider the top loop walker entry (name 'loop_walker')
+            if prop_config.get("name") != "loop_walker":
+                continue
+
+            spawn_transform = prop_config.get("transform")
+            target_location = prop_config.get("target_location")
+            if spawn_transform is None or target_location is None:
+                print(f"[Scenario05] WARNUNG: Top-Walker-Config '{prop_config.get('name')}' ist unvollständig.")
+                continue
+
+            try:
+                walker_bp = bp_lib.find(walker_bp_id)
+            except Exception as e:
+                print(f"[Scenario05] WARNUNG: Top-Walker-Blueprint '{walker_bp_id}' nicht gefunden: {e}")
+                continue
+
+            if walker_bp.has_attribute("is_invincible"):
+                walker_bp.set_attribute("is_invincible", "false")
+            if walker_bp.has_attribute("role_name"):
+                walker_bp.set_attribute("role_name", "walker")
+
+            walker_actor = self.world.try_spawn_actor(walker_bp, spawn_transform)
+            if walker_actor is None:
+                print(f"[Scenario05] WARNUNG: Top AI-Walker '{prop_config.get('name')}' konnte nicht gespawnt werden.")
+                continue
+
+            # Track actor and route info; we will move it manually in _update_top_loop_walker
+            self._walker_actor_ids.append(walker_actor.id)
+            # top-walker specific state
+            self._top_loop_walker_spawned = True
+            self._top_loop_walker_actor_id = walker_actor.id
+            # ensure numeric max_speed
+            try:
+                max_speed_val = float(prop_config.get("max_speed", 1.2))
+            except Exception:
+                max_speed_val = 1.2
+            self._top_loop_walker_route = {
+                "spawn_location": spawn_transform.location,
+                "target_location": target_location,
+                "current_target_location": target_location,
+                "heading_to_target": True,
+                "walker_id": walker_actor.id,
+                "max_speed": max_speed_val,
+                "arrive_threshold": PEDESTRIAN_ARRIVE_THRESH,
+                "name": prop_config.get("name", "loop_walker"),
+            }
+            # timing state for manual movement
+            try:
+                self._top_loop_walker_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+            except Exception:
+                self._top_loop_walker_spawn_time = None
+            self._top_loop_walker_last_update_time = self._top_loop_walker_spawn_time
+            self._top_loop_walker_arrival_time = None
+
+            try:
+                print(
+                    f"[Scenario05] Top AI-Walker gespawnt: id={walker_actor.id}, blueprint={walker_bp_id}, "
+                    f"spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f}), "
+                    f"target=({target_location.x:.2f}, {target_location.y:.2f}, {target_location.z:.2f}), "
+                    f"max_speed={self._top_loop_walker_route.get('max_speed'):.3f}"
+                )
+            except Exception:
+                pass
+            return True
+
+        return False
+
+    def _update_top_loop_walker(self, sim_time):
+        """Manual movement update for top walker, modeled after SANIMAL movement in Scenario06."""
+        if not getattr(self, "_top_loop_walker_spawned", False) or not getattr(self, "_top_loop_walker_route", None):
+            return
+
+        walker = self.world.get_actor(self._top_loop_walker_route.get("walker_id"))
+        if walker is None:
+            # cleanup
+            self._top_loop_walker_spawned = False
+            self._top_loop_walker_route = None
+            self._top_loop_walker_actor_id = None
+            return
+
+        target_location = self._top_loop_walker_route.get("current_target_location")
+        if target_location is None:
+            return
+
+        try:
+            current_location = walker.get_location()
+        except Exception:
+            return
+
+        # timing
+        if getattr(self, "_top_loop_walker_last_update_time", None) is None:
+            delta_time = SIM_STEP_S
+        else:
+            delta_time = max(0.0, sim_time - self._top_loop_walker_last_update_time)
+            if delta_time == 0.0:
+                delta_time = SIM_STEP_S
+        self._top_loop_walker_last_update_time = sim_time
+
+        distance = ((current_location.x - target_location.x) ** 2 + (current_location.y - target_location.y) ** 2) ** 0.5
+        if distance <= self._top_loop_walker_route.get("arrive_threshold", PEDESTRIAN_ARRIVE_THRESH):
+            if self._top_loop_walker_arrival_time is None:
+                self._top_loop_walker_arrival_time = sim_time
+            if (sim_time - self._top_loop_walker_arrival_time) >= 1.0:
+                # switch direction
+                next_target = self._top_loop_walker_route["spawn_location"] if self._top_loop_walker_route.get("heading_to_target", True) else self._top_loop_walker_route["target_location"]
+                self._top_loop_walker_route["heading_to_target"] = not self._top_loop_walker_route.get("heading_to_target", True)
+                self._top_loop_walker_route["current_target_location"] = next_target
+                self._top_loop_walker_arrival_time = None
+            return
+
+        try:
+            max_speed = float(self._top_loop_walker_route.get("max_speed", 0.6))
+        except Exception:
+            max_speed = 0.6
+        # clamp unrealistic speeds
+        if max_speed < 0.0:
+            max_speed = 0.0
+        if max_speed > 0.6:
+            max_speed = 0.6
+        max_step = max_speed * delta_time
+        if max_step <= 0.0:
+            return
+
+        try:
+            direction_x = target_location.x - current_location.x
+            direction_y = target_location.y - current_location.y
+            direction_length = (direction_x ** 2 + direction_y ** 2) ** 0.5
+            if direction_length == 0.0:
+                return
+
+            norm_x = direction_x / direction_length
+            norm_y = direction_y / direction_length
+            # apply control with explicit numeric speed
+            try:
+                applied_speed = max_speed
+                #print(f"[Scenario05] Top walker moving: id={walker.id} dt={delta_time:.3f}s dist={distance:.3f}m speed={applied_speed:.3f}m/s")
+            except Exception:
+                applied_speed = max_speed
+            walker.apply_control(
+                carla.WalkerControl(
+                    direction=carla.Vector3D(x=norm_x, y=norm_y, z=0.0),
+                    speed=applied_speed,
+                    jump=False,
+                )
+            )
+        except Exception as e:
+            print(f"[Scenario05] WARNUNG: Top AI-Walker konnte nicht manuell bewegt werden: {e}")
+            try:
+                walker.destroy()
+            except Exception:
+                pass
+            if self._top_loop_walker_actor_id in self._walker_actor_ids:
+                try:
+                    self._walker_actor_ids.remove(self._top_loop_walker_actor_id)
+                except Exception:
+                    pass
+            self._top_loop_walker_spawned = False
+            self._top_loop_walker_route = None
+            self._top_loop_walker_actor_id = None
 
     def _update_bottom_loop_walker(self, sim_time):
         if not self._bottom_loop_walker_spawned or not self._bottom_loop_walker_route:
             return
 
         walker = self.world.get_actor(self._bottom_loop_walker_route.get("walker_id"))
-        controller = self.world.get_actor(self._bottom_loop_walker_route.get("controller_id"))
-        if walker is None or controller is None:
+        if walker is None:
             self._bottom_loop_walker_spawned = False
             self._bottom_loop_walker_route = None
             self._bottom_loop_walker_actor_id = None
-            self._bottom_loop_walker_controller_id = None
             return
 
         target_location = self._bottom_loop_walker_route.get("current_target_location")
@@ -442,24 +658,78 @@ class Scenario05Runner:
             return
 
         try:
-            loc = walker.get_location()
+            current_location = walker.get_location()
         except Exception:
             return
 
-        distance = ((loc.x - target_location.x) ** 2 + (loc.y - target_location.y) ** 2 + (loc.z - target_location.z) ** 2) ** 0.5
-        if distance > self._bottom_loop_walker_route.get("arrive_threshold", PEDESTRIAN_ARRIVE_THRESH):
+        # timing
+        if getattr(self, "_bottom_loop_walker_last_update_time", None) is None:
+            delta_time = SIM_STEP_S
+        else:
+            delta_time = max(0.0, sim_time - self._bottom_loop_walker_last_update_time)
+            if delta_time == 0.0:
+                delta_time = SIM_STEP_S
+        self._bottom_loop_walker_last_update_time = sim_time
+
+        distance = ((current_location.x - target_location.x) ** 2 + (current_location.y - target_location.y) ** 2) ** 0.5
+        if distance <= self._bottom_loop_walker_route.get("arrive_threshold", PEDESTRIAN_ARRIVE_THRESH):
+            if getattr(self, "_bottom_loop_walker_arrival_time", None) is None:
+                self._bottom_loop_walker_arrival_time = sim_time
+            if (sim_time - self._bottom_loop_walker_arrival_time) >= 1.0:
+                # switch direction
+                next_target = self._bottom_loop_walker_route["spawn_location"] if self._bottom_loop_walker_route.get("heading_to_target", True) else self._bottom_loop_walker_route["target_location"]
+                self._bottom_loop_walker_route["heading_to_target"] = not self._bottom_loop_walker_route.get("heading_to_target", True)
+                self._bottom_loop_walker_route["current_target_location"] = next_target
+                self._bottom_loop_walker_arrival_time = None
             return
 
-        next_target = self._bottom_loop_walker_route["spawn_location"] if self._bottom_loop_walker_route.get("heading_to_target", True) else self._bottom_loop_walker_route["target_location"]
-        self._bottom_loop_walker_route["heading_to_target"] = not self._bottom_loop_walker_route.get("heading_to_target", True)
-        self._bottom_loop_walker_route["current_target_location"] = next_target
+        try:
+            max_speed = float(self._bottom_loop_walker_route.get("max_speed", 1.4))
+        except Exception:
+            max_speed = 1.4
+        if max_speed < 0.0:
+            max_speed = 0.0
+        if max_speed > 10.0:
+            max_speed = 10.0
+        max_step = max_speed * delta_time
+        if max_step <= 0.0:
+            return
 
         try:
-            controller.go_to_location(next_target)
-            controller.set_max_speed(self._bottom_loop_walker_route.get("max_speed", 1.4))
-            print(f"[Scenario05] AI-Walker wechselt Richtung bei sim_time={sim_time:.2f}s")
+            direction_x = target_location.x - current_location.x
+            direction_y = target_location.y - current_location.y
+            direction_length = (direction_x ** 2 + direction_y ** 2) ** 0.5
+            if direction_length == 0.0:
+                return
+
+            norm_x = direction_x / direction_length
+            norm_y = direction_y / direction_length
+            try:
+                applied_speed = max_speed
+                #print(f"[Scenario05] Bottom walker moving: id={walker.id} dt={delta_time:.3f}s dist={distance:.3f}m speed={applied_speed:.3f}m/s")
+            except Exception:
+                applied_speed = max_speed
+            walker.apply_control(
+                carla.WalkerControl(
+                    direction=carla.Vector3D(x=norm_x, y=norm_y, z=0.0),
+                    speed=applied_speed,
+                    jump=False,
+                )
+            )
         except Exception as e:
-            print(f"[Scenario05] WARNUNG: AI-Walker konnte Ziel nicht wechseln: {e}")
+            print(f"[Scenario05] WARNUNG: Bottom AI-Walker konnte nicht manuell bewegt werden: {e}")
+            try:
+                walker.destroy()
+            except Exception:
+                pass
+            if self._bottom_loop_walker_actor_id in self._walker_actor_ids:
+                try:
+                    self._walker_actor_ids.remove(self._bottom_loop_walker_actor_id)
+                except Exception:
+                    pass
+            self._bottom_loop_walker_spawned = False
+            self._bottom_loop_walker_route = None
+            self._bottom_loop_walker_actor_id = None
 
     def _update_pending_vehicle_immobilizations(self, sim_time):
         if not self._pending_vehicle_immobilizations:
@@ -1368,7 +1638,11 @@ class Scenario05Runner:
                 print(f"[Scenario05] WARNUNG: Fehler beim Aufräumen vor Unfall: {e}")
 
         self._spawn_static_prop_once(trigger_key)
-        self._spawn_bottom_loop_walker(trigger_key)
+        # spawn walker according to trigger_key: top_corner uses dedicated top walker
+        if trigger_key == "top_corner":
+            self._spawn_top_loop_walker(trigger_key)
+        else:
+            self._spawn_bottom_loop_walker(trigger_key)
         self._accident_spawned = True
         self._accident_spawn_time = sim_time
         print(f"[Scenario05] Unfall-Trigger erreicht; Static Prop gespawnt bei sim_time={sim_time:.2f}s")
@@ -1576,6 +1850,7 @@ class Scenario05Runner:
                 self._update_song(sim_time)
                 self._update_post_song_phases(sim_time, trigger_ego_transform)
                 self._update_bottom_loop_walker(sim_time)
+                self._update_top_loop_walker(sim_time)
                 self._update_pending_vehicle_immobilizations(sim_time)
 
                 if self._scenario_done:

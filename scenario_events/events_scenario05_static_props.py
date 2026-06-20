@@ -164,15 +164,29 @@ BOTTOM_CONSTRUCTION_CONE_SPAWNS = [
 
 BOTTOM_LOOP_WALKER_SPAWNS = [
     {
-        "name": "woman_walking_blue_0057",
+        "name": "loop_walker",
         "walker_blueprint": "walker.pedestrian.0057",
         "transform": carla.Transform(
-            carla.Location(x=109.800, y=296.000, z=1.900),
-            carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+            carla.Location(x=100.10, y=299.300, z=1.900),
+            carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
         ),
-        "target_location": carla.Location(x=102.200, y=299.400, z=1.900),
-        "target_rotation": carla.Rotation(pitch=0.0, yaw=70.0, roll=0.0),
-        "max_speed": 1.4,
+        "target_location": carla.Location(x=99.60, y=306.80, z=1.900),
+        "target_rotation": carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+        "max_speed": 0.5,
+    },
+]
+
+TOP_LOOP_WALKER_SPAWNS = [
+    {
+        "name": "loop_walker",
+        "walker_blueprint": "walker.pedestrian.0057",
+        "transform": carla.Transform(
+            carla.Location(x=111.50, y=308.20, z=1.900),
+            carla.Rotation(pitch=0.0, yaw=160.0, roll=0.0),
+        ),
+        "target_location": carla.Location(x=109.40, y=303.10, z=1.900),
+        "target_rotation": carla.Rotation(pitch=0.0, yaw=160.0, roll=0.0),
+        "max_speed": 0.5,
     },
 ]
 
@@ -226,6 +240,23 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
             ),
             "scale": None,
         },
+        # additional to avoid reverse during radio: 
+        {
+            "name": "street_barrier_03",
+            "blueprints": ["static.prop.streetbarrier"],
+            "transform": carla.Transform(
+                carla.Location(x=41.600, y=245.700, z=0.200),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            ),
+        },
+        {
+            "name": "street_barrier_04",
+            "blueprints": ["static.prop.streetbarrier"],
+            "transform": carla.Transform(
+                carla.Location(x=45.800, y=245.700, z=0.200),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            ),
+        },
         {
             "name": "ambulance_01",
             "blueprints": ["vehicle.ford.ambulance"],
@@ -237,7 +268,7 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
             "light_state": carla.VehicleLightState(
                 carla.VehicleLightState.Special1 | carla.VehicleLightState.LowBeam
             ),
-            "open_doors": [carla.VehicleDoor.FR],
+            "open_doors": [carla.VehicleDoor.All],
         },
         {
             "name": "tesla_model3_01",
@@ -306,6 +337,23 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
             ),
             "scale": None,
         },
+        # additional to avoid reverse during radio: 
+        {
+            "name": "street_barrier_03",
+            "blueprints": ["static.prop.streetbarrier"],
+            "transform": carla.Transform(
+                carla.Location(x=-7.10, y=196.10, z=0.200),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            ),
+        },
+        {
+            "name": "street_barrier_04",
+            "blueprints": ["static.prop.streetbarrier"],
+            "transform": carla.Transform(
+                carla.Location(x=-3.30, y=196.10, z=0.200),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            ),
+        },
         {
             "name": "ambulance_01",
             "blueprints": ["vehicle.ford.ambulance"],
@@ -368,19 +416,98 @@ STATIC_PROP_SPAWNS_BY_TRIGGER = {
             "scale": None,
         },
     ] + CONSTRUCTION_CONE_SPAWNS + BOTTOM_CONSTRUCTION_CONE_SPAWNS + BOTTOM_LOOP_WALKER_SPAWNS + WARNING_ACCIDENT_SPAWNS,
-    "top_corner": CONSTRUCTION_CONE_SPAWNS + WARNING_ACCIDENT_SPAWNS,
+    "top_corner": [
+        {
+            "name": "street_barrier_03",
+            "blueprints": ["static.prop.streetbarrier"],
+            "transform": carla.Transform(
+                carla.Location(x=34.200, y=302.300, z=0.200),
+                carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+            ),
+            "scale": None,
+        },
+        {
+            "name": "street_barrier_04",
+            "blueprints": ["static.prop.streetbarrier"],
+            "transform": carla.Transform(
+                carla.Location(x=34.200, y=305.700, z=0.200),
+                carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
+            ),
+            "scale": None,
+        },
+        {
+            "name": "ambulance_01",
+            "blueprints": ["vehicle.ford.ambulance"],
+            "transform": carla.Transform(
+                carla.Location(x=97.200, y=308.400, z=2.000),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            ),
+            "scale": None,
+            "light_state": carla.VehicleLightState(
+                carla.VehicleLightState.Special1 | carla.VehicleLightState.LowBeam
+            ),
+            "open_doors": [carla.VehicleDoor.All],
+        },
+        {
+            "name": "tesla_model3_01",
+            "blueprints": ["vehicle.tesla.model3"],
+            "transform": carla.Transform(
+                carla.Location(x=110.300, y=301.000, z=2.000),
+                carla.Rotation(pitch=0.0, yaw=200.0, roll=0.0),
+            ),
+            "scale": None,
+            "color": "255,255,255",
+            "immobilize_vehicle": True,
+        },
+        {
+            "name": "audi_a2_01",
+            "blueprints": ["vehicle.audi.a2"],
+            "transform": carla.Transform(
+                carla.Location(x=105.20, y=302.30, z=2.000),
+                carla.Rotation(pitch=-10.0, yaw=45.0, roll=180.0),
+            ),
+            "immobilize_vehicle": True,
+        },
+        {
+            "name": "fabienne_0056",
+            "blueprints": ["walker.pedestrian.0056"],
+            "transform": carla.Transform(
+                carla.Location(x=109.90, y=309.80, z=2.00),
+                carla.Rotation(pitch=0.0, yaw=40.0, roll=0.0),
+            ),
+            "scale": None,
+        },
+        {
+            "name": "man_talking_0058",
+            "blueprints": ["walker.pedestrian.0058"],
+            "transform": carla.Transform(
+                carla.Location(x=108.90, y=309.90, z=2.0),
+                carla.Rotation(pitch=0.0, yaw=275.0, roll=0.0),
+            ),
+            "scale": None,
+        },
+        {
+            "name": "man_sitting_0059",
+            "blueprints": ["walker.pedestrian.0059"],
+            "transform": carla.Transform(
+                carla.Location(x=108.900, y=301.700, z=2.000),
+                carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+            ),
+            "scale": None,
+        },
+    ] + CONSTRUCTION_CONE_SPAWNS + TOP_LOOP_WALKER_SPAWNS + WARNING_ACCIDENT_SPAWNS,
 }
 
 ACCIDENT_TRIGGER_KEYS = (
     "bottom_corner",
     "bottom_junction",
-    #"top_corner",
+    "top_corner",
 )
 
 ACCIDENT_TRIGGER_LOCATIONS = (
     carla.Location(x=-7.53, y=288.22, z=0.50),
     carla.Location(x=41.39, y=257.46, z=0.50),
-    #carla.Location(x=189.93, y=266.43, z=0.50),        # top_corner
+    carla.Location(x=189.93, y=266.43, z=0.50),        # top_corner
 )
 
 STATIC_PROP_SPAWNS = [
