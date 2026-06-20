@@ -12,6 +12,8 @@ from datetime import datetime
 import carla
 from common.window_positioning import get_pygame_window_hwnd, apply_borderless_style_windows
 
+GERMAN = True
+
 use_profile = "simulator"
 # --- Scenario Configurations ---
 SCENARIO_CONFIGS = {

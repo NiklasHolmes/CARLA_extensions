@@ -44,10 +44,13 @@ from common.audio_paths import (
     RADIO_INTRO,
     NEWS_LANDSLIDE_MALE,
     NEWS_RELATIONS_FEMALE,
+    NEWS_LANDSLIDE_MALE_ENG,
+    NEWS_RELATIONS_FEMALE_ENG,
 )
 from generate_audio import SongAudio, RepeatingAudio
 
 DEBUG_MODE = True
+from session_runner import GERMAN
 
 if DEBUG_MODE:
     START_TO_CARPED_DELAY_SECONDS = 1.0
@@ -59,7 +62,7 @@ if DEBUG_MODE:
     SONG_PLAY_DURATION_SECONDS = 2.0
 
     TRIGGER_CARPED = False
-    TRIGGER_ACCIDENT = True
+    TRIGGER_ACCIDENT = False
     TRIGGER_RADIO = True
 else:
     START_TO_CARPED_DELAY_SECONDS = 1.0
@@ -76,6 +79,14 @@ else:
     TRIGGER_CARPED = True
     TRIGGER_ACCIDENT = True
     TRIGGER_RADIO = True
+
+if GERMAN:
+    NEWS_LANDSLIDE = NEWS_LANDSLIDE_MALE
+    NEWS_RELATIONS = NEWS_RELATIONS_FEMALE
+else: 
+    NEWS_LANDSLIDE = NEWS_LANDSLIDE_MALE_ENG
+    NEWS_RELATIONS = NEWS_RELATIONS_FEMALE_ENG
+
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
 TL_HOLD_ORIGINALLIGHT_SECONDS = 3.0
@@ -214,14 +225,14 @@ class Scenario05Runner:
             channel_index=7,
         )
         self._radio_news_male_audio = RepeatingAudio(
-            NEWS_LANDSLIDE_MALE,
+            NEWS_LANDSLIDE,
             repeat_count=1,
             volume=0.85,
             channel_index=8,
             fade_in_ms=0,
         )
         self._radio_news_female_audio = RepeatingAudio(
-            NEWS_RELATIONS_FEMALE,
+            NEWS_RELATIONS,
             repeat_count=1,
             volume=0.85,
             channel_index=9,
@@ -1695,7 +1706,7 @@ class Scenario05Runner:
             if self._radio_intro_audio.is_finished:
                 if self._radio_news_male_audio.play():
                     self._radio_phase = "news_male"
-                    print(f"[Scenario05] Radio -> NEWS_LANDSLIDE_MALE at sim_time={sim_time:.2f}s")
+                    print(f"[Scenario05] Radio -> NEWS_LANDSLIDE_MALE (in {'German' if GERMAN else 'English'}) at sim_time={sim_time:.2f}s")
                 else:
                     print(f"[Scenario05] WARNUNG: NEWS_LANDSLIDE_MALE konnte nicht gestartet werden bei sim_time={sim_time:.2f}s")
                     self._radio_finished = True
@@ -1715,7 +1726,7 @@ class Scenario05Runner:
             if self._radio_pause_start_time is not None and (sim_time - self._radio_pause_start_time) >= 1.0:
                 if self._radio_news_female_audio.play():
                     self._radio_phase = "news_female"
-                    print(f"[Scenario05] Radio -> NEWS_RELATIONS_FEMALE at sim_time={sim_time:.2f}s")
+                    print(f"[Scenario05] Radio -> NEWS_RELATIONS_FEMALE (in {'German' if GERMAN else 'English'}) at sim_time={sim_time:.2f}s")
                 else:
                     print(f"[Scenario05] WARNUNG: NEWS_RELATIONS_FEMALE konnte nicht gestartet werden bei sim_time={sim_time:.2f}s")
                     self._radio_finished = True

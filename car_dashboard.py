@@ -15,6 +15,8 @@ import threading
 import time
 import argparse
 import ctypes
+from session_runner import GERMAN           # TODO: check if this works
+
 from common.window_positioning import (
     get_windows_monitor_rects,
     get_pygame_window_hwnd,
@@ -522,9 +524,15 @@ class CarDashboard(threading.Thread):
 
         warning_text = None
         if self._brake_warning_on:
-            warning_text = "Bremsfehler!"
+            if GERMAN:
+                warning_text = "Bremsfehler!"
+            else:
+                warning_text = "Brake Fault!"
         elif self._fuel_empty_warning_on:
-            warning_text = "Tank leer!"
+            if GERMAN:
+                warning_text = "Tank leer!"
+            else:
+                warning_text = "Fuel empty!"
         elif DEBUGMODE:
             warning_text = "Bremsfehler!"
 
