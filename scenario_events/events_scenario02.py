@@ -10,9 +10,25 @@ import time
 import carla
 
 try:
-    from events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, POORROAD_OBJECTS_CONFIG
+    from events_scenario02_static_props import (
+        get_start_barrier_spawns,
+        get_trash_trigger_config,
+        get_poorroad_trigger_config,
+        get_traffic_route_configs,
+        get_drivertrash_spawn_configs,
+        SNAKE_TRIGGER_SPAWN_CONFIGS,
+        POORROAD_OBJECTS_CONFIG,
+    )
 except ModuleNotFoundError:
-    from scenario_events.events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, POORROAD_OBJECTS_CONFIG
+    from scenario_events.events_scenario02_static_props import (
+        get_start_barrier_spawns,
+        get_trash_trigger_config,
+        get_poorroad_trigger_config,
+        get_traffic_route_configs,
+        get_drivertrash_spawn_configs,
+        SNAKE_TRIGGER_SPAWN_CONFIGS,
+        POORROAD_OBJECTS_CONFIG,
+    )
 
 try:
     from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
@@ -33,9 +49,9 @@ if DEBUG_MODE:
 
     TRIGGER_TRAFFIC = False
     TRIGGER_TRASH = False
-    TRIGGER_SNAKE = False
+    TRIGGER_SNAKE = True
     TRIGGER_SMELL = False
-    TRIGGER_POORROAD = True
+    TRIGGER_POORROAD = False
     TRIGGER_DRIVERTRASH = True
 else:
     START_TO_TRAFFIC_DELAY = 1.0
@@ -70,7 +86,7 @@ hero_green = True
 SNAKE_MAX_SPEED = 1.0
 SNAKE_ARRIVE_THRESH = 1.0
 SNAKE_STOP_AT_TARGET_DURATION = 1.0
-SNAKE_LIFETIME_S = 5.0
+SNAKE_LIFETIME_S = 20.0
 
 BLOCKED_VEHICLE_KEYWORDS = (
 	"firetruck",
@@ -112,7 +128,8 @@ class Scenario02Runner:
         self._trash_trigger_configs = get_trash_trigger_config()
 
         self._poorroad_trigger_configs = get_poorroad_trigger_config()
-        self._snake_trigger_configs = get_snake_configs()
+
+        self._snake_trigger_configs = SNAKE_TRIGGER_SPAWN_CONFIGS
         self._drivertrash_trigger_configs = get_drivertrash_spawn_configs()
         self._traffic_route_configs = get_traffic_route_configs()
 
@@ -610,8 +627,8 @@ class Scenario02Runner:
         self.drivertrash_active = True
 
     def _get_snake_route_config(self, hero_location, hero_velocity=None):
-        snake_configs = get_snake_configs() if callable(get_snake_configs) else []
-        for cfg in snake_configs:
+        configs = self._snake_trigger_configs if isinstance(self._snake_trigger_configs, (list, tuple)) else []
+        for cfg in configs:
             trigger_location = cfg.get("trigger_location")
             if trigger_location is None:
                 continue
