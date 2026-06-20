@@ -38,3 +38,5 @@ RADIO_INTRO = r".\audio\radio_intro.wav"
 NEWS_LANDSLIDE_MALE = r".\audio\news_landslide_male.wav"
 NEWS_RELATIONS_FEMALE = r".\audio\news_relations_female.wav"
 
+NEWS_LANDSLIDE_MALE_ENG = r".\audio\news_landslide_male_eng.wav"
+NEWS_RELATIONS_FEMALE_ENG = r".\audio\news_relations_female_eng.wav"
