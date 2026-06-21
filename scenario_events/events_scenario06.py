@@ -32,7 +32,9 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 
-DEBUG_MODE = True                    # attention! single file mode!
+from scenario_logger import TriggerLogger, parse_logging_arg
+
+DEBUG_MODE = False                    # attention! single file mode!
 
 if DEBUG_MODE:
     RAIN_TO_HIGHPED_DELAY = 0.0
@@ -43,15 +45,16 @@ if DEBUG_MODE:
     COW_TO_FUEL_DELAY = 1.0
     FUEL_TO_END_DELAY = 2.0
 
-    run_in_singleFile_mode = True
-    TRIGGER_TRAFFIC = False
-    TRIGGER_WEATHER = False
-    TRIGGER_HIGHPED = False
+    run_in_singleFile_mode = False
+    TRIGGER_TRAFFIC = True
+    TRIGGER_WEATHER = True
+    TRIGGER_HIGHPED = True
     TRIGGER_BUS = True
     TRIGGER_SONG = True
     TRIGGER_SANIMAL = True
-    TRIGGER_COW = False
-    TRIGGER_FUELEMPTY = False
+    TRIGGER_COW = True
+    TRIGGER_FUELEMPTY = True
+
     TRIGGER_SANIMAL_IMMEDIATE = False
 
     START_TO_RAIN_DELAY = 1.0
@@ -152,13 +155,23 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
     return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
 
 class Scenario06Runner:
-    def __init__(self, host, port, tm_port, done_file=None, trigger_traffic=True, trigger_weather=True, trigger_highped=True, trigger_bus=True, trigger_song=True, trigger_sanimal=True, trigger_cow=True, trigger_fuelempty=True):
+    def __init__(self, host, port, tm_port, done_file=None, logging=None, trigger_traffic=True, trigger_weather=True, trigger_highped=True, trigger_bus=True, trigger_song=True, trigger_sanimal=True, trigger_cow=True, trigger_fuelempty=True):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
         self._tm_port = tm_port
         self._done_file = done_file
         self._rng = random.Random()
+
+        self.trigger_logger = None
+        if logging:
+            pid, scen = parse_logging_arg(logging)
+        if pid and scen:
+            self.trigger_logger = TriggerLogger(pid, scen)
+            print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+        else:
+            print(f"[Scenario00] Could not parse --logging arg: {logging}")
+
         self._trigger_traffic = trigger_traffic
         self._trigger_weather = trigger_weather
         self._trigger_highped = trigger_highped
@@ -664,6 +677,12 @@ class Scenario06Runner:
         except Exception as exc:
             print(f"[Scenario06] WARNUNG: Bus-Route (nur Straight) konnte nicht gesetzt werden: {exc}")
 
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('03', 'disappearing_bus', window_duration_seconds=10.0)
+        except Exception:
+            pass
+
         print(
             f"[Scenario06] Disappearing bus spawned: id={actor.id}, trigger={trigger_config.get('name', 'unknown')}, "
             f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f}), "
@@ -842,6 +861,12 @@ class Scenario06Runner:
             f"[Scenario06] HighPed spawned: id={walker.id}, route={route_config['name']}, sim_time={sim_time:.2f}s, "
             f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
         )
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('02', 'highway_pedestrian', window_duration_seconds=10.0)
+        except Exception:
+            pass
+
         return True
 
     def _finish_highped_route(self, walker, sim_time):
@@ -934,6 +959,12 @@ class Scenario06Runner:
             radius_m=SANIMAL_CLEAR_RADIUS_M,
         )
 
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('05', 'small_animal', window_duration_seconds=10.0)
+        except Exception:
+            pass
+
         print(
             f"[Scenario06] SANIMAL spawned: id={walker.id}, route={route_config['name']}, sim_time={sim_time:.2f}s, "
             f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
@@ -997,6 +1028,11 @@ class Scenario06Runner:
     def _start_song_trigger(self):
         if self._song_audio.play(self.world.get_snapshot().timestamp.elapsed_seconds):
             print("spielt song")
+            try:
+                if getattr(self, 'trigger_logger', None):
+                    self.trigger_logger.log_trigger('04', 'song', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+            except Exception:
+                pass
         else:
             print("[Scenario06] WARNUNG: Song konnte nicht gestartet werden.")
         self.song_finished = True
@@ -1015,6 +1051,11 @@ class Scenario06Runner:
                 with open(fuel_empty_signal_file, "w", encoding="utf-8") as fuel_empty_handle:
                     fuel_empty_handle.write("fuel_empty\n")
                 print(f"[Scenario06] Fuel empty signal sent to manual_control: {fuel_empty_signal_file}")
+                try:
+                    if getattr(self, 'trigger_logger', None):
+                        self.trigger_logger.log_trigger('06', 'fuel_empty', window_duration_seconds=FUEL_TO_END_DELAY)
+                except Exception:
+                    pass
             except Exception as exc:
                 print(f"[Scenario06] WARNING: could not write fuel empty signal file: {exc}")
 
@@ -1495,8 +1536,6 @@ class Scenario06Runner:
 
         self._spawn_sanimal(route_config, sim_time)
 
-
-
     def _update_weather_cycle(self, sim_time):
         if self._start_sim_time is None:
             return
@@ -1509,6 +1548,11 @@ class Scenario06Runner:
             self._weather_phase = "mid_rain_lead_in"
             self._weather_phase_start_time = sim_time
             print(f"[Scenario06] Weather changed to MidRainyNoon at sim_time={sim_time:.2f}s")
+            try:
+                if getattr(self, 'trigger_logger', None):
+                    self.trigger_logger.log_trigger('01', 'sudden_rain', window_duration_seconds=(MID_RAIN_LEAD_IN_S + HARD_RAIN_DURATION_S + MID_RAIN_FOLLOW_UP_S + SOFT_RAIN_DURATION_S))
+            except Exception:
+                pass
             return
 
         if self._weather_phase == "mid_rain_lead_in":
@@ -1761,12 +1805,14 @@ if __name__ == "__main__":
     parser.add_argument("--port", default=2000, type=int)
     parser.add_argument("--tm-port", default=8000, type=int)
     parser.add_argument("--done-file", default=None)
+    parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
     Scenario06Runner(
         args.host,
         args.port,
         args.tm_port,
         args.done_file,
+        args.logging,
         trigger_traffic=TRIGGER_TRAFFIC,
         trigger_weather=TRIGGER_WEATHER,
         trigger_highped=TRIGGER_HIGHPED,
@@ -1776,3 +1822,4 @@ if __name__ == "__main__":
         trigger_cow=TRIGGER_COW,
         trigger_fuelempty=TRIGGER_FUELEMPTY,
     ).run()
+

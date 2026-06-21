@@ -48,9 +48,10 @@ from common.audio_paths import (
     NEWS_RELATIONS_FEMALE_ENG,
 )
 from generate_audio import SongAudio, RepeatingAudio
-
-DEBUG_MODE = True
+from scenario_logger import TriggerLogger, parse_logging_arg
 from session_runner import GERMAN
+
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_CARPED_DELAY_SECONDS = 1.0
@@ -61,8 +62,8 @@ if DEBUG_MODE:
     ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
     SONG_PLAY_DURATION_SECONDS = 2.0
 
-    TRIGGER_CARPED = False
-    TRIGGER_ACCIDENT = False
+    TRIGGER_CARPED = True
+    TRIGGER_ACCIDENT = True
     TRIGGER_RADIO = True
 else:
     START_TO_CARPED_DELAY_SECONDS = 1.0
@@ -163,14 +164,21 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 
 
 class Scenario05Runner:
-    def __init__(self, host, port, tm_port, done_file=None):
+    def __init__(self, host, port, tm_port, done_file=None, logging=None):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
         self._tm_port = tm_port
         self._done_file = done_file
         self._rng = random.Random()
-
+        if logging:
+            pid, scen = parse_logging_arg(logging)
+            if pid and scen:
+                self.trigger_logger = TriggerLogger(pid, scen)
+                print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+            else:
+                print(f"[Scenario00] Could not parse --logging arg: {logging}")
+        
         self._start_sim_time = None
         self._traffic_spawned = False
         self._traffic_spawn_time = None
@@ -1380,10 +1388,14 @@ class Scenario05Runner:
         self._pedestrian_confirmation_response = None
         self._pedestrian_confirmation_listener_started = False
         if response in ("j", "ja", "y", "yes", ""):
-            print("[Scenario05] loneleyPed bestätigt; starte Pedestrian und erlaube Fortsetzung.")
+            print("[Scenario05] loneleyPed confirmed; continue with scenario.")
+            try:
+                if getattr(self, 'trigger_logger', None):
+                    self.trigger_logger.log_trigger(trigger_id='01', trigger_type='lonely_pedestrian', window_duration_seconds=5.0)
+            except Exception:
+                pass
             self._pedestrian_confirmation_pending = False
             self._ped_to_song = True
-            # mark confirmation completed so we don't ask again
             self._pedestrian_confirmation_completed = True
             # allow song start when conditions met
             return
@@ -1614,6 +1626,11 @@ class Scenario05Runner:
             return
         self._song_started = True
         self._song_start_time = sim_time
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('02', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+        except Exception:
+            pass
         print(f"[Scenario05] Song started at sim_time={sim_time:.2f}s")
         if not self._play_song(sim_time):
             print("[Scenario05] WARNUNG: Song konnte nicht gestartet werden; fahre ohne Song fort.")
@@ -1637,7 +1654,7 @@ class Scenario05Runner:
             self._song_finish_time = sim_time
             print(f"[Scenario05] Song finished at sim_time={sim_time:.2f}s")
 
-    def _spawn_accident_placeholder(self, sim_time, trigger_key=None):
+    def _spawn_accident(self, sim_time, trigger_key=None):
         if self._accident_spawned:
             return True
 
@@ -1656,6 +1673,11 @@ class Scenario05Runner:
             self._spawn_bottom_loop_walker(trigger_key)
         self._accident_spawned = True
         self._accident_spawn_time = sim_time
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger(trigger_id='03', trigger_type='accident', window_duration_seconds=20.0)
+        except Exception:
+            pass
         print(f"[Scenario05] Unfall-Trigger erreicht; Static Prop gespawnt bei sim_time={sim_time:.2f}s")
         return True
 
@@ -1668,12 +1690,21 @@ class Scenario05Runner:
         print(f"[Scenario05] ACCIDENT skipped at sim_time={sim_time:.2f}s")
         return True
 
-    def _start_radio_voice_placeholder(self, sim_time):
+    def _start_radio_voice(self, sim_time):
         if self._radio_started:
             return True
 
         self._radio_started = True
         self._radio_start_time = sim_time
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger(
+                    trigger_id='04', 
+                    trigger_type='radio', 
+                    window_duration_seconds=30.0
+                )
+        except Exception:
+            pass
         self._radio_phase = "intro"
         self._radio_pause_start_time = None
         if self._radio_intro_audio.play(sim_time):
@@ -1758,7 +1789,7 @@ class Scenario05Runner:
                 self._draw_accident_trigger_boxes()
                 trigger_key = self._is_accident_trigger_reached(ego_transform)
                 if trigger_key is not None:
-                    self._spawn_accident_placeholder(sim_time, trigger_key)
+                    self._spawn_accident(sim_time, trigger_key)
 
         if self._accident_spawned and not self._radio_started and self._accident_spawn_time is not None:
             # wait the configured delay plus a small extra buffer, and ensure pending immobilizations are done
@@ -1778,7 +1809,7 @@ class Scenario05Runner:
                     self._accident_manual_start_listener_started = False
                     self._accident_manual_start_response = None
                     if response in ("j", "ja", "y", "yes", ""):
-                        self._start_radio_voice_placeholder(sim_time)
+                        self._start_radio_voice(sim_time)
                     else:
                         print("[Scenario05] Accident continue declined; skipping radio.")
                         self._skip_radio_phase(sim_time)
@@ -1905,5 +1936,6 @@ if __name__ == "__main__":
     parser.add_argument("--port", default=2000, type=int)
     parser.add_argument("--tm-port", default=8000, type=int)
     parser.add_argument("--done-file", default=None)
+    parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
-    Scenario05Runner(args.host, args.port, args.tm_port, args.done_file).run()
+    Scenario05Runner(args.host, args.port, args.tm_port, args.done_file,args.logging,).run()

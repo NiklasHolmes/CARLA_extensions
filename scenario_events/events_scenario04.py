@@ -41,6 +41,8 @@ except ModuleNotFoundError:
 from common.audio_paths import HAPPINESS_RP_UPTOWN_FUNK_PATH
 from generate_audio import SongAudio
 
+from scenario_logger import TriggerLogger, parse_logging_arg
+
 DEBUG_MODE = False
 
 if DEBUG_MODE:
@@ -109,13 +111,22 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
     return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
 
 class Scenario04Runner:
-    def __init__(self, host, port, tm_port, done_file=None):
+    def __init__(self, host, port, tm_port, done_file=None, logging=None):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
         self._tm_port = tm_port
         self._done_file = done_file
         self._rng = random.Random()
+
+        self.trigger_logger = None
+        if logging:
+            pid, scen = parse_logging_arg(logging)
+            if pid and scen:
+                self.trigger_logger = TriggerLogger(pid, scen)
+                print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+            else:
+                print(f"[Scenario00] Could not parse --logging arg: {logging}")    
         
         self._start_sim_time = None
         self._traffic_spawned = False
@@ -331,6 +342,12 @@ class Scenario04Runner:
             f"[Scenario04] {trigger_name} aktiviert -> ANIMCAT gespawnt: id={actor.id}, blueprint={blueprint_id}, "
             f"spawn=({spawn_location.x:.2f}, {spawn_location.y:.2f}, {spawn_location.z:.2f})"
         )
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('01', 'cat', window_duration_seconds=10.0)
+        except Exception:
+            pass
+
         return True
 
     def _start_animcat_trigger(self, trigger_config, sim_time):
@@ -666,6 +683,12 @@ class Scenario04Runner:
                             f"[Scenario04] DANCINGM gespawnt bei Ampel: id={actor.id}, blueprint={DANCINGM_PEDESTRIAN_BLUEPRINT_ID}, "
                             f"light_id={traffic_light.id}, spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
                         )
+                        try:
+                            if getattr(self, 'trigger_logger', None):
+                                self.trigger_logger.log_trigger('03', 'dancing_guy', window_duration_seconds=10.0)
+                        except Exception:
+                            pass
+        
                     except Exception:
                         print(f"[Scenario04] WARNUNG: Ampel konnte nicht auf Rot gesetzt werden: light_id={traffic_light.id}")
 
@@ -1066,6 +1089,11 @@ class Scenario04Runner:
             return
         self._song_started = True
         self._song_start_time = sim_time
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('02', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+        except Exception:
+            pass
         print(f"[Scenario04] Song started at sim_time={sim_time:.2f}s")
         if not self._play_song(sim_time):
             print("[Scenario04] WARNUNG: Song konnte nicht gestartet werden; fahre ohne Song fort.")
@@ -1267,5 +1295,6 @@ if __name__ == '__main__':
     parser.add_argument('--port', default=2000, type=int)
     parser.add_argument('--tm-port', default=8000, type=int)
     parser.add_argument('--done-file', default=None)
+    parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
-    Scenario04Runner(args.host, args.port, args.tm_port, args.done_file).run()
+    Scenario04Runner(args.host, args.port, args.tm_port, args.done_file, args.logging).run()

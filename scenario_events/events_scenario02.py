@@ -9,6 +9,8 @@ import time
 
 import carla
 
+from scenario_logger import TriggerLogger, parse_logging_arg
+
 try:
     from events_scenario02_static_props import (
         get_start_barrier_spawns,
@@ -18,7 +20,7 @@ try:
         get_drivertrash_spawn_configs,
         SNAKE_TRIGGER_SPAWN_CONFIGS,
         POORROAD_OBJECTS_CONFIG,
-
+        TRASH_OBJECTS_CONFIG,
     )
 except ModuleNotFoundError:
     from scenario_events.events_scenario02_static_props import (
@@ -29,6 +31,7 @@ except ModuleNotFoundError:
         get_drivertrash_spawn_configs,
         SNAKE_TRIGGER_SPAWN_CONFIGS,
         POORROAD_OBJECTS_CONFIG,
+        TRASH_OBJECTS_CONFIG,
     )
 
 try:
@@ -36,7 +39,7 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_TRAFFIC_DELAY = 2.0
@@ -48,11 +51,11 @@ if DEBUG_MODE:
     DRIVERTRASH_TO_END_DELAY = 2.0
     run_in_singleFile_mode = False
 
-    TRIGGER_TRAFFIC = False
-    TRIGGER_TRASH = False
-    TRIGGER_SNAKE = False
-    TRIGGER_SMELL = False
-    TRIGGER_POORROAD = False
+    TRIGGER_TRAFFIC = True
+    TRIGGER_TRASH = True
+    TRIGGER_SNAKE = True
+    TRIGGER_SMELL = True
+    TRIGGER_POORROAD = True
     TRIGGER_DRIVERTRASH = True
 
     PROFILE_DRIVERTRASH = 'supervisor4home'
@@ -116,7 +119,7 @@ BLOCKED_VEHICLE_KEYWORDS = (
 )
 
 class Scenario02Runner:
-    def __init__(self, host, port, tm_port, done_file=None, trigger_traffic=True, trigger_trash=True,
+    def __init__(self, host, port, tm_port, done_file=None, logging=None, trigger_traffic=True, trigger_trash=True,
                  trigger_poorroad=True, trigger_smell=True, trigger_drivertrash=True, trigger_snake=True):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
@@ -127,6 +130,15 @@ class Scenario02Runner:
         self._done_file = done_file
         self._rng = random.Random()
         self._debug_trash_box_lifetime = SIM_STEP_S * 2.0
+
+        self.trigger_logger = None
+        if logging:
+            pid, scen = parse_logging_arg(logging)
+            if pid and scen:
+                self.trigger_logger = TriggerLogger(pid, scen)
+                print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+            else:
+                print(f"[Scenario00] Could not parse --logging arg: {logging}")    
 
         # trash_configs = get_trash_trigger_config()
         # self._trash_trigger_config = trash_configs[0] if trash_configs else None
@@ -441,8 +453,6 @@ class Scenario02Runner:
         print("[Scenario02] start_trash() - Spawne Objekte direkt aus TRASH_OBJECTS_CONFIG")
         
         try:
-            from events_scenario02_static_props import TRASH_OBJECTS_CONFIG
-            
             bp_lib = self.world.get_blueprint_library()
             spawned_count = 0
             
@@ -483,11 +493,13 @@ class Scenario02Runner:
             if spawned_count == 0:
                 print("[Scenario02] WARNUNG: Es wurden keine Objekte aus der Config gespawnt.")
             else:
-                # Wir merken uns den genauen Timestamp (Simulationszeit), wann gespawnt wurde
-                # Nutze hier die Variable, die dein Skript für die aktuelle Zeit nutzt (z.B. sim_time oder snapshot-Zeit)
-                # Falls du in der run-Schleife bist, kannst du es auch dort setzen.
                 self._trash_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
                 self._trash_physics_active = True
+                try:
+                    if getattr(self, 'trigger_logger', None):
+                        self.trigger_logger.log_trigger('01', 'trash', window_duration_seconds=10.0)
+                except Exception:
+                    pass
                 
         except Exception as exc:
             print(f"[Scenario02] ERROR beim Spawnen von Müll: {exc}")
@@ -562,6 +574,11 @@ class Scenario02Runner:
             return
         print("[Scenario02] start_poorroad()")
         self.poorroad_started = True
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('04', 'poor_road', window_duration_seconds=10.0)
+        except Exception:
+            pass
         self._spawn_poorroad_static_props()
     
     def _spawn_poorroad_static_props(self):
@@ -622,6 +639,11 @@ class Scenario02Runner:
             if user_input == "j":
                 break
             print("Please press J and Enter to continue.")
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('03', 'smell', window_duration_seconds=20.0)
+        except Exception:
+            pass
         self.smell_finished = True
 
     def start_drivertrash(self):
@@ -630,6 +652,11 @@ class Scenario02Runner:
         print("[Scenario02] start_drivertrash()")
         self.drivertrash_started = True
         self.drivertrash_active = True
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('05', 'driver_trash', window_duration_seconds=20.0)
+        except Exception:
+            pass
 
     def _get_snake_route_config(self, hero_location, hero_velocity=None):
         configs = self._snake_trigger_configs if isinstance(self._snake_trigger_configs, (list, tuple)) else []
@@ -799,6 +826,11 @@ class Scenario02Runner:
         self._walker_actor_ids.append(walker.id)
 
         print(f"[Scenario02] Snake spawned: id={walker.id}, route={route_config.get('name')}, sim_time={sim_time}")
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('02', 'snake', window_duration_seconds=10.0)
+        except Exception:
+            pass
 
         # start movement like SANIMAL
         try:
@@ -863,6 +895,11 @@ class Scenario02Runner:
         self._walker_actor_ids.append(walker.id)
 
         print(f"[Scenario02] Immediate Snake spawned: id={walker.id}, route={route_config.get('name')}, sim_time={sim_time}")
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('02', 'snake', window_duration_seconds=10.0)
+        except Exception:
+            pass
         return True
 
     def _update_snake(self, sim_time):
@@ -1362,6 +1399,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", default=2000, type=int)
     parser.add_argument("--tm-port", default=8000, type=int)
     parser.add_argument("--done-file", default=None)
+    parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
 
     Scenario02Runner(
@@ -1369,6 +1407,7 @@ if __name__ == "__main__":
         args.port,
         args.tm_port,
         args.done_file,
+        args.logging,
         trigger_traffic=TRIGGER_TRAFFIC,
         trigger_trash=TRIGGER_TRASH,
         trigger_poorroad=TRIGGER_POORROAD,

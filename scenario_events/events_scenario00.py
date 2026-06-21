@@ -14,10 +14,7 @@ except ModuleNotFoundError:
 from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
 from generate_audio import SongAudio
 
-try: 
-    from scenario_logger import  parse_logging_arg, TriggerLogger
-except ModuleNotFoundError:
-    from scenario_logger import  parse_logging_arg, TriggerLogger
+from scenario_logger import TriggerLogger, parse_logging_arg
 
 # Constants
 DEBUG_MODE = True
@@ -127,7 +124,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
     return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
 
 class Scenario00Runner:
-    def __init__(self, host, port, tm_port, done_file=None, logging_arg=None):
+    def __init__(self, host, port, tm_port, done_file=None, logging=None):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
@@ -148,13 +145,13 @@ class Scenario00Runner:
         #     pass
 
         self.trigger_logger = None
-        if logging_arg:
-            pid, scen = parse_logging_arg(args.logging)
+        if logging:
+            pid, scen = parse_logging_arg(logging)
             if pid and scen:
                 self.trigger_logger = TriggerLogger(pid, scen)
                 print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
             else:
-                print(f"[Scenario00] Could not parse --logging arg: {args.logging}")    
+                print(f"[Scenario00] Could not parse --logging arg: {logging}")    
         
         self._start_sim_time = None
         self._traffic_spawned = False

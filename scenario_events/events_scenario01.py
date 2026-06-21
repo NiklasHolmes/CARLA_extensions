@@ -31,6 +31,8 @@ try:
 except ModuleNotFoundError:
 	from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, spawn_pedestrians, start_pedestrians, update_pedestrians, set_all_traffic_light_intervals, attach_collision_sensor
 
+from scenario_logger import TriggerLogger, parse_logging_arg
+
 def get_actor_blueprints(world, filter_pattern):
 	bps = list(world.get_blueprint_library().filter(filter_pattern))
 	if not bps:
@@ -47,7 +49,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
 		result.append(bp)
 	return result
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
 	START_TO_REDLIGHT_DELAY = 1.0
@@ -65,8 +67,8 @@ if DEBUG_MODE:
 	TRAFFICJAM_TRAFFIC_LIGHT_RED_SECONDS = 5.0
 	TRAFFICJAM_TRAFFIC_LIGHT_GREEN_SECONDS = 1.0
 
-	TRIGGER_REDLIGHT = False
-	TRIGGER_TRAFFICJAM = False
+	TRIGGER_REDLIGHT = True
+	TRIGGER_TRAFFICJAM = True
 	TRIGGER_SONG = True
 	TRIGGER_BADGUY = True
 	TRIGGER_CROSSPED = True
@@ -155,7 +157,7 @@ BLOCKED_VEHICLE_KEYWORDS = (
 TL_FORCE_GREEN = False
 
 class Scenario01Runner:
-	def __init__(self, host, port, tm_port, done_file=None, trigger_redlight=True, trigger_trafficjam=True, trigger_badguy=True, trigger_song=True, trigger_crossped=True, trigger_occupy=True):
+	def __init__(self, host, port, tm_port, done_file=None, logging=None, trigger_redlight=True, trigger_trafficjam=True, trigger_badguy=True, trigger_song=True, trigger_crossped=True, trigger_occupy=True):
 		self.client = carla.Client(host, port)
 		self.client.set_timeout(10.0)
 		self.world = self.client.get_world()
@@ -168,6 +170,15 @@ class Scenario01Runner:
 		self._badguy_process = None
 		# control pruning of trafficjam vehicles via module-level boolean PRUNE_TJ_CARS
 		self._prune_tj_cars = PRUNE_TJ_CARS
+
+		self.trigger_logger = None
+		if logging:
+			pid, scen = parse_logging_arg(logging)
+			if pid and scen:
+				self.trigger_logger = TriggerLogger(pid, scen)
+				print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+			else:
+				print(f"[Scenario00] Could not parse --logging arg: {logging}")    
 
 		self._trigger_redlight = trigger_redlight
 		self._trigger_trafficjam = trigger_trafficjam
@@ -1157,6 +1168,13 @@ class Scenario01Runner:
 		self.redlight_active = True
 		self.redlight_finished = False
 		self._redlight_started_at = sim_time
+
+		try:
+			if getattr(self, 'trigger_logger', None):
+				self.trigger_logger.log_trigger('01', 'red_traffic_light', window_duration_seconds=REDLIGHT_PHASE_MAX_SECONDS)
+		except Exception:
+			pass
+	
 		self._redlight_traffic_light_states.clear()
 		self._redlight_seen_traffic_light_ids.clear()
 		self._redlight_seen_traffic_light_count = 0
@@ -1338,6 +1356,13 @@ class Scenario01Runner:
 				self._trigger2_inside_last_tick = False
 				self._trigger2_activated = False
 				self._start_barrier_manual_prompt()
+
+				try:
+					if getattr(self, 'trigger_logger', None):
+						self.trigger_logger.log_trigger(trigger_id='02', trigger_type='traffic_jam', window_duration_seconds=20.0)
+				except Exception:
+					pass
+	
 				# If trigger_config provides an explicit traffic_light_position, pin that TL
 				try:
 					tl_pos = trigger_config.get("traffic_light_position")
@@ -1439,6 +1464,11 @@ class Scenario01Runner:
 				# text=True,
 				creationflags=subprocess.CREATE_NEW_CONSOLE
 			)
+			try:
+				if getattr(self, 'trigger_logger', None):
+					self.trigger_logger.log_trigger('04', 'badguy', window_duration_seconds=20.0)
+			except Exception:
+				pass
 		except Exception as exc:
 			print(f"[Scenario01] WARNING: could not open second manual_control.py: {exc}")
 
@@ -1469,6 +1499,11 @@ class Scenario01Runner:
 			return
 		self._song_started = True
 		self._song_start_time = self.world.get_snapshot().timestamp.elapsed_seconds
+		try:
+			if getattr(self, 'trigger_logger', None):
+				self.trigger_logger.log_trigger('03', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+		except Exception:
+			pass
 		print(f"[Scenario01] Song started at sim_time={self._song_start_time:.2f}s")
 		if self._song_audio.play(self._song_start_time):
 			print("spielt song")
@@ -1863,6 +1898,7 @@ if __name__ == "__main__":
 	parser.add_argument("--port", default=2000, type=int)
 	parser.add_argument("--tm-port", default=8000, type=int)
 	parser.add_argument("--done-file", default=None)
+	parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
 	args = parser.parse_args()
 
 	Scenario01Runner(
@@ -1870,6 +1906,7 @@ if __name__ == "__main__":
 		args.port,
 		args.tm_port,
 		args.done_file,
+		args.logging,
 		trigger_redlight=TRIGGER_REDLIGHT,
 		trigger_trafficjam=TRIGGER_TRAFFICJAM,
 		trigger_badguy=TRIGGER_BADGUY,
