@@ -42,6 +42,8 @@ try:
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
+from scenario_logger import TriggerLogger, parse_logging_arg
+
 try:
     from events_scenario03_static_props import (
         get_barrier_spawn,
@@ -64,7 +66,7 @@ except ModuleNotFoundError:
         LTRUCK_NAVIGATION_BARRIER_CONFIGS,
     )
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 if DEBUG_MODE:
     START_TO_CARAWAY_DELAY = 2.0
@@ -75,8 +77,8 @@ if DEBUG_MODE:
     BRAKE_TO_END_DELAY = 5.0
 
     TRIGGER_CARAWAY = False
-    TRIGGER_LTRUCK = True
-    TRIGGER_SONG = True
+    TRIGGER_LTRUCK = False
+    TRIGGER_SONG = False
     TRIGGER_POLICE = True
     TRIGGER_BRAKE = True
 
@@ -109,7 +111,7 @@ route_green = ["Straight", "Straight", "Straight", "Straight", "Straight", "Stra
 
 
 # copWaving lifetime (seconds) before removal
-COPWAVING_LIFETIME_S = 10.0
+COPWAVING_LIFETIME_S = 30.0
 COPWAVING_WALK_SPEED = 1.4
 COPWAVING_ARRIVE_THRESH = 1.2
 COPWAVING_STATUS_LOG_INTERVAL_S = 1.0
@@ -132,7 +134,7 @@ DELAY_LABELS = {
 }
 
 class Scenario03Runner:
-    def __init__(self, host, port, tm_port, done_file=None, trigger_caraway=True, trigger_ltruck=True, trigger_song=True, trigger_police=True, trigger_brake=True):
+    def __init__(self, host, port, tm_port, done_file=None, logging=None, trigger_caraway=True, trigger_ltruck=True, trigger_song=True, trigger_police=True, trigger_brake=True):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
@@ -197,6 +199,15 @@ class Scenario03Runner:
         self._caraway_vehicle_distances_m = {}
         self._debug_trigger_box_lifetime = SIM_STEP_S * 2.0
 
+        self.trigger_logger = None
+        if logging:
+            pid, scen = parse_logging_arg(logging)
+            if pid and scen:
+                self.trigger_logger = TriggerLogger(pid, scen)
+                print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+            else:
+                print(f"[Scenario00] Could not parse --logging arg: {logging}")
+
         # copWaving tracking
         self._copwaving_triggered_keys = set()
         self._copwaving_actor_ids = {}
@@ -214,6 +225,8 @@ class Scenario03Runner:
         self._copwaving_transition_spawn_transform = None
         self._copwaving_target_locations = None
         self._copwaving_current_target_idx = 0
+        # copWaving phase start time (used to enforce COPWAVING_LIFETIME_S)
+        self._copwaving_phase_start_time = None
         # support multiple sequential targets for cop waving (list of carla.Location)
         self._copwaving_target_locations = None
         self._copwaving_current_target_idx = 0
@@ -1222,6 +1235,11 @@ class Scenario03Runner:
         self.song_started = True
         self._song_start_time = self.world.get_snapshot().timestamp.elapsed_seconds
         print(f"[Scenario03] song started at sim_time={self._song_start_time:.2f}s")
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('03', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+        except Exception:
+            pass
         if self._song_audio.play(self._song_start_time):
             print("[Scenario03] song play requested")
         else:
@@ -1487,6 +1505,16 @@ class Scenario03Runner:
         self._copwaving_active_trigger_config = trigger_config
         self._copwaving_wave_actor_id = self._copwaving_actor_ids.get(trigger_name)
         self._copwaving_spawn_time[trigger_name] = sim_time
+        # record phase start so we can enforce a maximum lifetime
+        try:
+            self._copwaving_phase_start_time = float(sim_time)
+        except Exception:
+            self._copwaving_phase_start_time = sim_time
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('04', 'police', window_duration_seconds=10.0)
+        except Exception:
+            pass
         print(f"[Scenario03] {trigger_name} aktiviert -> policeman waving actor_id={self._copwaving_wave_actor_id}")
         return True
 
@@ -1515,6 +1543,7 @@ class Scenario03Runner:
         self._copwaving_transition_spawn_transform = None
         self._copwaving_active_trigger_name = None
         self._copwaving_active_trigger_config = None
+        self._copwaving_phase_start_time = None
         self.police_finished = True
         self.police_active = False
         print("[Scenario03] copWaving finished -> police phase completed.")
@@ -1646,6 +1675,18 @@ class Scenario03Runner:
 
         self._update_copwaving_walk(sim_time)
 
+        # enforce maximum copWaving lifetime so scenario cannot get stuck
+        try:
+            if self._copwaving_phase_start_time is not None:
+                if (sim_time - self._copwaving_phase_start_time) >= float(COPWAVING_LIFETIME_S):
+                    print(
+                        f"[Scenario03] copWaving lifetime exceeded ({COPWAVING_LIFETIME_S}s) -> forcing finish | sim_time={sim_time:.2f}s"
+                    )
+                    self._finish_copwaving_phase()
+                    return
+        except Exception:
+            pass
+
     def _get_copwaving_trigger_config(self, hero_location, hero_velocity=None):
         if hero_location is None:
             return None
@@ -1744,6 +1785,11 @@ class Scenario03Runner:
 
         if not self._brake_warning_audio.play():
             print("[Scenario03] WARNING: brake warning sound konnte nicht gestartet werden.")
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('05', 'brake_warning', window_duration_seconds=BRAKE_TO_END_DELAY)
+        except Exception:
+            pass
         self.brake_finished = True
 
     def _skip_caraway_trigger(self, sim_time):
@@ -1828,6 +1874,12 @@ class Scenario03Runner:
                         caraway_trigger_config = self._get_caraway_trigger_config(ego_location, ego_velocity)
 
                     if caraway_trigger_config is not None:
+                        # Trigger box activated for caraway -> log and spawn
+                        try:
+                            if getattr(self, 'trigger_logger', None):
+                                self.trigger_logger.log_trigger('01', 'caraway', window_duration_seconds=10.0)
+                        except Exception:
+                            pass
                         if self._spawn_caraway_vehicle_from_config(caraway_trigger_config):
                             self._finish_delay_timer("start_to_caraway", sim_time)
 
@@ -1894,6 +1946,13 @@ class Scenario03Runner:
                                                 tl.set_state(carla.TrafficLightState.Red)
                                         except Exception:
                                             pass
+                            except Exception:
+                                pass
+
+                            # Log LTruck trigger at the moment the trigger box is detected
+                            try:
+                                if getattr(self, 'trigger_logger', None):
+                                    self.trigger_logger.log_trigger('02', 'ltruck', window_duration_seconds=30.0)
                             except Exception:
                                 pass
 
@@ -2022,6 +2081,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", default=2000, type=int)
     parser.add_argument("--tm-port", default=8000, type=int)
     parser.add_argument("--done-file", default=None)
+    parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
 
     Scenario03Runner(
@@ -2029,6 +2089,7 @@ if __name__ == "__main__":
         args.port,
         args.tm_port,
         args.done_file,
+        args.logging,
         trigger_caraway=TRIGGER_CARAWAY,
         trigger_ltruck=TRIGGER_LTRUCK,
         trigger_song=TRIGGER_SONG,
