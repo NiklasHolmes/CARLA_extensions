@@ -14,7 +14,7 @@ from common.window_positioning import get_pygame_window_hwnd, apply_borderless_s
 
 GERMAN = True
 
-use_profile = "simulator"
+use_profile = "simulator4home"
 # --- Scenario Configurations ---
 SCENARIO_CONFIGS = {
     "scenario00": {
@@ -76,8 +76,12 @@ class SessionRunner:
     def __init__(self, host='127.0.0.1', port=2000, participant_id=None, state_file=None, start_index=None, fresh_session=False, target_scenario=None):
         self.host = host
         self.port = port
-        self.state_root = os.path.join(os.path.dirname(__file__), '_out')
-        self.state_file = state_file or os.path.join(self.state_root, 'session_state.json')
+        # Use a dedicated per-participant log root
+        self.plog_root = os.path.join(os.path.dirname(__file__), '_plog')
+        os.makedirs(self.plog_root, exist_ok=True)
+        self.state_root = self.plog_root
+        # state_file is per-participant now; if explicitly provided keep it, otherwise resolve later
+        self.state_file = state_file
         self.participant_id = participant_id
         self.start_index_override = start_index
         self.fresh_session = fresh_session
@@ -98,14 +102,33 @@ class SessionRunner:
             parts = str(current_participant_id).split('_', 2)
             if len(parts) >= 3 and parts[0] == 'P' and parts[1].isdigit():
                 next_number = int(parts[1]) + 1
-                return f"P_{next_number:02d}_{datetime.now().strftime('%Y%m%d_%H%M')}"
-        return f"P_01_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                return f"P{next_number:02d}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        return f"P01_{datetime.now().strftime('%Y%m%d_%H%M')}"
 
     def _load_state_file_raw(self):
-        if not os.path.exists(self.state_file):
+        # If explicit state_file passed, load it
+        if self.state_file:
+            if not os.path.exists(self.state_file):
+                return None
+            try:
+                with open(self.state_file, 'r', encoding='utf-8') as handle:
+                    return json.load(handle)
+            except Exception:
+                return None
+
+        # Otherwise load per-participant session_state.json
+        pid = self.participant_id
+        if pid is None:
+            return None
+        # Resolve full participant id (do not create here)
+        full_pid, participant_dir, existed = self._participant_dir_for(pid, create=False)
+        if not full_pid or not participant_dir:
+            return None
+        participant_file = os.path.join(participant_dir, 'session_state.json')
+        if not os.path.exists(participant_file):
             return None
         try:
-            with open(self.state_file, 'r', encoding='utf-8') as handle:
+            with open(participant_file, 'r', encoding='utf-8') as handle:
                 return json.load(handle)
         except Exception:
             return None
@@ -130,16 +153,129 @@ class SessionRunner:
         return False
 
     def _default_participant_id(self):
-        loaded_state = self._load_state_file()
-        if loaded_state and not self.fresh_session and not self._is_completed_state(loaded_state):
-            loaded_participant_id = loaded_state.get('participant_id')
-            if loaded_participant_id:
-                return loaded_participant_id
+        # If no explicit participant id was provided (normal run), prefer the highest P_## available
+        try:
+            dirs = [d for d in os.listdir(self.plog_root) if os.path.isdir(os.path.join(self.plog_root, d))]
+        except Exception:
+            dirs = []
 
-        if loaded_state:
-            return self._next_participant_id(loaded_state.get('participant_id'))
+        # collect candidate dirs by numeric participant index
+        import re
+        number_buckets = {}
+        for d in dirs:
+            m = re.match(r'^[Pp]_?(\d+)_', d)
+            if not m:
+                # try variant without second underscore (e.g. P01YYYY... not expected) - skip
+                continue
+            try:
+                n = int(m.group(1))
+            except Exception:
+                continue
+            number_buckets.setdefault(n, []).append(d)
 
+        if number_buckets and not self.fresh_session:
+            # pick highest numeric bucket, then most recently modified directory within that bucket
+            max_num = max(number_buckets.keys())
+            candidates = number_buckets[max_num]
+            candidates_full = [(c, os.path.getmtime(os.path.join(self.plog_root, c))) for c in candidates]
+            candidates_full.sort(key=lambda t: t[1], reverse=True)
+            chosen = candidates_full[0][0]
+            return chosen
+
+        # If fresh session requested: pick next sequential participant number (P_01 -> P_02 -> ...)
+        if self.fresh_session:
+            try:
+                max_num = 0
+                for d in dirs:
+                    m = re.match(r'^[Pp]_?(\d+)', d)
+                    if m:
+                        try:
+                            n = int(m.group(1))
+                            if n > max_num:
+                                max_num = n
+                        except Exception:
+                            continue
+                next_num = max_num + 1 if max_num >= 0 else 1
+                participant_id = f"P_{next_num:02d}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                return participant_id
+            except Exception:
+                return f"P_01_{datetime.now().strftime('%Y%m%d_%H%M')}"
+
+        # Fallback: try to continue the most recent participant with incomplete state
+        if not self.fresh_session:
+            try:
+                dirs_full = [os.path.join(self.plog_root, d) for d in dirs]
+                dirs_full.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                for p in dirs_full:
+                    candidate = os.path.join(p, 'session_state.json')
+                    if os.path.exists(candidate):
+                        try:
+                            with open(candidate, 'r', encoding='utf-8') as handle:
+                                loaded = json.load(handle)
+                            if isinstance(loaded, dict) and not self._is_completed_state(loaded):
+                                pid = loaded.get('participant_id')
+                                if pid:
+                                    return pid
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+        # As last resort, create a new P_01 timestamped id
         return f"P_01_{datetime.now().strftime('%Y%m%d_%H%M')}"
+
+    def _participant_dir_for(self, raw_participant_id=None, create=True):
+        """Resolve a participant directory name and path.
+        - If `raw_participant_id` contains '_' it's treated as full id.
+        - If short like 'P01', find latest matching dir 'P01_YYYYMMDD_HHMM' or create one.
+        Returns (participant_id, participant_dir, existed)
+        """
+        if raw_participant_id is None:
+            return (None, None, False)
+
+        # Full id provided? Only treat as full id when it matches the expected full-id pattern
+        # e.g. P_01_20260621_1435 or P01_20260621_1435
+        try:
+            import re
+            if re.match(r'^[Pp]_?\d{1,2}_\d{8}_\d{4}$', raw_participant_id):
+                participant_id = raw_participant_id
+                participant_dir = os.path.join(self.plog_root, participant_id)
+                existed = os.path.isdir(participant_dir)
+                if not existed and create:
+                    os.makedirs(participant_dir, exist_ok=True)
+                return (participant_id, participant_dir, existed)
+        except Exception:
+            pass
+
+        # Short id: search for existing directories matching the prefix.
+        # Match flexibly by comparing names with underscores removed so 'P_01' matches 'P01_...'.
+        prefix = raw_participant_id
+        norm_prefix = prefix.replace('_', '').lower()
+        candidates = []
+        try:
+            for d in os.listdir(self.plog_root):
+                full = os.path.join(self.plog_root, d)
+                if not os.path.isdir(full):
+                    continue
+                d_norm = d.replace('_', '').lower()
+                if d_norm.startswith(norm_prefix):
+                    candidates.append((d, os.path.getmtime(full)))
+        except Exception:
+            candidates = []
+
+        if candidates:
+            candidates.sort(key=lambda t: t[1], reverse=True)
+            chosen = candidates[0][0]
+            participant_id = chosen
+            participant_dir = os.path.join(self.plog_root, participant_id)
+            return (participant_id, participant_dir, True)
+
+        # Not found -> create new
+        participant_id = f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        participant_dir = os.path.join(self.plog_root, participant_id)
+        if create:
+            os.makedirs(participant_dir, exist_ok=True)
+        return (participant_id, participant_dir, False)
 
     def _now_text(self):
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -156,19 +292,8 @@ class SessionRunner:
         os.replace(temp_path, path)
 
     def _load_session_archive(self):
+        # Archive concept removed; per-participant session files are used.
         loaded_state = self._load_state_file_raw()
-        if not loaded_state:
-            return {
-                'current_session': None,
-                'session_history': [],
-            }
-
-        if isinstance(loaded_state, dict) and 'current_session' in loaded_state:
-            return {
-                'current_session': loaded_state.get('current_session'),
-                'session_history': list(loaded_state.get('session_history', [])),
-            }
-
         return {
             'current_session': loaded_state,
             'session_history': [],
@@ -189,7 +314,17 @@ class SessionRunner:
         }
 
     def _load_or_initialize_session_state(self, scenario_order):
-        if self.participant_id is None:
+        # If the user provided a participant id, try to attach to an existing participant.
+        if self.participant_id is not None:
+            # First check if a matching participant folder already exists (do not create yet)
+            full_pid, participant_dir, existed = self._participant_dir_for(self.participant_id, create=False)
+            if existed:
+                # attach to existing
+                self.participant_id = full_pid
+            else:
+                print(f"[SessionRunner] No participant found for '{self.participant_id}'. Aborting.")
+                sys.exit(1)
+        else:
             self.participant_id = self._default_participant_id()
 
         loaded_state = None if self.fresh_session else self._load_state_file()
@@ -218,12 +353,16 @@ class SessionRunner:
     def _save_session_state(self):
         if self.session_state is None:
             return
-        archive = self._load_session_archive()
-        current_session = archive.get('current_session')
-        if current_session and current_session.get('participant_id') != self.session_state.get('participant_id'):
-            archive.setdefault('session_history', []).append(current_session)
-        archive['current_session'] = self.session_state
-        self._atomic_write_json(self.state_file, archive)
+        # Write only per-participant session_state.json into _plog/<participant_id>/session_state.json
+        try:
+            participant_id = self.session_state.get('participant_id') or self.participant_id
+            if participant_id:
+                participant_dir = os.path.join(self.plog_root, participant_id)
+                os.makedirs(participant_dir, exist_ok=True)
+                participant_path = os.path.join(participant_dir, 'session_state.json')
+                self._atomic_write_json(participant_path, self.session_state)
+        except Exception:
+            pass
 
     def _scenario_run_count(self, scenario_name):
         if self.session_state is None:
@@ -748,6 +887,24 @@ class SessionRunner:
 
         if self.target_scenario:
             print(f"Running single scenario: {self.target_scenario}")
+            # Ensure a collection participant folder P_00_<timestamp> exists for single-scenario runs
+            try:
+                pid = f"P_00_{datetime.now().strftime('%Y%m%d_%H%M')}"
+                self.participant_id = pid
+                participant_dir = os.path.join(self.plog_root, pid)
+                os.makedirs(participant_dir, exist_ok=True)
+                # initialize a minimal session_state for this collected scenario
+                try:
+                    state = self._build_new_session_state([self.target_scenario])
+                    # mark that it's not started yet
+                    state['current_state']['next_scenario_index'] = 0
+                    state['current_state']['current_status'] = 'NOT_STARTED'
+                    participant_path = os.path.join(participant_dir, 'session_state.json')
+                    self._atomic_write_json(participant_path, state)
+                except Exception:
+                    pass
+            except Exception:
+                pass
             try:
                 self._connect_to_carla()
                 self._load_scenario_map_and_weather(self.target_scenario)
@@ -797,7 +954,7 @@ class SessionRunner:
                     return
                 description = config["description"]
 
-                print(f"\n--- Running Scenario {i+1}/{len(scenario_order)}: {scenario_name} ({description})---")
+                print(f"\n--- Running Scenario {i+1}/{len(scenario_order)}: {scenario_name} ({description}) for {self.participant_id}---")
                 
                 # Set up the world for the current scenario
                 self._load_scenario_map_and_weather(scenario_name)
@@ -835,6 +992,7 @@ if __name__ == '__main__':
     parser.add_argument('--start-index', default=None, type=int, help='override next_scenario_index for repeat/continue (0-based; 2 starts at the 3rd scenario)')
     parser.add_argument('--fresh-session', '--new-session', '--new', dest='fresh_session', action='store_true', help='force a new participant/session even if an existing state file is present')
     parser.add_argument('--scenario', default=None, help='NEW => "scenario01')
+    # --scenario => creates participant P00
 
     args = parser.parse_args()
     
