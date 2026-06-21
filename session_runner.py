@@ -977,9 +977,9 @@ class SessionRunner:
             # scenario00 must always come first
             if "scenario00" in all_scenarios:
                 all_scenarios.remove("scenario00")
-                all_scenarios.remove("scenario02")
+                # all_scenarios.remove("scenario02")
                 random.shuffle(all_scenarios)
-                scenario_order = ["scenario00"] + all_scenarios + ["scenario02"]
+                scenario_order = ["scenario00"] + all_scenarios # + ["scenario02"]
             else:
                 random.shuffle(all_scenarios)
                 scenario_order = all_scenarios
