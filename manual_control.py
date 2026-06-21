@@ -944,12 +944,12 @@ class World(object):
             self.hud.notification('Cola can blueprint not found')
             return
 
-        if self.thrown_prop is not None:
-            try:
-                self.thrown_prop.destroy()
-            except Exception:
-                pass
-            self.thrown_prop = None
+        # if self.thrown_prop is not None:
+        #     try:
+        #         self.thrown_prop.destroy()
+        #     except Exception:
+        #         pass
+        #     self.thrown_prop = None
 
         vehicle_transform = self.player.get_transform()
         forward_vector = vehicle_transform.get_forward_vector()
