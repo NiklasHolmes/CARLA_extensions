@@ -300,7 +300,7 @@ class Scenario00Runner:
         # log trigger for vehicle spawn
         try:
             if getattr(self, 'trigger_logger', None):
-                self.trigger_logger.log_trigger('vehicles_spawned_01', 'spawn_vehicles', window_duration_seconds=VEHICLE_ACTIVE_SECONDS)
+                self.trigger_logger.log_trigger('01', 'spawn_vehicles', window_duration_seconds=VEHICLE_ACTIVE_SECONDS)
         except Exception:
             pass
 
@@ -467,6 +467,12 @@ class Scenario00Runner:
             controller.set_max_speed(route.get("max_speed", PEDESTRIAN_MAX_SPEED))
             print(f"[Scenario00] Pedestrian {walker.id} ist jetzt unterwegs mit speed={route.get('max_speed', PEDESTRIAN_MAX_SPEED):.1f}.")
 
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('02', 'spawn_pedestrians', window_duration_seconds=10.0)
+        except Exception:
+            pass
+        
         self._pedestrians_started = True
 
     def _start_song(self, sim_time):
@@ -482,7 +488,7 @@ class Scenario00Runner:
         else:
             try:
                 if getattr(self, 'trigger_logger', None):
-                    self.trigger_logger.log_trigger('song_started_01', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+                    self.trigger_logger.log_trigger('03', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
             except Exception:
                 pass
 
