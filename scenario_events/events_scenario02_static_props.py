@@ -2431,72 +2431,6 @@ DRIVERTRASH_SPAWN_X_OFFSET = -30.0
 DRIVERTRASH_SPAWN_Y_OFFSET = 0.0
 DRIVERTRASH_SPAWN_Z = 1.50
 
-def _build_snake_config(index, trigger_location):
-    spawn_location = carla.Location(
-        x=trigger_location.x + SNAKE_SPAWN_X_OFFSET,
-        y=trigger_location.y + SNAKE_SPAWN_Y_OFFSET,
-        z=trigger_location.z + SNAKE_SPAWN_Z_OFFSET,
-    )
-    target_location = carla.Location(
-        x=spawn_location.x,
-        y=SNAKE_TARGET_Y,
-        z=spawn_location.z,
-    )
-    return {
-        "name": f"snakeTrigger{index}",
-        "trigger_location": trigger_location,
-        "trigger_x_tolerance": SNAKE_TRIGGER_TOLERANCE_X,
-        "trigger_y_tolerance": SNAKE_TRIGGER_TOLERANCE_Y,
-        "trigger_direction_axis": SNAKE_TRIGGER_DIRECTION_AXIS,
-        "trigger_direction_sign": SNAKE_TRIGGER_DIRECTION_SIGN,
-        "spawn_configs": [
-            {
-                "name": f"snake_start_{index:02d}",
-                "transform": carla.Transform(
-                    spawn_location,
-                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0),
-                ),
-                "scale": None,
-            },
-            {
-                "name": f"snake_end_{index:02d}",
-                "transform": carla.Transform(
-                    target_location,
-                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0),
-                ),
-                "scale": None,
-            },
-        ],
-    }
-
-SNAKE_AND_DRIVERTRASH_TRIGGER_LOCATIONS = (
-    # first lane
-    carla.Location(x=114.6000, y=244.5000, z=0.3000),
-    carla.Location(x=176.7000, y=244.5000, z=0.3000),
-    carla.Location(x=308.6000, y=244.5000, z=0.0000),
-    carla.Location(x=442.4000, y=244.5000, z=0.0000),
-    carla.Location(x=517.6000, y=244.5000, z=0.0000),
-
-    carla.Location(x=114.6000, y=141.5000, z=0.3000),
-    carla.Location(x=176.7000, y=141.5000, z=0.3000),
-    carla.Location(x=308.6000, y=141.5000, z=0.0000),
-    carla.Location(x=442.4000, y=141.5000, z=0.0000),
-    carla.Location(x=517.6000, y=141.5000, z=0.0000),
-
-    carla.Location(x=114.6000, y=41.9000, z=0.3000),
-    carla.Location(x=176.7000, y=41.9000, z=0.3000),
-    carla.Location(x=308.6000, y=41.9000, z=0.0000),
-    carla.Location(x=442.4000, y=41.9000, z=0.0000),
-    carla.Location(x=517.6000, y=41.9000, z=0.0000),
-)
-
-# Backwards-compatible alias while all route generation uses the shared list.
-SNAKE_TRIGGER_LOCATIONS = SNAKE_AND_DRIVERTRASH_TRIGGER_LOCATIONS
-
-SNAKE_CONFIGS = tuple(
-    _build_snake_config(index + 1, trigger_location)
-    for index, trigger_location in enumerate(SNAKE_AND_DRIVERTRASH_TRIGGER_LOCATIONS)
-)
 
 SNAKE_TRIGGER_SPAWN_CONFIGS = (
     # Trigger 1 (Hauptstraße, Richtung -x)
@@ -3734,38 +3668,237 @@ SNAKE_TRIGGER_SPAWN_CONFIGS = (
 )
 # Trigger 19 not working + Trigger 20 out of reach
 
-def _build_drivertrash_config(index, trigger_location):
-    spawn_location = carla.Location(
-        x=trigger_location.x + DRIVERTRASH_SPAWN_X_OFFSET,
-        y=trigger_location.y + DRIVERTRASH_SPAWN_Y_OFFSET,
-        z=DRIVERTRASH_SPAWN_Z,
-    )
-    return {
-        "name": f"drivertrash_trigger{index}",
-        "trigger_location": trigger_location,
-        "trigger_x_tolerance": SNAKE_TRIGGER_TOLERANCE_X,
-        "trigger_y_tolerance": SNAKE_TRIGGER_TOLERANCE_Y,
-        "trigger_direction_axis": SNAKE_TRIGGER_DIRECTION_AXIS,
-        "trigger_direction_sign": SNAKE_TRIGGER_DIRECTION_SIGN,
+DRIVERTRASH_TRIGGER_SPAWN_CONFIGS = (
+    {
+        "name": "drivertrash01",
+        "trigger_location": carla.Location(x=-1.76, y=9.55, z=0.30),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": 1,
         "spawn_configs": [
             {
-                "name": f"drivertrash_spawn_{index:02d}",
                 "blueprints": ["vehicle.nissan.patrol"],
                 "transform": carla.Transform(
-                    spawn_location,
-                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                    carla.Location(x=-1.98, y=249.43, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=90.0, roll=0.0),
                 ),
-                "scale": None,
                 #"color": "255,255,255",
                 "audio_mode": "horn_only",
             },
         ],
-    }
-
-DRIVERTRASH_SPAWN_CONFIGS = tuple(
-    _build_drivertrash_config(index + 1, trigger_location)
-    for index, trigger_location in enumerate(SNAKE_AND_DRIVERTRASH_TRIGGER_LOCATIONS)
+    },
+    {
+        "name": "drivertrash02",
+        "trigger_location": carla.Location(x=1.5, y=295.42, z=0.30),
+        "trigger_x_tolerance": 2.0,
+        "trigger_y_tolerance": 5.0,
+        "trigger_direction_axis": "y",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=1.55, y=50.44, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=-90.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash03",
+        "trigger_location": carla.Location(x=105.57, y=330.56, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=262.59, y=330.54, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash04",
+        "trigger_location": carla.Location(x=321.75, y=326.25, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=142.91, y=326.97, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash05",
+        "trigger_location": carla.Location(x=321.75, y=194.73, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=132.35, y=195.01, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash06",
+        "trigger_location": carla.Location(x=105.57, y=199.44, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=295.08, y=199.06, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash07",
+        "trigger_location": carla.Location(x=321.75, y=129.06, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=132.35, y=129.34, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash08",
+        "trigger_location": carla.Location(x=105.57, y=133.77, z=0.30), 
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=295.08, y=133.39, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash09",
+        "trigger_location": carla.Location(x=322.09, y=55.15, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=191.08, y=55.84, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash10",
+        "trigger_location": carla.Location(x=170.54, y=59.90, z=0.30),
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=288.23, y=59.33, z=0.30),
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash11",
+        "trigger_location": carla.Location(x=322.09, y=-2.75, z=0.30),  # 55.15 - 57.90
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": -1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=191.08, y=-2.06, z=0.30),  # 55.84 - 57.90
+                    carla.Rotation(pitch=0.0, yaw=180.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
+    {
+        "name": "drivertrash12",
+        "trigger_location": carla.Location(x=170.54, y=2.0, z=0.30),  # Deine Zielvorgabe (59.90 - 57.90)
+        "trigger_x_tolerance": 5.0,
+        "trigger_y_tolerance": 2.0,
+        "trigger_direction_axis": "x",
+        "trigger_direction_sign": 1,
+        "spawn_configs": [
+            {
+                "blueprints": ["vehicle.nissan.patrol"],
+                "transform": carla.Transform(
+                    carla.Location(x=288.23, y=1.43, z=0.30),  # 59.33 - 57.90
+                    carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0),
+                ),
+                #"color": "255,255,255",
+                "audio_mode": "horn_only",
+            },
+        ],
+    },
 )
+
 
 def get_trash_trigger_config():
     return TRASH_TRIGGER_CONFIG
@@ -3773,8 +3906,6 @@ def get_trash_trigger_config():
 def get_poorroad_trigger_config():
     return POORROAD_TRIGGER_CONFIG
 
-def get_snake_configs():
-    return SNAKE_CONFIGS
-
 def get_drivertrash_spawn_configs():
-    return DRIVERTRASH_SPAWN_CONFIGS
+    return DRIVERTRASH_TRIGGER_SPAWN_CONFIGS
+

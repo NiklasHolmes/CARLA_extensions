@@ -18,6 +18,7 @@ try:
         get_drivertrash_spawn_configs,
         SNAKE_TRIGGER_SPAWN_CONFIGS,
         POORROAD_OBJECTS_CONFIG,
+
     )
 except ModuleNotFoundError:
     from scenario_events.events_scenario02_static_props import (
@@ -49,10 +50,12 @@ if DEBUG_MODE:
 
     TRIGGER_TRAFFIC = False
     TRIGGER_TRASH = False
-    TRIGGER_SNAKE = True
+    TRIGGER_SNAKE = False
     TRIGGER_SMELL = False
     TRIGGER_POORROAD = False
     TRIGGER_DRIVERTRASH = True
+
+    PROFILE_DRIVERTRASH = 'supervisor4home'
 else:
     START_TO_TRAFFIC_DELAY = 1.0
     TRAFFIC_TO_TRASH_DELAY = 10.0
@@ -69,6 +72,8 @@ else:
     TRIGGER_SMELL = True
     TRIGGER_POORROAD = True
     TRIGGER_DRIVERTRASH = True
+
+    PROFILE_DRIVERTRASH = 'supervisor'
 
 SIM_STEP_S = 0.05
 
@@ -649,12 +654,8 @@ class Scenario02Runner:
         return None
 
     def _get_drivertrash_config(self, hero_location, hero_velocity=None):
-        try:
-            from events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS
-        except Exception:
-            from scenario_events.events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS
 
-        configs = DRIVERTRASH_SPAWN_CONFIGS if isinstance(DRIVERTRASH_SPAWN_CONFIGS, (list, tuple)) else []
+        configs = self._drivertrash_trigger_configs if isinstance(self._drivertrash_trigger_configs, (list, tuple)) else []
         for cfg in configs:
             trigger_location = cfg.get("trigger_location")
             if trigger_location is None:
@@ -706,7 +707,7 @@ class Scenario02Runner:
         self._drivertrash_process = start_manual_control_process(
             host=self.host,
             port=self.port,
-            profile='supervisor',
+            profile=PROFILE_DRIVERTRASH,
             done_file=None,
             vehicle_id=vehicle_id,
             vehicle_color=vehicle_color,
@@ -1284,14 +1285,10 @@ class Scenario02Runner:
                 if self.drivertrash_active and not self.drivertrash_finished:
                     # try to find a drivertrash config matching hero location/direction and launch manual control
                     config = None
-                    try:
-                        from events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS as DRIVERTRASH_CONFIGS
-                    except Exception:
-                        from scenario_events.events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS as DRIVERTRASH_CONFIGS
                     # prefer matching config based on hero location/direction
                     hero_vel = ego.get_velocity() if ego is not None else None
-                    if DRIVERTRASH_CONFIGS:
-                        config = self._get_drivertrash_config(hero_location, hero_vel) if hero_location is not None else (DRIVERTRASH_CONFIGS[0] if len(DRIVERTRASH_CONFIGS) == 1 else None)
+                    if self._drivertrash_trigger_configs:
+                        config = self._get_drivertrash_config(hero_location, hero_vel) if hero_location is not None else (self._drivertrash_trigger_configs[0] if len(self._drivertrash_trigger_configs) == 1 else None)
 
                     if config:
                         if self._start_drivertrash_manual_control_from_config(config):
