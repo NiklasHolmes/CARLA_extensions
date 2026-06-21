@@ -10,16 +10,33 @@ import time
 import carla
 
 try:
-    from events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config, POORROAD_SPAWNBOX_CONFIG
+    from events_scenario02_static_props import (
+        get_start_barrier_spawns,
+        get_trash_trigger_config,
+        get_poorroad_trigger_config,
+        get_traffic_route_configs,
+        get_drivertrash_spawn_configs,
+        SNAKE_TRIGGER_SPAWN_CONFIGS,
+        POORROAD_OBJECTS_CONFIG,
+
+    )
 except ModuleNotFoundError:
-    from scenario_events.events_scenario02_static_props import get_start_barrier_spawns, get_trash_trigger_config, get_poorroad_trigger_config, get_traffic_route_configs, get_snake_configs, get_drivertrash_spawn_configs, get_destroy_zone_config, POORROAD_SPAWNBOX_CONFIG
+    from scenario_events.events_scenario02_static_props import (
+        get_start_barrier_spawns,
+        get_trash_trigger_config,
+        get_poorroad_trigger_config,
+        get_traffic_route_configs,
+        get_drivertrash_spawn_configs,
+        SNAKE_TRIGGER_SPAWN_CONFIGS,
+        POORROAD_OBJECTS_CONFIG,
+    )
 
 try:
     from scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 except ModuleNotFoundError:
     from scenario_events.scenario_helper import start_manual_control_process, build_trigger_box_configs, draw_trigger_boxes, force_green_light, set_all_traffic_light_intervals, attach_collision_sensor
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 if DEBUG_MODE:
     START_TO_TRAFFIC_DELAY = 2.0
@@ -31,12 +48,14 @@ if DEBUG_MODE:
     DRIVERTRASH_TO_END_DELAY = 2.0
     run_in_singleFile_mode = False
 
-    TRIGGER_TRAFFIC = True
-    TRIGGER_TRASH = True
-    TRIGGER_SNAKE = True
-    TRIGGER_SMELL = True
-    TRIGGER_POORROAD = True
+    TRIGGER_TRAFFIC = False
+    TRIGGER_TRASH = False
+    TRIGGER_SNAKE = False
+    TRIGGER_SMELL = False
+    TRIGGER_POORROAD = False
     TRIGGER_DRIVERTRASH = True
+
+    PROFILE_DRIVERTRASH = 'supervisor4home'
 else:
     START_TO_TRAFFIC_DELAY = 1.0
     TRAFFIC_TO_TRASH_DELAY = 10.0
@@ -54,6 +73,8 @@ else:
     TRIGGER_POORROAD = True
     TRIGGER_DRIVERTRASH = True
 
+    PROFILE_DRIVERTRASH = 'supervisor'
+
 SIM_STEP_S = 0.05
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
@@ -70,7 +91,7 @@ hero_green = True
 SNAKE_MAX_SPEED = 1.0
 SNAKE_ARRIVE_THRESH = 1.0
 SNAKE_STOP_AT_TARGET_DURATION = 1.0
-SNAKE_LIFETIME_S = 5.0
+SNAKE_LIFETIME_S = 20.0
 
 BLOCKED_VEHICLE_KEYWORDS = (
 	"firetruck",
@@ -107,31 +128,26 @@ class Scenario02Runner:
         self._rng = random.Random()
         self._debug_trash_box_lifetime = SIM_STEP_S * 2.0
 
-        trash_configs = get_trash_trigger_config()
-        self._trash_trigger_config = trash_configs[0] if trash_configs else None
+        # trash_configs = get_trash_trigger_config()
+        # self._trash_trigger_config = trash_configs[0] if trash_configs else None
+        self._trash_trigger_configs = get_trash_trigger_config()
+
         self._poorroad_trigger_configs = get_poorroad_trigger_config()
-        self._snake_trigger_configs = get_snake_configs()
+
+        self._snake_trigger_configs = SNAKE_TRIGGER_SPAWN_CONFIGS
         self._drivertrash_trigger_configs = get_drivertrash_spawn_configs()
         self._traffic_route_configs = get_traffic_route_configs()
 
-        self._destroy_zone_config = get_destroy_zone_config()
-        self._last_destroy_check_time = 0.0
-
         self._trigger_box_thickness = 0.1
 
-        self._destroy_trigger_box_config = build_trigger_box_configs(
-            [self._destroy_zone_config],
-            color=(255, 0, 0, 255),
-            thickness=self._trigger_box_thickness
-        )
         self._trash_trigger_box_configs = build_trigger_box_configs(
-            [self._trash_trigger_config] if self._trash_trigger_config else [],
+            list(self._trash_trigger_configs) if self._trash_trigger_configs else [],
             color=(0, 255, 0, 255),
             thickness=self._trigger_box_thickness,
         )
         self._poorroad_trigger_box_configs = build_trigger_box_configs(
-            self._poorroad_trigger_configs,
-            color=(0, 255, 0, 255),
+            list(self._poorroad_trigger_configs) if self._poorroad_trigger_configs else [],
+            color=(150, 60, 0, 255),
             thickness=self._trigger_box_thickness,
         )
         self._snake_trigger_box_configs = build_trigger_box_configs(
@@ -269,31 +285,6 @@ class Scenario02Runner:
         if abs(hero_location.y - center.y) > y_tol:
             return False
         return True
-    
-    def _check_and_destroy_ai_vehicles(self, sim_time, hero_actor):
-        if sim_time - self._last_destroy_check_time < 5.0:
-            return
-            
-        self._last_destroy_check_time = sim_time
-        
-        if self._destroy_zone_config is None:
-            return
-        
-        all_actors = self.world.get_actors()
-        vehicles = all_actors.filter('vehicle.*')
-        
-        hero_id = hero_actor.id if hero_actor is not None else None
-        
-        for vehicle in vehicles:
-            if hero_id is not None and vehicle.id == hero_id:
-                continue
-            try:
-                v_location = vehicle.get_location()
-                if self._is_within_trigger(self._destroy_zone_config, v_location):
-                    print(f"[DestroyZone] AI Vehicle {vehicle.id} ({vehicle.type_id}) detected!")
-                    vehicle.destroy()
-            except Exception as e:
-                print(f"[DestroyZone] {vehicle.id}: {e}")
 
     def _draw_trigger_box(self, box_configs, enabled):
         if not DEBUG_MODE or not enabled:
@@ -313,80 +304,6 @@ class Scenario02Runner:
             if abs(hero_location.x - center.x) <= x_tol and abs(hero_location.y - center.y) <= y_tol:
                 return trigger_config
         return None
-
-    def _spawn_poorroad_static_props(self):
-        # if not trigger_config:
-        #     return False
-        print("Spawning random poorroad static props...")
-
-        blueprints_to_spawn = [
-            "static.prop.ironplank",
-            "static.prop.dirtdebris01",
-            "static.prop.dirtdebris02",
-            "static.prop.dirtdebris03"
-        ]
-
-        poorroad_spawned_actors = []
-        min_distance = 40.0
-        max_try_attempts = 10 # higher?
-
-        for selected_box in POORROAD_SPAWNBOX_CONFIG:
-            print(f"Starte Spawn-Vorgang für {selected_box['name']}...")
-
-            # WICHTIG: Wir tracken die Locations NUR FÜR DIESE BOX separat für den Abstand!
-            current_box_locations = []
-
-            box_spawn_pool = []
-            for bp_name in blueprints_to_spawn:
-                box_spawn_pool.extend([bp_name] * 4)
-
-            for bp_name in box_spawn_pool:
-                blueprint_list = self.world.get_blueprint_library().filter(bp_name)
-                if not blueprint_list:
-                    print(f"Blueprint {bp_name} nicht in CARLA gefunden. Überspringe.")
-                    continue
-                bp = blueprint_list[0]
-
-                spawned_successfully = False
-                attempts = 0
-
-                while not spawned_successfully and attempts < max_try_attempts:
-                    attempts += 1
-
-                    random_x = random.uniform(selected_box["x_min"], selected_box["x_max"])
-                    random_y = random.uniform(selected_box["y_min"], selected_box["y_max"])
-                    
-                    potential_location = carla.Location(x=random_x, y=random_y, z=0.01)
-
-                    too_close = False
-
-                    for existing_loc in current_box_locations:
-                        if potential_location.distance(existing_loc) < min_distance:
-                            too_close = True
-                            break
-
-                    if not too_close:
-                        random_rot = carla.Rotation(pitch=0.0, yaw=random.uniform(0.0, 360.0), roll=0.0)
-                        transform = carla.Transform(potential_location, random_rot)
-
-                        actor = self.world.try_spawn_actor(bp, transform)
-                        
-                        if actor is not None:
-                            poorroad_spawned_actors.append(actor)
-                            current_box_locations.append(potential_location)
-
-                            if hasattr(self, '_poorroad_actor_ids'):
-                                self._poorroad_actor_ids.append(actor.id)
-                            if hasattr(self, 'static_props'):
-                                self.static_props.append(actor)
-                            
-                            spawned_successfully = True
-                            print(f"[{selected_box['name']}] Erfolgreich gespawned: {bp_name} bei X: {random_x:.2f}, Y: {random_y:.2f}")
-
-                if not spawned_successfully:
-                    print(f"[{selected_box['name']}] Konnte keinen Platz für {bp_name} finden nach {max_try_attempts} Versuchen.")
-
-        print(f"Fertig! Insgesamt {len(poorroad_spawned_actors)} PoorRoad-Objekte platziert (Soll: 64).")
 
     def _destroy_poorroad_static_props(self):
         if not self._poorroad_actor_ids:
@@ -412,33 +329,6 @@ class Scenario02Runner:
             return list(self._poorroad_trigger_configs)
         return [cfg for cfg in self._poorroad_trigger_configs if cfg.get("name") != self._poorroad_active_trigger_name]
 
-    def _update_poorroad_phase(self, hero_location):
-        if not self.poorroad_started or self.poorroad_finished:
-            return
-        trigger_config = self._get_poorroad_trigger_for_location(hero_location)
-        if trigger_config is None:
-            return
-        
-        trigger_name = trigger_config.get("name")
-        if trigger_name == self._poorroad_active_trigger_name:
-            return
-        
-        if self._poorroad_active_trigger_name is None:
-            self._poorroad_active_trigger_name = trigger_name
-            
-            spawned = self._spawn_poorroad_static_props()
-
-            if spawned:
-                print(f"[Scenario02] PoorRoad random Props erfolgreich in den Boxen über Trigger '{trigger_name}' gespawnt.")
-            else:
-                print(f"[Scenario02] PoorRoad Trigger '{trigger_name}' erkannt, aber Spawn fehlgeschlagen.")
-            return
-        
-        if self._poorroad_active_trigger_name is not None and trigger_name != self._poorroad_active_trigger_name:
-            self._destroy_poorroad_static_props()
-            self.poorroad_finished = True
-            print(f"[Scenario02] PoorRoad zweiter Trigger '{trigger_name}' erreicht, Props entfernt. PoorRoad abgeschlossen.")
-            return
 
     def _update_traffic_trigger(self):
         delay_state = self._delay_states.get("start_to_traffic")
@@ -538,30 +428,6 @@ class Scenario02Runner:
         self._traffic_vehicle_actor_ids.append(actor.id)
         return actor
 
-    def _update_trash_trigger(self):
-        delay_state = self._delay_states.get("traffic_to_trash")
-        return delay_state is not None and delay_state["finished"]
-
-    def _update_snake_trigger(self):
-        delay_state = self._delay_states.get("trash_to_snake")
-        return delay_state is not None and delay_state["finished"]
-
-    def _update_smell_trigger(self):
-        delay_state = self._delay_states.get("snake_to_smell")
-        return delay_state is not None and delay_state["finished"]
-
-    def _update_poorroad_trigger(self):
-        delay_state = self._delay_states.get("smell_to_poorroad")
-        return delay_state is not None and delay_state["finished"]
-
-    def _update_drivertrash_trigger(self):
-        delay_state = self._delay_states.get("poorroad_to_drivertrash")
-        return delay_state is not None and delay_state["finished"]
-
-    def _update_end_trigger(self):
-        delay_state = self._delay_states.get("drivertrash_to_end")
-        return delay_state is not None and delay_state["finished"]
-
     def find_hero(self):
         for actor in self.world.get_actors():
             if actor.attributes.get("role_name") in ["hero", "default_player"]:
@@ -569,59 +435,62 @@ class Scenario02Runner:
         return None
 
     def start_trash(self):
-        def _spawn_trash_static_props(self, trigger_config=None):
-            spawn_configs = []
-            if trigger_config is None:
-                trigger_config = self._trash_trigger_config
-            spawn_configs = trigger_config.get("spawn_configs", []) if trigger_config is not None else []
-
+        if self.trash_finished:
+            return
+            
+        print("[Scenario02] start_trash() - Spawne Objekte direkt aus TRASH_OBJECTS_CONFIG")
+        
+        try:
+            from events_scenario02_static_props import TRASH_OBJECTS_CONFIG
+            
             bp_lib = self.world.get_blueprint_library()
-            spawned = 0
-            for spawn in spawn_configs:
-                transform = spawn.get("transform")
-                blueprint_ids = spawn.get("blueprints", [])
+            spawned_count = 0
+            
+            # Wir erstellen eine Liste in deiner Klasse, um die Müll-Actors zu tracken
+            self._trash_actors = []
+            
+            for spawn in TRASH_OBJECTS_CONFIG:
+                transform = spawn["transform"]
+                blueprint_ids = spawn["blueprints"]
+                
                 bp = None
-                if blueprint_ids:
-                    # try the first blueprint id that exists
-                    for bid in blueprint_ids:
-                        try:
-                            bp = bp_lib.find(bid)
-                        except Exception:
-                            bp = None
-                        if bp is not None:
-                            break
-                # fallback: try generic static.prop filter
+                for bid in blueprint_ids:
+                    try:
+                        bp = bp_lib.find(bid)
+                        break
+                    except Exception:
+                        continue
+                        
                 if bp is None:
-                    matches = list(bp_lib.filter("static.prop.*"))
-                    bp = matches[0] if matches else None
-
-                if bp is None:
-                    print("[Scenario02] WARNUNG: Keine static props Blueprints gefunden.")
+                    print(f"[Scenario02] WARNUNG: Blueprint {blueprint_ids} nicht gefunden.")
                     continue
 
                 actor = self.world.try_spawn_actor(bp, transform)
                 if actor is None:
-                    print(f"[Scenario02] WARNUNG: static prop spawn fehlgeschlagen blueprint={bp.id}")
+                    print(f"[Scenario02] WARNUNG: Spawn fehlgeschlagen für {bp.id}")
                     continue
+                
+                # Physik kurz EINSCHALTEN, damit sie ggf. kleine Unebenheiten ausgleichen
+                try:
+                    actor.set_simulate_physics(True)
+                except Exception:
+                    pass
+
                 self._persistent_static_actor_ids.append(actor.id)
-                spawned += 1
-                print(f"[Scenario02] Static prop gespawnt id={actor.id} blueprint={bp.id}")
-
-            return spawned > 0
-
-        # make function visible as method
-        setattr(self, "_spawn_trash_static_props", _spawn_trash_static_props.__get__(self))
-
-        if self.trash_finished:
-            return
-        print("[Scenario02] start_trash()")
-        # spawn static props defined in trigger config
-        try:
-            ok = self._spawn_trash_static_props(self._trash_trigger_config)
-            if not ok:
-                print("[Scenario02] WARNUNG: Keine statischen Props gespawnt.")
+                self._trash_actors.append(actor) # Für das spätere Einfrieren merken!
+                spawned_count += 1
+                
+            if spawned_count == 0:
+                print("[Scenario02] WARNUNG: Es wurden keine Objekte aus der Config gespawnt.")
+            else:
+                # Wir merken uns den genauen Timestamp (Simulationszeit), wann gespawnt wurde
+                # Nutze hier die Variable, die dein Skript für die aktuelle Zeit nutzt (z.B. sim_time oder snapshot-Zeit)
+                # Falls du in der run-Schleife bist, kannst du es auch dort setzen.
+                self._trash_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
+                self._trash_physics_active = True
+                
         except Exception as exc:
-            print(f"[Scenario02] ERROR beim Spawnen statischer Props: {exc}")
+            print(f"[Scenario02] ERROR beim Spawnen von Müll: {exc}")
 
         self.trash_finished = True
 
@@ -688,18 +557,56 @@ class Scenario02Runner:
             pass
         self.traffic_finished = True
 
-    def start_uncivbehav(self):
-        if self.uncivbehav_finished:
-            return
-        print("[Scenario02] start_uncivbehav()")
-        self.uncivbehav_finished = True
-
-    def start_poorroad(self, hero_location=None):
+    def start_poorroad(self):
         if self.poorroad_finished or self.poorroad_started:
             return
         print("[Scenario02] start_poorroad()")
         self.poorroad_started = True
-        self._update_poorroad_phase(hero_location)
+        self._spawn_poorroad_static_props()
+    
+    def _spawn_poorroad_static_props(self):
+        if self.poorroad_finished:
+            return
+        print("[Scenario02] Trigger ausgelöst: Starte _spawn_poorroad_static_props()")
+
+        try:
+            spawn_configs = POORROAD_OBJECTS_CONFIG
+        except Exception as e:
+            print(f"[Scenario02] Fehler beim Laden von POORROAD_OBJECTS_CONFIG: {e}")
+            spawn_configs = []
+
+        bp_lib = self.world.get_blueprint_library()
+        spawned = 0
+
+        for spawn in spawn_configs:
+            transform = spawn.get("transform")
+            blueprint_ids = spawn.get("blueprints", [])
+            bp = None
+            
+            if blueprint_ids:
+                for bid in blueprint_ids:
+                    try:
+                        bp = bp_lib.find(bid)
+                    except Exception:
+                        bp = None
+                    if bp is not None:
+                        break
+
+            if bp is None:
+                print(f"[Scenario02] Warnung: Kein gültiger Blueprint gefunden für {spawn.get('name')}")
+                continue
+
+            actor = self.world.try_spawn_actor(bp, transform)
+            if actor is not None:
+                # Wichtig, damit die Objekte beim Beenden des Szenarios wieder aufgeräumt werden
+                self._persistent_static_actor_ids.append(actor.id)
+                spawned += 1
+                if DEBUG_MODE:
+                    print(f"[Scenario02] Poorroad prop gespawnt: id={actor.id} blueprint={bp.id}")
+
+        print(f"[Scenario02] Insgesamt {spawned} Poorroad-Objekte erfolgreich gespawnt.")
+        # Setze das Flag auf True, damit der Trigger nicht mehrfach feuert
+        self.poorroad_finished = True
 
     def start_smell(self):
         if self.smell_finished:
@@ -725,13 +632,8 @@ class Scenario02Runner:
         self.drivertrash_active = True
 
     def _get_snake_route_config(self, hero_location, hero_velocity=None):
-        try:
-            from events_scenario02_static_props import get_snake_configs
-        except Exception:
-            from scenario_events.events_scenario02_static_props import get_snake_configs
-
-        snake_configs = get_snake_configs() if callable(get_snake_configs) else []
-        for cfg in snake_configs:
+        configs = self._snake_trigger_configs if isinstance(self._snake_trigger_configs, (list, tuple)) else []
+        for cfg in configs:
             trigger_location = cfg.get("trigger_location")
             if trigger_location is None:
                 continue
@@ -752,12 +654,8 @@ class Scenario02Runner:
         return None
 
     def _get_drivertrash_config(self, hero_location, hero_velocity=None):
-        try:
-            from events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS
-        except Exception:
-            from scenario_events.events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS
 
-        configs = DRIVERTRASH_SPAWN_CONFIGS if isinstance(DRIVERTRASH_SPAWN_CONFIGS, (list, tuple)) else []
+        configs = self._drivertrash_trigger_configs if isinstance(self._drivertrash_trigger_configs, (list, tuple)) else []
         for cfg in configs:
             trigger_location = cfg.get("trigger_location")
             if trigger_location is None:
@@ -809,7 +707,7 @@ class Scenario02Runner:
         self._drivertrash_process = start_manual_control_process(
             host=self.host,
             port=self.port,
-            profile='supervisor',
+            profile=PROFILE_DRIVERTRASH,
             done_file=None,
             vehicle_id=vehicle_id,
             vehicle_color=vehicle_color,
@@ -854,11 +752,6 @@ class Scenario02Runner:
         if route_config is None:
             # nothing to spawn yet
             return False
-
-        try:
-            from events_scenario02_static_props import get_snake_configs
-        except Exception:
-            from scenario_events.events_scenario02_static_props import get_snake_configs
 
         bp_lib = self.world.get_blueprint_library()
         walker_bp_id = "walker.pedestrian.0052"
@@ -1111,7 +1004,7 @@ class Scenario02Runner:
         if self.smell_finished:
             return
         self._finish_delay_timer("snake_to_smell", sim_time)
-        self.start_smell()
+        self.smell_finished = True
         print("[Scenario02] Smell trigger skipped.")
 
     def _skip_drivertrash_trigger(self, sim_time):
@@ -1253,9 +1146,7 @@ class Scenario02Runner:
                 sim_time = self.world.get_snapshot().timestamp.elapsed_seconds
                 ego = self.find_hero()
                 hero_location = ego.get_location() if ego is not None else None
-                self._update_poorroad_phase(hero_location)
-
-                self._check_and_destroy_ai_vehicles(sim_time, ego)
+                # self._update_poorroad_phase(hero_location)
 
                 if self._start_sim_time is None:
                     self._start_sim_time = sim_time
@@ -1295,8 +1186,13 @@ class Scenario02Runner:
                             print("Waiting for trigger to spawn trash...")
                             self._trash_trigger_listening_announced = True
 
-                        if self._is_within_trigger(self._trash_trigger_config, hero_location):
-                            self.start_trash()
+                        # if self._is_within_trigger(self._trash_trigger_configs, hero_location):
+                        #     self.start_trash()
+                        if self._trash_trigger_configs:
+                            for config in self._trash_trigger_configs:
+                                if self._is_within_trigger(config, hero_location):
+                                    self.start_trash()
+                                    break
 
                 trash_to_snake_state = self._delay_states["trash_to_snake"]
                 if self.trash_finished:
@@ -1367,7 +1263,11 @@ class Scenario02Runner:
                     if not self._trigger_poorroad:
                         self._skip_poorroad_trigger(sim_time)
                     else:
-                        self.start_poorroad(hero_location)
+                        if self._poorroad_trigger_configs:
+                            for config in self._poorroad_trigger_configs:
+                                if self._is_within_trigger(config, hero_location):
+                                    self.start_poorroad()
+                                    break
 
                 poorroad_to_drivertrash_state = self._delay_states["poorroad_to_drivertrash"]
                 if self.poorroad_finished:
@@ -1379,21 +1279,16 @@ class Scenario02Runner:
                     if not self._trigger_drivertrash:
                         self._skip_drivertrash_trigger(sim_time)
                     else:
-
                         self.start_drivertrash()
 
                 drivertrash_to_end_state = self._delay_states["drivertrash_to_end"]
                 if self.drivertrash_active and not self.drivertrash_finished:
                     # try to find a drivertrash config matching hero location/direction and launch manual control
                     config = None
-                    try:
-                        from events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS as DRIVERTRASH_CONFIGS
-                    except Exception:
-                        from scenario_events.events_scenario02_static_props import DRIVERTRASH_SPAWN_CONFIGS as DRIVERTRASH_CONFIGS
                     # prefer matching config based on hero location/direction
                     hero_vel = ego.get_velocity() if ego is not None else None
-                    if DRIVERTRASH_CONFIGS:
-                        config = self._get_drivertrash_config(hero_location, hero_vel) if hero_location is not None else (DRIVERTRASH_CONFIGS[0] if len(DRIVERTRASH_CONFIGS) == 1 else None)
+                    if self._drivertrash_trigger_configs:
+                        config = self._get_drivertrash_config(hero_location, hero_vel) if hero_location is not None else (self._drivertrash_trigger_configs[0] if len(self._drivertrash_trigger_configs) == 1 else None)
 
                     if config:
                         if self._start_drivertrash_manual_control_from_config(config):
@@ -1406,8 +1301,6 @@ class Scenario02Runner:
                     self._update_delay_timer("drivertrash_to_end", sim_time)
 
                 if DEBUG_MODE:
-                    self._draw_trigger_box(self._destroy_trigger_box_config, True)
-                    
                     trash_listening = self._trigger_trash and self.traffic_finished and traffic_to_trash_state["finished"] and not self.trash_finished
                     if trash_listening:
                         if not self._trash_trigger_listening_announced:
@@ -1422,16 +1315,12 @@ class Scenario02Runner:
                             self._snake_trigger_listening_announced = True
                         self._draw_trigger_box(self._snake_trigger_box_configs, True)
 
-                    poorroad_listening = self._trigger_poorroad and self.poorroad_started and not self.poorroad_finished
+                    poorroad_listening = self._trigger_poorroad and self.smell_finished and smell_to_poorroad_state["finished"] and not self.poorroad_started and not self.poorroad_finished
                     if poorroad_listening:
                         if not self._poorroad_trigger_listening_announced:
                             print("Waiting for trigger to spawn poor road...")
                             self._poorroad_trigger_listening_announced = True
-                        self._draw_trigger_box(build_trigger_box_configs(
-                            self._get_poorroad_debug_trigger_configs(),
-                            color=(0, 255, 0, 255),
-                            thickness=self._trigger_box_thickness,
-                        ), True)
+                        self._draw_trigger_box(self._poorroad_trigger_box_configs, True)
 
                     drivertrash_listening = self._trigger_drivertrash and self.poorroad_finished and poorroad_to_drivertrash_state["finished"] and not self.drivertrash_finished and self._drivertrash_process is None
                     if drivertrash_listening:
@@ -1442,6 +1331,19 @@ class Scenario02Runner:
 
                 if self.drivertrash_finished and drivertrash_to_end_state["finished"]:
                     self._scenario_done = True
+                
+                if getattr(self, "_trash_physics_active", False):
+                    current_time = self.world.get_snapshot().timestamp.elapsed_seconds
+                    # Wenn 5 Sekunden vergangen sind
+                    if current_time - self._trash_spawn_time >= 5.0:
+                        print("[Scenario02] 5 Sekunden um: Friere Physik für alle Müllobjekte ein (Performance-Boost)...")
+                        for actor in self._trash_actors:
+                            try:
+                                if actor.is_alive:
+                                    actor.set_simulate_physics(False) # Physik stoppen, Objekt steht still
+                            except Exception:
+                                pass
+                        self._trash_physics_active = False
 
                 if self._scenario_done:
                     return
