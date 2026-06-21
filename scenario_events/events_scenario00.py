@@ -127,7 +127,7 @@ def filter_blocked_vehicle_blueprints(blueprints, blocked_keywords):
     return [bp for bp in blueprints if not any(k in bp.id.lower() for k in blocked_keywords)]
 
 class Scenario00Runner:
-    def __init__(self, host, port, tm_port, done_file=None):
+    def __init__(self, host, port, tm_port, done_file=None, logging_arg=None):
         self.client = carla.Client(host, port)
         self.client.set_timeout(10.0)
         self.world = self.client.get_world()
@@ -146,6 +146,15 @@ class Scenario00Runner:
         #         self.logger.addHandler(fh)
         # except Exception:
         #     pass
+
+        self.trigger_logger = None
+        if logging_arg:
+            pid, scen = parse_logging_arg(args.logging)
+            if pid and scen:
+                self.trigger_logger = TriggerLogger(pid, scen)
+                print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+            else:
+                print(f"[Scenario00] Could not parse --logging arg: {args.logging}")    
         
         self._start_sim_time = None
         self._traffic_spawned = False
@@ -676,13 +685,5 @@ if __name__ == '__main__':
     parser.add_argument('--done-file', default=None)
     parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
-    runner = Scenario00Runner(args.host, args.port, args.tm_port, args.done_file)
-    # attach trigger logger if requested
-    if getattr(args, 'logging', None):
-        pid, scen = parse_logging_arg(args.logging)
-        if pid and scen:
-            runner.trigger_logger = TriggerLogger(pid, scen)
-            print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
-        else:
-            print(f"[Scenario00] Could not parse --logging arg: {args.logging}")
+    runner = Scenario00Runner(args.host, args.port, args.tm_port, args.done_file, args.logging)
     runner.run()
