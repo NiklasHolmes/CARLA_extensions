@@ -88,6 +88,10 @@ import carla
 from carla import ColorConverter as cc
 
 import argparse
+import csv
+
+from vehicle_logger import VehicleLogger
+
 import collections
 from collections import deque
 import datetime
@@ -183,6 +187,7 @@ _BLINKER_PATH = r".\audio\car_blinker.wav"
 _BRAKE_PATH = r".\audio\car_brake.wav"
 _PROXIMITY_ALERT_PATH = r".\audio\car_proximityAlert.wav"
 
+LOG_INTERVAL = 0.1
 # Central audio manager
 # Central audio manager
 audio_manager: Optional[object] = None
@@ -2796,6 +2801,39 @@ def game_loop(args):
         if not ENABLE_HUD:
             hud.toggle_info()
         world = World(sim_world, hud, args)
+        # configure an independent VehicleLogger if requested via CLI
+        vehicle_logger = None
+        if getattr(args, 'logging', None):
+            try:
+                txt = str(args.logging).strip()
+                txt = txt.strip('()')
+                parts = [p.strip() for p in re.split('[,;]+', txt) if p.strip()]
+                pid_token = parts[0] if len(parts) >= 1 else None
+                scenario_token = parts[1] if len(parts) >= 2 else None
+                if pid_token and scenario_token:
+                    pid_token = pid_token.strip().strip('"').strip("'")
+                    plog_root = os.path.join(os.path.dirname(__file__), '_plog')
+                    if os.path.isdir(plog_root):
+                        norm_prefix = pid_token.replace('_', '').lower()
+                        candidates = []
+                        for d in os.listdir(plog_root):
+                            full = os.path.join(plog_root, d)
+                            if not os.path.isdir(full):
+                                continue
+                            d_norm = d.replace('_', '').lower()
+                            if d_norm.startswith(norm_prefix):
+                                candidates.append((d, os.path.getmtime(full)))
+                        if candidates:
+                            candidates.sort(key=lambda t: t[1], reverse=True)
+                            chosen = candidates[0][0]
+                            participant_dir = os.path.join(plog_root, chosen)
+                            vehicle_logger = VehicleLogger(participant_dir, scenario_token.strip(), sample_interval=getattr(args, 'log_sample_interval', LOG_INTERVAL))
+                        else:
+                            print(f"[ManualControl] No matching participant folder for '{pid_token}'; logging disabled")
+                else:
+                    print(f"[ManualControl] --logging requires participant and scenario, e.g. '(P_01_..., S3)'")
+            except Exception as e:
+                print(f"[ManualControl] Failed to parse --logging argument: {e}")
         # Timestamp for last hero marker draw
         hero_marker_last = 0.0
         
@@ -2939,6 +2977,9 @@ def game_loop(args):
             except Exception:
                 pass
             
+            # sample vehicle dynamics independently if logger active
+            if vehicle_logger is not None:
+                vehicle_logger.maybe_sample(world)
             pygame.display.flip()
 
     finally:
@@ -2957,6 +2998,14 @@ def game_loop(args):
             world.event_sync = None
 
         _stop_dashboard_process()
+
+        # If vehicle dynamics logger was created, flush buffer now
+        try:
+            if vehicle_logger is not None:
+                vehicle_logger.flush(append=True)
+                print(f"[ManualControl] Flushed vehicle dynamics to {vehicle_logger.filename}")
+        except Exception:
+            pass
 
         if world is not None:
             world.destroy()
@@ -3079,6 +3128,19 @@ def main():
         choices=['keyboard', 'gamepad', 'wheel'],
         default='keyboard',
         help='Select input device for this window (default: keyboard)'
+    )
+    argparser.add_argument(
+        '--logging',
+        metavar='LOG',
+        default=None,
+        help='enable vehicle dynamics logging: e.g. "(P_01_20260621_1435, S3)" or "P01,S3"'
+    )
+    argparser.add_argument(
+        '--log-sample-interval',
+        metavar='SECONDS',
+        default=1.0,
+        type=float,
+        help='sampling interval in seconds for vehicle dynamics logging (default: 1.0)'
     )
     args = argparser.parse_args()
     global AUDIO_MODE

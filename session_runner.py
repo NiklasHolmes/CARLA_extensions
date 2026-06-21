@@ -327,9 +327,19 @@ class SessionRunner:
         else:
             self.participant_id = self._default_participant_id()
 
+        # Try to load existing session state (unless a fresh session is requested)
         loaded_state = None if self.fresh_session else self._load_state_file()
-        if loaded_state and loaded_state.get('participant_id') == self.participant_id and not self._is_completed_state(loaded_state):
+        if loaded_state:
+            # If the loaded state claims a different participant_id, prefer the one from the file
+            file_pid = loaded_state.get('participant_id')
+            if file_pid and file_pid != self.participant_id:
+                print(f"[SessionRunner] NOTE: session_state.json participant_id '{file_pid}' differs from requested '{self.participant_id}'; using file participant id")
+                self.participant_id = file_pid
+
+        # If we have a loaded state and it's not completed, use it. Otherwise build a new one.
+        if loaded_state and not self._is_completed_state(loaded_state):
             self.session_state = loaded_state
+            # ensure required keys exist
             if 'scenario_order' not in self.session_state:
                 self.session_state['scenario_order'] = list(scenario_order)
             if 'current_state' not in self.session_state:
@@ -342,8 +352,10 @@ class SessionRunner:
                 }
             if 'scenarios_log' not in self.session_state:
                 self.session_state['scenarios_log'] = []
+            print(f"[SessionRunner] Loaded existing session state for participant '{self.participant_id}'")
         else:
             self.session_state = self._build_new_session_state(scenario_order)
+            print(f"[SessionRunner] Creating new session state for participant '{self.participant_id}' (fresh_session={self.fresh_session})")
 
         if self.start_index_override is not None:
             self.session_state['current_state']['next_scenario_index'] = max(0, int(self.start_index_override))
@@ -358,9 +370,28 @@ class SessionRunner:
             participant_id = self.session_state.get('participant_id') or self.participant_id
             if participant_id:
                 participant_dir = os.path.join(self.plog_root, participant_id)
-                os.makedirs(participant_dir, exist_ok=True)
+                # If participant dir is newly created, initialize placeholder CSVs for scenarios
+                created_now = False
+                if not os.path.isdir(participant_dir):
+                    os.makedirs(participant_dir, exist_ok=True)
+                    created_now = True
                 participant_path = os.path.join(participant_dir, 'session_state.json')
                 self._atomic_write_json(participant_path, self.session_state)
+                if created_now:
+                    # create placeholder vehicle dynamics CSV files and empty trigger logs for scenarios S00..S06
+                    try:
+                        for i in range(0, 7):
+                            sname = f"S{i:02d}"
+                            csv_path = os.path.join(participant_dir, f"{sname}_vehicle_dynamics.csv")
+                            if not os.path.exists(csv_path):
+                                with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+                                    f.write('timestamp,throttle,brake,steer,speed\n')
+                            trig_path = os.path.join(participant_dir, f"{sname}_trigger_log.json")
+                            if not os.path.exists(trig_path):
+                                with open(trig_path, 'w', encoding='utf-8') as f:
+                                    json.dump([], f)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -497,6 +528,23 @@ class SessionRunner:
             cmd.append('--enable-brake-warning')
         if scenario_name == 'scenario06':
             cmd.append('--enable-fuel-empty-warning')
+        # If we have a participant id available, pass --logging so manual_control can write into per-participant folder
+        try:
+            if self.participant_id:
+                # Convert scenario_name like 'scenario00' -> 'S00'
+                import re
+                m = re.search(r'\d+', scenario_name)
+                scen_token = None
+                if m:
+                    scen_token = f"S{int(m.group(0)):02d}"
+                else:
+                    scen_token = scenario_name
+                logging_arg = f"({self.participant_id},{scen_token})"
+                cmd.extend(['--logging', logging_arg])
+                print(f"[SessionRunner] Passing --logging to manual_control: {logging_arg}")
+        except Exception as e:
+            print(f"[SessionRunner] Failed to build --logging arg: {e}")
+
         manual_control_process = subprocess.Popen(cmd)
         return manual_control_process
 
