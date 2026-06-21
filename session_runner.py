@@ -146,8 +146,9 @@ class SessionRunner:
         scenario_order = state.get('scenario_order') or []
         next_index = current_state.get('next_scenario_index')
         status = str(current_state.get('current_status') or '').upper()
-        if status == 'COMPLETED':
-            return True
+        
+        # Consider session completed only when next_scenario_index indicates we've exhausted the scenario list.
+        # Do not treat a single 'COMPLETED' status of the last run as whole-session completion.
         if isinstance(next_index, int) and scenario_order and next_index >= len(scenario_order):
             return True
         return False
@@ -333,12 +334,24 @@ class SessionRunner:
             # If the loaded state claims a different participant_id, prefer the one from the file
             file_pid = loaded_state.get('participant_id')
             if file_pid and file_pid != self.participant_id:
-                print(f"[SessionRunner] NOTE: session_state.json participant_id '{file_pid}' differs from requested '{self.participant_id}'; using file participant id")
-                self.participant_id = file_pid
+                # Try to resolve file_pid to an existing participant directory name
+                resolved_pid, resolved_dir, existed = self._participant_dir_for(file_pid, create=False)
+                if existed and resolved_pid:
+                    print(f"[SessionRunner] NOTE: session_state.json participant_id '{file_pid}' maps to existing dir '{resolved_pid}'; using that")
+                    self.participant_id = resolved_pid
+                else:
+                    # If we cannot resolve, keep current participant_id (directory) and warn
+                    print(f"[SessionRunner] WARNING: session_state.json participant_id '{file_pid}' does not map to an existing folder; keeping '{self.participant_id}'")
 
         # If we have a loaded state and it's not completed, use it. Otherwise build a new one.
         if loaded_state and not self._is_completed_state(loaded_state):
             self.session_state = loaded_state
+            # debug print useful to see what was loaded
+            try:
+                cs = self.session_state.get('current_state', {})
+                print(f"[SessionRunner] Loaded state next_scenario_index={cs.get('next_scenario_index')} current_status={cs.get('current_status')}")
+            except Exception:
+                pass
             # ensure required keys exist
             if 'scenario_order' not in self.session_state:
                 self.session_state['scenario_order'] = list(scenario_order)
@@ -562,6 +575,21 @@ class SessionRunner:
             '--tm-port', '8000',
             '--done-file', done_file,
         ]
+        # Pass --logging to events script so it can write per-participant trigger logs
+        try:
+            if self.participant_id:
+                import re
+                m = re.search(r'\d+', scenario_name)
+                scen_token = None
+                if m:
+                    scen_token = f"S{int(m.group(0)):02d}"
+                else:
+                    scen_token = scenario_name
+                logging_arg = f"({self.participant_id},{scen_token})"
+                cmd.extend(['--logging', logging_arg])
+                print(f"[SessionRunner] Passing --logging to events: {logging_arg}")
+        except Exception as e:
+            print(f"[SessionRunner] Failed to build events --logging arg: {e}")
         return subprocess.Popen(cmd)
     
     def _run_rear_view(self):

@@ -14,8 +14,13 @@ except ModuleNotFoundError:
 from common.audio_paths import NEUTRAL_RP_TRACY_CHAPMAN_FAST_CAR_PATH
 from generate_audio import SongAudio
 
+try: 
+    from scenario_logger import  parse_logging_arg, TriggerLogger
+except ModuleNotFoundError:
+    from scenario_logger import  parse_logging_arg, TriggerLogger
+
 # Constants
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 VEHICLE_ACTIVE_SECONDS = 0.0                    # if > 0 => vehicles will be removed; if = 0 => stay infinitely
 
@@ -283,6 +288,12 @@ class Scenario00Runner:
         print(
             f"[Scenario00] Vehicles spawned: {len(spawned_ids)}/{len(points)}"
         )
+        # log trigger for vehicle spawn
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('vehicles_spawned_01', 'spawn_vehicles', window_duration_seconds=VEHICLE_ACTIVE_SECONDS)
+        except Exception:
+            pass
 
     def _force_green_light(self, ego, sim_time):
         try:
@@ -459,6 +470,12 @@ class Scenario00Runner:
             print("[Scenario00] WARNUNG: Song konnte nicht gestartet werden; fahre ohne Song fort.")
             self._song_finished = True
             self._song_finish_time = sim_time
+        else:
+            try:
+                if getattr(self, 'trigger_logger', None):
+                    self.trigger_logger.log_trigger('song_started_01', 'song_start', window_duration_seconds=SONG_PLAY_DURATION_SECONDS)
+            except Exception:
+                pass
 
     def _play_song(self, sim_time):
         return self._song_audio.play(sim_time)
@@ -657,5 +674,15 @@ if __name__ == '__main__':
     parser.add_argument('--port', default=2000, type=int)
     parser.add_argument('--tm-port', default=8000, type=int)
     parser.add_argument('--done-file', default=None)
+    parser.add_argument('--logging', default=None, help='pass participant and scenario token, e.g. "(P_01_...,S01)"')
     args = parser.parse_args()
-    Scenario00Runner(args.host, args.port, args.tm_port, args.done_file).run()
+    runner = Scenario00Runner(args.host, args.port, args.tm_port, args.done_file)
+    # attach trigger logger if requested
+    if getattr(args, 'logging', None):
+        pid, scen = parse_logging_arg(args.logging)
+        if pid and scen:
+            runner.trigger_logger = TriggerLogger(pid, scen)
+            print(f"[Scenario00] TriggerLogger attached for participant={pid}, scenario={scen}")
+        else:
+            print(f"[Scenario00] Could not parse --logging arg: {args.logging}")
+    runner.run()
