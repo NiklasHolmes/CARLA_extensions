@@ -1321,6 +1321,11 @@ class Scenario05Runner:
                     self._pedestrian_confirmation_listener_started = False
                     self._start_pedestrian_confirmation_listener()
                     print(f"[Scenario05] Pedestrian gespawnt (vor dem Auto): id={walker_id}")
+                    try:
+                        if getattr(self, 'trigger_logger', None):
+                            self.trigger_logger.log_trigger(trigger_id='01', trigger_type='lonely_pedestrian', window_duration_seconds=10.0)
+                    except Exception:
+                        pass
                     return True
 
         return False
@@ -1389,11 +1394,7 @@ class Scenario05Runner:
         self._pedestrian_confirmation_listener_started = False
         if response in ("j", "ja", "y", "yes", ""):
             print("[Scenario05] loneleyPed confirmed; continue with scenario.")
-            try:
-                if getattr(self, 'trigger_logger', None):
-                    self.trigger_logger.log_trigger(trigger_id='01', trigger_type='lonely_pedestrian', window_duration_seconds=5.0)
-            except Exception:
-                pass
+
             self._pedestrian_confirmation_pending = False
             self._ped_to_song = True
             self._pedestrian_confirmation_completed = True
