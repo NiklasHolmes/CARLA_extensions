@@ -683,11 +683,6 @@ class Scenario04Runner:
                             f"[Scenario04] DANCINGM gespawnt bei Ampel: id={actor.id}, blueprint={DANCINGM_PEDESTRIAN_BLUEPRINT_ID}, "
                             f"light_id={traffic_light.id}, spawn=({spawn_transform.location.x:.2f}, {spawn_transform.location.y:.2f}, {spawn_transform.location.z:.2f})"
                         )
-                        try:
-                            if getattr(self, 'trigger_logger', None):
-                                self.trigger_logger.log_trigger('03', 'dancing_guy', window_duration_seconds=10.0)
-                        except Exception:
-                            pass
         
                     except Exception:
                         print(f"[Scenario04] WARNUNG: Ampel konnte nicht auf Rot gesetzt werden: light_id={traffic_light.id}")
@@ -701,7 +696,13 @@ class Scenario04Runner:
             )
         if actor is None:
             return False
-
+        
+        try:
+            if getattr(self, 'trigger_logger', None):
+                self.trigger_logger.log_trigger('03', 'dancing_guy', window_duration_seconds=10.0)
+        except Exception:
+            pass
+        
         self._dancingm_pedestrian_spawned = True
         self._dancingm_pedestrian_actor_id = actor.id
         self._dancingm_pedestrian_spawn_time = self.world.get_snapshot().timestamp.elapsed_seconds
