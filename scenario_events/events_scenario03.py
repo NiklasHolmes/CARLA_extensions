@@ -9,27 +9,15 @@ import carla
 from carla import VehicleLightState
 import threading
 
-# For debug start manual control with: 
-# --enable-brake-warning
-
-BRAKE_SIGNAL_FILE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    '..',
-    'common',
-    'scenario_brake.signal',
-)
-BRAKE_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(BRAKE_SIGNAL_FILE_DEFAULT))
-BRAKE_WARNING_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
-
 try:
-    from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH
+    from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH, WARNING_SOUND
     from generate_audio import RepeatingAudio, SongAudio
 except ModuleNotFoundError:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
     if extensions_root not in sys.path:
         sys.path.insert(0, extensions_root)
-    from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH
+    from common.audio_paths import FEAR_RP_NEUROSIS_FEAR_AND_SICKNESS_PATH, WARNING_SOUND
     from generate_audio import RepeatingAudio, SongAudio
 
 try:
@@ -43,6 +31,19 @@ except ModuleNotFoundError:
     from scenario_events.scenario_helper import build_trigger_box_configs, draw_trigger_boxes, force_green_light
 
 from scenario_logger import TriggerLogger, parse_logging_arg
+# For debug start manual control with: 
+# --enable-brake-warning
+
+BRAKE_SIGNAL_FILE_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '..',
+    'common',
+    'scenario_brake.signal',
+)
+BRAKE_SIGNAL_FILE_DEFAULT = os.path.normpath(os.path.abspath(BRAKE_SIGNAL_FILE_DEFAULT))
+#BRAKE_WARNING_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
+
+BRAKE_WARNING_CHIME_PATH = WARNING_SOUND
 
 try:
     from events_scenario03_static_props import (
@@ -86,10 +87,10 @@ if DEBUG_MODE:
     SUPERVISOR_PROFILE = 'supervisor4home'
 else:
     START_TO_CARAWAY_DELAY = 10.0
-    CARAWAY_TO_LTRUCK_DELAY = 20.0
-    LTRUCK_TO_SONG_DELAY = 30.0
+    CARAWAY_TO_LTRUCK_DELAY = 5.0
+    LTRUCK_TO_SONG_DELAY = 10.0
     SONG_TO_POLICE_DELAY = 10.0
-    POLICE_TO_BRAKE_DELAY = 30.0
+    POLICE_TO_BRAKE_DELAY = 15.0
     BRAKE_TO_END_DELAY = 5.0
 
     TRIGGER_CARAWAY = True

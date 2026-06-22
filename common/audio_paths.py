@@ -40,3 +40,6 @@ NEWS_RELATIONS_FEMALE = r".\audio\news_relations_female.wav"
 
 NEWS_LANDSLIDE_MALE_ENG = r".\audio\news_landslide_male_eng.wav"
 NEWS_RELATIONS_FEMALE_ENG = r".\audio\news_relations_female_eng.wav"
+
+# Warnings
+WARNING_SOUND = r".\audio\car_low_fuel_chime.wav"
