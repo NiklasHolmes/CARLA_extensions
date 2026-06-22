@@ -12,14 +12,14 @@ import time
 
 import carla
 try:
-    from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH
+    from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH, WARNING_SOUND
     from generate_audio import RepeatingAudio, SongAudio
 except ModuleNotFoundError:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_root = os.path.normpath(os.path.join(current_dir, ".."))
     if extensions_root not in sys.path:
         sys.path.insert(0, extensions_root)
-    from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH
+    from common.audio_paths import SURPRISE_RP_LITTLE_NUMBERS_PATH, WARNING_SOUND
     from generate_audio import RepeatingAudio, SongAudio
 
 try:
@@ -99,7 +99,9 @@ SONG_PLAY_DURATION_SECONDS = 30.0
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
 
-FUEL_EMPTY_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
+#FUEL_EMPTY_CHIME_PATH = r"C:\C_CARLA\CARLA_extensions\audio\car_low_fuel_chime.wav"
+FUEL_EMPTY_CHIME_PATH = WARNING_SOUND
+
 FUEL_EMPTY_SIGNAL_FILE_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     '..',
