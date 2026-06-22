@@ -72,10 +72,10 @@ else:
     ACCIDENT_TO_RADIO_DELAY_SECONDS = 2.0
     RADIO_TO_END_DELAY_SECONDS = 10.0
 
-    SONG_PLAY_DURATION_SECONDS = 20.0
-
     # Additional short delay to allow accident-related messages to finish
     ACCIDENT_PROMPT_EXTRA_DELAY_SECONDS = 7.0
+
+    SONG_PLAY_DURATION_SECONDS = 20.0
 
     TRIGGER_CARPED = True
     TRIGGER_ACCIDENT = True

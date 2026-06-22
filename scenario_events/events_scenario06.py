@@ -46,12 +46,12 @@ if DEBUG_MODE:
     FUEL_TO_END_DELAY = 2.0
 
     run_in_singleFile_mode = False
-    TRIGGER_TRAFFIC = True
-    TRIGGER_WEATHER = True
-    TRIGGER_HIGHPED = True
-    TRIGGER_BUS = True
-    TRIGGER_SONG = True
-    TRIGGER_SANIMAL = True
+    TRIGGER_TRAFFIC = False
+    TRIGGER_WEATHER = False
+    TRIGGER_HIGHPED = False
+    TRIGGER_BUS = False
+    TRIGGER_SONG = False
+    TRIGGER_SANIMAL = False
     TRIGGER_COW = True
     TRIGGER_FUELEMPTY = True
 
@@ -64,24 +64,13 @@ if DEBUG_MODE:
     SOFT_RAIN_DURATION_S = 1.0
     HIGHPED_LIFETIME_S = 20.0
 else:
-    RAIN_TO_HIGHPED_DELAY = 20.0
-    HIGHPED_TO_BUS_DELAY = 20.0
-    BUS_TO_SONG_DELAY = 10.0
-    SONG_TO_SANIMAL_DELAY = 10.0
-    SANIMAL_TO_COW_DELAY = 5.0
-    COW_TO_FUEL_DELAY = 5.0                 # TODO: implement cow?
+    RAIN_TO_HIGHPED_DELAY = 5.0
+    HIGHPED_TO_BUS_DELAY = 5.0
+    BUS_TO_SONG_DELAY = 5.0
+    SONG_TO_SANIMAL_DELAY = 5.0
+    SANIMAL_TO_COW_DELAY = 1.0
+    COW_TO_FUEL_DELAY = 1.0                 # TODO: implement cow?
     FUEL_TO_END_DELAY = 10.0
-
-    run_in_singleFile_mode = False  
-    TRIGGER_TRAFFIC = True
-    TRIGGER_WEATHER = True
-    TRIGGER_HIGHPED = True
-    TRIGGER_BUS = True
-    TRIGGER_SONG = True
-    TRIGGER_SANIMAL = True
-    TRIGGER_COW = False
-    TRIGGER_FUELEMPTY = True
-    TRIGGER_SANIMAL_IMMEDIATE = False
 
     START_TO_RAIN_DELAY = 10.0
     MID_RAIN_LEAD_IN_S = 5.0
@@ -89,6 +78,18 @@ else:
     MID_RAIN_FOLLOW_UP_S = 5.0
     SOFT_RAIN_DURATION_S = 5.0
     HIGHPED_LIFETIME_S = 20.0
+
+    run_in_singleFile_mode = False
+    TRIGGER_TRAFFIC = True
+    TRIGGER_WEATHER = True
+    TRIGGER_HIGHPED = True
+    TRIGGER_BUS = True
+    TRIGGER_SONG = True
+    TRIGGER_SANIMAL = True
+    TRIGGER_COW = True
+    TRIGGER_FUELEMPTY = True
+
+    TRIGGER_SANIMAL_IMMEDIATE = False
 
 HERO_GREEN_LIGHT_HOLD_SECONDS = 5.0
 TL_HOLD_ORIGINALLIGHT_SECONDS = 1.0

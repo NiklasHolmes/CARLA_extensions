@@ -14,7 +14,7 @@ import os
 # ==============================================================================
 REAR_VIEW_WIDTH = 1920
 REAR_VIEW_HEIGHT = 1080
-REAR_VIEW_SCREEN_PERCENTAGE = 0.6
+REAR_VIEW_SCREEN_PERCENTAGE = 0.8
 REAR_VIEW_FPS = 10
 REAR_VIEW_ROLE_NAME = "hero"
 

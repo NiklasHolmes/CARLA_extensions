@@ -17,7 +17,7 @@ from generate_audio import SongAudio
 from scenario_logger import TriggerLogger, parse_logging_arg
 
 # Constants
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 VEHICLE_ACTIVE_SECONDS = 0.0                    # if > 0 => vehicles will be removed; if = 0 => stay infinitely
 
@@ -35,12 +35,12 @@ else:
     TRAFFIC_SPAWN_DELAY_SECONDS = 5.0
     VEHICLE_ACTIVE_SECONDS = 0.0
 
-    CAR_TO_PED_DELAY_SECONDS = 10.0
-    PED_TO_SONG_DELAY_SECONDS = 10.0
+    CAR_TO_PED_DELAY_SECONDS = 20.0
+    PED_TO_SONG_DELAY_SECONDS = 30.0
     SONG_TO_END_DELAY_SECONDS = 10.0
 
     SONG_START_OFFSET_SECONDS = 3.0
-    SONG_PLAY_DURATION_SECONDS = 20.0
+    SONG_PLAY_DURATION_SECONDS = 40.0
 
 SONG_FADE_IN_MS = 3000
 SONG_FADE_OUT_MS = 3000
